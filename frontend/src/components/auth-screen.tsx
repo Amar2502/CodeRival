@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { ArrowRight, Shield, Swords, Zap } from "lucide-react";
 import { API_URL } from "../lib/api";
+import { useAuthStore } from "@/lib/auth_store";
 
 type AuthMode = "signin" | "register";
 
@@ -17,6 +18,18 @@ type FormState = {
 };
 
 type UsernameStatus = "idle" | "checking" | "available" | "taken" | "error";
+
+interface User {
+  id: string;
+  name: string;
+  email: string;
+  username: string;
+}
+
+interface AuthResponse {
+  message?: string;
+  user: User;
+}
 
 const initialFormState: FormState = {
   name: "",
@@ -70,6 +83,8 @@ export function AuthScreen({ mode }: { mode: AuthMode }) {
 
   const current = copy[mode];
   const isRegister = mode === "register";
+
+  const { setUser } = useAuthStore();
 
   useEffect(() => {
     if (!isRegister) {
@@ -150,13 +165,19 @@ export function AuthScreen({ mode }: { mode: AuthMode }) {
         body: JSON.stringify(payload),
       });
 
-      const data = (await response.json().catch(() => ({}))) as { message?: string };
+      const data = (await response.json().catch(() => ({}))) as AuthResponse;
 
       if (!response.ok) {
         throw new Error(data.message ?? "Unable to complete authentication");
       }
 
-      router.replace("/");
+      setUser(data.user);
+
+      if (isRegister) {
+        router.replace(`/verify-email?email=${encodeURIComponent(form.email)}`);
+      } else {
+        router.replace("/dashboard");
+      }
       router.refresh();
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Something went wrong");

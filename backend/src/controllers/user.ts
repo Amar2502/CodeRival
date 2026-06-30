@@ -14,3 +14,19 @@ export const checkUsername = async (req: Request, res: Response) => {
 
   return res.status(200).json({ available: !user });
 };
+
+export const getMe = (req: Request, res: Response) => {
+  if (!req.user) {
+    return res.status(401).json({
+      message: "Unauthorized",
+    });
+  }
+
+  return res.status(200).json({
+    user: {
+      id: req.user.userId,
+      username: req.user.username,
+      email: req.user.email,
+    },
+  });
+};

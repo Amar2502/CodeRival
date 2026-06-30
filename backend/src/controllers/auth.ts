@@ -46,18 +46,20 @@ export const register = async (req: Request, res: Response) => {
     });
 
     res.status(201).json({
-      userId: user.id,
-      username: user.username,
-      email: user.email,
-      message: "User registered successfully",
-    });
+  message: "User registered successfully",
+  user: {
+    id: user.id,
+    username: user.username,
+    email: user.email,
+  },
+});
   } catch (err) {
     console.log(err);
     return res.status(500).json({ message: "Internal server error" });
   }
 };
 
-export const login = async (req: Request, res: Response) => {
+export const signin = async (req: Request, res: Response) => {
   const { id, password } = req.body;
 
   if (!id || !password) {
@@ -100,11 +102,13 @@ export const login = async (req: Request, res: Response) => {
     });
 
     res.status(200).json({
-      userId: user.id,
-      email: user.email,
-      username: user.username,
-      message: "User logged in successfully",
-    });
+  message: "User logged in successfully",
+  user: {
+    id: user.id,
+    username: user.username,
+    email: user.email,
+  },
+});
   } catch (err) {
     console.log(err);
     return res.status(500).json({ message: "Internal server error" });
