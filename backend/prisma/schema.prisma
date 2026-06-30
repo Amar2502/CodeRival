@@ -1,0 +1,186 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum MatchStatus {
+  WAITING
+  RUNNING
+  FINISHED
+  CANCELLED
+}
+
+enum Verdict {
+  AC
+  WA
+  TLE
+  MLE
+  RTE
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum Language {
+  CPP
+  PYTHON
+  JAVA
+  JAVASCRIPT
+  TYPESCRIPT
+  GO
+  RUST
+}
+
+enum SubmissionStatus {
+  QUEUED
+  RUNNING
+  FINISHED
+}
+
+model User {
+  id           String  @id @default(cuid())
+  name         String
+  email        String  @unique
+  passwordHash String?
+  avatar       String?
+  username     String  @unique
+
+  rating        Int @default(1200)
+  wins          Int @default(0)
+  losses        Int @default(0)
+  draws         Int @default(0)
+  matchesPlayed Int @default(0)
+
+  country  String?
+  isOnline Boolean   @default(false)
+  lastSeen DateTime?
+
+  googleId      String?
+  githubId      String?
+  emailVerified Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  player1Matches Match[] @relation("Player1Matches")
+  player2Matches Match[] @relation("Player2Matches")
+  winnerMatches  Match[] @relation("WinnerMatches")
+
+  submissions Submission[]
+
+  @@index([rating])
+  @@index([username])
+}
+
+model Problem {
+  id            String     @id @default(cuid())
+  title         String     @unique
+  description   String
+  slug          String     @unique
+  difficulty    Difficulty
+  constraints   String[]
+  timeLimitMs   Int
+  memoryLimitMb Int
+  isActive      Boolean    @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  starterCodes ProblemStarterCode[]
+  examples     ProblemExample[]
+  testCases    ProblemTestCase[]
+  submissions  Submission[]
+  matches      Match[]
+  topics       Topic[]
+}
+
+model Topic {
+  id   String @id @default(cuid())
+  name String @unique
+
+  problems Problem[]
+}
+
+model ProblemStarterCode {
+  id          String   @id @default(cuid())
+  problemId   String
+  language    Language
+  starterCode String
+
+  problem Problem @relation(fields: [problemId], references: [id], onDelete: Cascade)
+
+  @@unique([problemId, language])
+}
+
+model ProblemExample {
+  id           String  @id @default(cuid())
+  problemId    String
+  input        String
+  output       String
+  explanation  String?
+  displayOrder Int
+
+  problem Problem @relation(fields: [problemId], references: [id], onDelete: Cascade)
+
+  @@unique([problemId, displayOrder])
+}
+
+model ProblemTestCase {
+  id        String  @id @default(cuid())
+  problemId String
+  input     String
+  output    String
+  isSample  Boolean @default(false)
+  isHidden  Boolean @default(true)
+
+  problem Problem @relation(fields: [problemId], references: [id], onDelete: Cascade)
+}
+
+model Match {
+  id String @id @default(cuid())
+
+  player1Id String
+  player2Id String
+  winnerId  String?
+  problemId String
+
+  status    MatchStatus @default(WAITING)
+  startedAt DateTime?
+  endedAt   DateTime?
+  createdAt DateTime    @default(now())
+
+  winner  User?   @relation("WinnerMatches", fields: [winnerId], references: [id])
+  problem Problem @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  player1 User    @relation("Player1Matches", fields: [player1Id], references: [id])
+  player2 User    @relation("Player2Matches", fields: [player2Id], references: [id])
+
+  submissions Submission[]
+}
+
+model Submission {
+  id String @id @default(cuid())
+
+  userId    String
+  matchId   String?
+  problemId String
+
+  language   Language
+  sourceCode String
+  verdict    Verdict?
+  runtimeMs  Int?
+  memoryKb   Int?
+
+  status      SubmissionStatus @default(QUEUED)
+  submittedAt DateTime         @default(now())
+
+  user    User    @relation(fields: [userId], references: [id])
+  match   Match?  @relation(fields: [matchId], references: [id])
+  problem Problem @relation(fields: [problemId], references: [id])
+}
