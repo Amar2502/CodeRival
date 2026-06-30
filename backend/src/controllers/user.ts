@@ -1,8 +1,8 @@
 import { Request, Response } from "express";
 import { db } from "../config/db";
 
-export const register = async (req: Request, res: Response) => {
-  const username = req.query;
+export const checkUsername = async (req: Request, res: Response) => {
+  const username = req.query.username;
 
   if (!username) {
     return res.status(400).json({ message: "Username required" });

@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import bcrypt from "bcrypt";
 import { db } from "../config/db";
 import { generateToken } from "../utils/generateToken";
 
@@ -11,6 +12,7 @@ export const register = async (req: Request, res: Response) => {
   }
 
   try {
+    const passwordHash = await bcrypt.hash(password, 10);
 
     const emailExists = await db.user.findUnique({
       where: { email },
@@ -31,7 +33,7 @@ export const register = async (req: Request, res: Response) => {
         name,
         email,
         username,
-        passwordHash: password,
+        passwordHash,
       },
     });
 
@@ -39,6 +41,7 @@ export const register = async (req: Request, res: Response) => {
 
     res.cookie("token", token, {
       httpOnly: true,
+      sameSite: "lax",
       maxAge: 30 * 24 * 60 * 60 * 1000,
     });
 
@@ -73,7 +76,17 @@ export const login = async (req: Request, res: Response) => {
       return;
     }
 
-    if (user.passwordHash !== password) {
+    const passwordHash = user.passwordHash;
+    if (!passwordHash) {
+      res.status(400).json({ message: "Invalid credentials" });
+      return;
+    }
+
+    const passwordMatches = passwordHash.startsWith("$")
+      ? await bcrypt.compare(password, passwordHash)
+      : passwordHash === password;
+
+    if (!passwordMatches) {
       res.status(400).json({ message: "Invalid credentials" });
       return;
     }
@@ -82,6 +95,7 @@ export const login = async (req: Request, res: Response) => {
 
     res.cookie("token", token, {
       httpOnly: true,
+      sameSite: "lax",
       maxAge: 30 * 24 * 60 * 60 * 1000,
     });
 

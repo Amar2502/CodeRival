@@ -1,12 +1,12 @@
 import app from "./app";
 import { config } from "./config/config";
-import { prisma } from "./config/db";
+import { db } from "./config/db";
 
 const PORT = config.PORT;
 
 async function start_server() {
     try {
-        await prisma.$connect();
+        await db.$connect();
         console.log("Database connected successfully");
         
         app.listen(PORT, ()=> {
