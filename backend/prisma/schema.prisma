@@ -30,12 +30,8 @@ enum Difficulty {
 
 enum Language {
   CPP
-  PYTHON
   JAVA
-  JAVASCRIPT
-  TYPESCRIPT
-  GO
-  RUST
+  PYTHON
 }
 
 enum SubmissionStatus {
@@ -94,7 +90,6 @@ model Problem {
   updatedAt DateTime @updatedAt
 
   starterCodes ProblemStarterCode[]
-  examples     ProblemExample[]
   testCases    ProblemTestCase[]
   submissions  Submission[]
   matches      Match[]
@@ -117,19 +112,6 @@ model ProblemStarterCode {
   problem Problem @relation(fields: [problemId], references: [id], onDelete: Cascade)
 
   @@unique([problemId, language])
-}
-
-model ProblemExample {
-  id           String  @id @default(cuid())
-  problemId    String
-  input        String
-  output       String
-  explanation  String?
-  displayOrder Int
-
-  problem Problem @relation(fields: [problemId], references: [id], onDelete: Cascade)
-
-  @@unique([problemId, displayOrder])
 }
 
 model ProblemTestCase {
