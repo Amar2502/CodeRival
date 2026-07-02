@@ -280,8 +280,9 @@ export default function DashboardPage() {
 						<div className="mt-3 border-t border-[#334155]">
 							{problemRows.map((problem) => {
 								return (
+									<Link href={`/problems/${problem.slug}`} key={problem.id} className="block">
 									<article
-										key={problem.id}
+										// key={problem.id}
 										className="grid gap-3 border-b border-[#1E293B] py-3.5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center"
 									>
 										<div className="min-w-0">
@@ -305,6 +306,7 @@ export default function DashboardPage() {
 											</span>
 										</div>
 									</article>
+									</Link>
 								);
 							})}
 						</div>
