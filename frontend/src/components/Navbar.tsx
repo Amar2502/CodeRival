@@ -1,19 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import {
   List,
-  ChevronLeft,
-  ChevronRight,
-  Shuffle,
   Play,
   CloudUpload,
-  NotebookText,
-  Sparkles,
-  LayoutGrid,
   Settings,
-  Flame,
-  Timer,
-  UserPlus,
+  UserRound,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -25,10 +18,10 @@ export default function Navbar() {
         <div className="flex h-6 w-6 items-center justify-center rounded bg-[#FB923C] text-sm font-bold text-black">
           C
         </div>
-        <button className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm font-medium text-[#CBD5E1] transition hover:bg-[#1E293B] hover:text-[#F8FAFC]">
+        <Link href="/problems" className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm font-medium text-[#CBD5E1] transition hover:bg-[#1E293B] hover:text-[#F8FAFC]">
           <List className="h-4 w-4" />
           Problem List
-        </button>
+        </Link>
       </div>
 
       {/* Center cluster */}
@@ -51,9 +44,9 @@ export default function Navbar() {
         <Button variant="icon" size="icon" className="h-7 w-7 text-[#CBD5E1] hover:bg-[#1E293B] hover:text-[#F8FAFC]">
           <Settings className="h-4 w-4" />
         </Button>
-        <Button variant="icon" size="icon" className="h-7 w-7 text-[#CBD5E1] hover:bg-[#1E293B] hover:text-[#F8FAFC]">
-          <UserPlus className="h-4 w-4" />
-        </Button>
+        <Link href="/me" className="flex h-7 w-7 items-center justify-center rounded-md text-[#CBD5E1] transition hover:bg-[#1E293B] hover:text-[#F8FAFC]">
+          <UserRound className="h-4 w-4" />
+        </Link>
         <div className="h-6 w-6 rounded-full bg-linear-to-br from-[#4F46E5] to-[#FB923C]" />
       </div>
     </div>

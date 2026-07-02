@@ -130,6 +130,7 @@ export default function DashboardPage() {
 	const dashboardUser = dashboard?.user ?? null;
 	const displayUsername = dashboardUser?.username ?? user?.username ?? "Rival";
 	const recentMatches = dashboard?.recentMatches ?? [];
+	const profileHref = dashboardUser?.id ? `/profile/${dashboardUser.id}` : "/me";
 	const rankingStats = dashboardUser
 		? [
 			{ label: "Current rating", value: String(dashboardUser.rating) },
@@ -211,8 +212,9 @@ export default function DashboardPage() {
 					<nav className="flex flex-wrap items-center gap-5 text-sm text-[#CBD5E1]">
 						{[
 							["Battles", "/dashboard"],
-							["Leaderboard", "/dashboard"],
-							["Profile", "/dashboard"],
+							["Problems", "/problems"],
+							["Account", "/me"],
+							["Username check", "/user/check-username"],
 						].map(([label, href]) => (
 							<Link key={label} href={href} className="border-b border-transparent pb-1 transition hover:border-[#6366F1] hover:text-[#F8FAFC]">
 								{label}
@@ -231,19 +233,19 @@ export default function DashboardPage() {
 						<div className="flex flex-col gap-3 border-b border-[#334155] pb-3">
 
 							<div className="flex flex-wrap align-middle items-center gap-3 text-sm text-[#CBD5E1]">
-								<button
-									type="button"
-									className="inline-flex border-2 rounded-2xl border-slate-400 p-3 align-middle items-center gap-2  font-medium transition hover:border-[#6366F1] hover:text-[#F8FAFC] cursor-pointer"
+								<Link
+									href="/user/check-username"
+									className="inline-flex border-2 rounded-2xl border-slate-400 p-3 align-middle items-center gap-2 font-medium transition hover:border-[#6366F1] hover:text-[#F8FAFC] cursor-pointer"
 								>
 									Challenge friends
-								</button>
-								<button
-									type="button"
+								</Link>
+								<Link
+									href="/problems"
 									className="inline-flex items-center gap-2 border-2 rounded-2xl border-slate-400 p-3 align-middle font-medium transition hover:border-[#FB923C] hover:text-[#F8FAFC] cursor-pointer"
 								>
 									Start battle
 									<Play className="h-4 w-4" />
-								</button>
+								</Link>
 							</div>
 
 							<div className="flex flex-col gap-3 border-t border-[#1E293B] pt-3 lg:flex-row lg:items-center lg:justify-between">
@@ -383,6 +385,14 @@ export default function DashboardPage() {
 											</div>
 										</div>
 									))}
+								</div>
+								<div className="mt-4 flex flex-wrap gap-3">
+									<Link href="/problems" className="rounded-full border border-[#334155] px-4 py-2 text-sm text-[#CBD5E1] transition hover:border-[#6366F1] hover:text-[#F8FAFC]">
+										Browse problems
+									</Link>
+									<Link href={profileHref} className="rounded-full border border-[#334155] px-4 py-2 text-sm text-[#CBD5E1] transition hover:border-[#6366F1] hover:text-[#F8FAFC]">
+										Open profile
+									</Link>
 								</div>
 							</section>
 						</div>
