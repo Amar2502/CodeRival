@@ -8,10 +8,13 @@ CREATE TYPE "Verdict" AS ENUM ('AC', 'WA', 'TLE', 'MLE', 'RTE');
 CREATE TYPE "Difficulty" AS ENUM ('EASY', 'MEDIUM', 'HARD');
 
 -- CreateEnum
-CREATE TYPE "Language" AS ENUM ('CPP', 'PYTHON', 'JAVA', 'JAVASCRIPT', 'TYPESCRIPT', 'GO', 'RUST');
+CREATE TYPE "Language" AS ENUM ('CPP', 'JAVA', 'PYTHON');
 
 -- CreateEnum
 CREATE TYPE "SubmissionStatus" AS ENUM ('QUEUED', 'RUNNING', 'FINISHED');
+
+-- CreateEnum
+CREATE TYPE "CheckerType" AS ENUM ('NORMAL', 'FLOAT', 'TREE', 'GRAPH', 'CUSTOM');
 
 -- CreateTable
 CREATE TABLE "User" (
@@ -41,10 +44,11 @@ CREATE TABLE "User" (
 -- CreateTable
 CREATE TABLE "Problem" (
     "id" TEXT NOT NULL,
+    "problemNumber" INTEGER NOT NULL,
     "title" TEXT NOT NULL,
-    "description" TEXT NOT NULL,
     "slug" TEXT NOT NULL,
     "difficulty" "Difficulty" NOT NULL,
+    "description" TEXT NOT NULL,
     "constraints" TEXT[],
     "timeLimitMs" INTEGER NOT NULL,
     "memoryLimitMb" INTEGER NOT NULL,
@@ -56,6 +60,18 @@ CREATE TABLE "Problem" (
 );
 
 -- CreateTable
+CREATE TABLE "ProblemExample" (
+    "id" TEXT NOT NULL,
+    "problemId" TEXT NOT NULL,
+    "input" TEXT NOT NULL,
+    "output" TEXT NOT NULL,
+    "explanation" TEXT,
+    "order" INTEGER NOT NULL,
+
+    CONSTRAINT "ProblemExample_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "Topic" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
@@ -64,37 +80,65 @@ CREATE TABLE "Topic" (
 );
 
 -- CreateTable
+CREATE TABLE "ProblemSignature" (
+    "id" TEXT NOT NULL,
+    "problemId" TEXT NOT NULL,
+    "functionName" TEXT NOT NULL,
+    "returnType" TEXT NOT NULL,
+    "parameters" JSONB NOT NULL,
+
+    CONSTRAINT "ProblemSignature_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "ProblemStarterCode" (
     "id" TEXT NOT NULL,
     "problemId" TEXT NOT NULL,
     "language" "Language" NOT NULL,
     "starterCode" TEXT NOT NULL,
+    "solutionClass" TEXT,
+    "imports" TEXT,
 
     CONSTRAINT "ProblemStarterCode_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
-CREATE TABLE "ProblemExample" (
+CREATE TABLE "LanguageTemplate" (
     "id" TEXT NOT NULL,
-    "problemId" TEXT NOT NULL,
-    "input" TEXT NOT NULL,
-    "output" TEXT NOT NULL,
-    "explanation" TEXT,
-    "displayOrder" INTEGER NOT NULL,
+    "language" "Language" NOT NULL,
+    "wrapperTemplate" TEXT NOT NULL,
+    "compileCommand" TEXT NOT NULL,
+    "runCommand" TEXT NOT NULL,
+    "fileName" TEXT NOT NULL,
+    "extension" TEXT NOT NULL,
 
-    CONSTRAINT "ProblemExample_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "LanguageTemplate_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "ProblemTestCase" (
     "id" TEXT NOT NULL,
     "problemId" TEXT NOT NULL,
-    "input" TEXT NOT NULL,
-    "output" TEXT NOT NULL,
+    "input" JSONB NOT NULL,
+    "expectedOutput" JSONB NOT NULL,
     "isSample" BOOLEAN NOT NULL DEFAULT false,
+    "order" INTEGER NOT NULL,
+    "weight" INTEGER NOT NULL DEFAULT 1,
     "isHidden" BOOLEAN NOT NULL DEFAULT true,
 
     CONSTRAINT "ProblemTestCase_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "ProblemJudge" (
+    "id" TEXT NOT NULL,
+    "problemId" TEXT NOT NULL,
+    "checker" "CheckerType" NOT NULL,
+    "customChecker" TEXT,
+    "parser" TEXT,
+    "validator" TEXT,
+
+    CONSTRAINT "ProblemJudge_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -150,10 +194,13 @@ CREATE INDEX "User_rating_idx" ON "User"("rating");
 CREATE INDEX "User_username_idx" ON "User"("username");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "Problem_title_key" ON "Problem"("title");
+CREATE UNIQUE INDEX "Problem_problemNumber_key" ON "Problem"("problemNumber");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Problem_slug_key" ON "Problem"("slug");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Problem_title_key" ON "Problem"("title");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Topic_name_key" ON "Topic"("name");
@@ -162,19 +209,28 @@ CREATE UNIQUE INDEX "Topic_name_key" ON "Topic"("name");
 CREATE UNIQUE INDEX "ProblemStarterCode_problemId_language_key" ON "ProblemStarterCode"("problemId", "language");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "ProblemExample_problemId_displayOrder_key" ON "ProblemExample"("problemId", "displayOrder");
+CREATE UNIQUE INDEX "LanguageTemplate_language_key" ON "LanguageTemplate"("language");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "ProblemJudge_problemId_key" ON "ProblemJudge"("problemId");
 
 -- CreateIndex
 CREATE INDEX "_ProblemToTopic_B_index" ON "_ProblemToTopic"("B");
 
 -- AddForeignKey
-ALTER TABLE "ProblemStarterCode" ADD CONSTRAINT "ProblemStarterCode_problemId_fkey" FOREIGN KEY ("problemId") REFERENCES "Problem"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "ProblemExample" ADD CONSTRAINT "ProblemExample_problemId_fkey" FOREIGN KEY ("problemId") REFERENCES "Problem"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "ProblemSignature" ADD CONSTRAINT "ProblemSignature_problemId_fkey" FOREIGN KEY ("problemId") REFERENCES "Problem"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ProblemStarterCode" ADD CONSTRAINT "ProblemStarterCode_problemId_fkey" FOREIGN KEY ("problemId") REFERENCES "Problem"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "ProblemTestCase" ADD CONSTRAINT "ProblemTestCase_problemId_fkey" FOREIGN KEY ("problemId") REFERENCES "Problem"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ProblemJudge" ADD CONSTRAINT "ProblemJudge_problemId_fkey" FOREIGN KEY ("problemId") REFERENCES "Problem"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Match" ADD CONSTRAINT "Match_winnerId_fkey" FOREIGN KEY ("winnerId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;

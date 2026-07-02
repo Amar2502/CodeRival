@@ -40,6 +40,14 @@ enum SubmissionStatus {
   FINISHED
 }
 
+enum CheckerType {
+  NORMAL
+  FLOAT
+  TREE
+  GRAPH
+  CUSTOM
+}
+
 model User {
   id           String  @id @default(cuid())
   name         String
@@ -76,53 +84,115 @@ model User {
 }
 
 model Problem {
-  id            String     @id @default(cuid())
-  title         String     @unique
-  description   String
-  slug          String     @unique
-  difficulty    Difficulty
-  constraints   String[]
+  id String @id @default(cuid())
+
+  problemNumber Int    @unique
+  title         String
+  slug          String @unique
+  difficulty Difficulty
+  description String // Markdown
+  constraints String[]
+
   timeLimitMs   Int
   memoryLimitMb Int
-  isActive      Boolean    @default(true)
+
+  isActive Boolean @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  judge ProblemJudge?
+
+  topics Topic[]
+  examples     ProblemExample[]
   starterCodes ProblemStarterCode[]
+  signatures   ProblemSignature[]
   testCases    ProblemTestCase[]
-  submissions  Submission[]
-  matches      Match[]
-  topics       Topic[]
+  submissions Submission[]
+  matches     Match[]
+
+  @@unique([title])
 }
 
-model Topic {
-  id   String @id @default(cuid())
-  name String @unique
+model ProblemExample {
 
-  problems Problem[]
+  id          String @id @default(cuid())
+  problemId   String
+  input       String
+  output      String
+  explanation String?
+  order       Int
+
+  problem Problem @relation(fields: [problemId], references: [id], onDelete: Cascade)
+}
+
+model Topic { 
+
+  id String @id @default(cuid()) 
+  name String @unique 
+  problems Problem[] 
+}
+
+model ProblemSignature {
+
+  id String @id @default(cuid())
+  problemId String
+  functionName String
+  returnType String
+  parameters Json
+
+  problem Problem @relation(fields: [problemId], references: [id], onDelete: Cascade)
 }
 
 model ProblemStarterCode {
-  id          String   @id @default(cuid())
-  problemId   String
-  language    Language
-  starterCode String
 
-  problem Problem @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  id String @id @default(cuid())
+  problemId String
+  language Language
+  starterCode String
+  solutionClass String?
+  imports String?
+
+  problem Problem @relation(fields:[problemId], references:[id], onDelete:Cascade)
 
   @@unique([problemId, language])
 }
 
-model ProblemTestCase {
-  id        String  @id @default(cuid())
-  problemId String
-  input     String
-  output    String
-  isSample  Boolean @default(false)
-  isHidden  Boolean @default(true)
+model LanguageTemplate {
 
-  problem Problem @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  id String @id @default(cuid())
+  language Language @unique
+  wrapperTemplate String
+  compileCommand String
+  runCommand String
+  fileName String
+  extension String
+}
+
+model ProblemTestCase {
+
+  id String @id @default(cuid())
+  problemId String
+  input Json
+  expectedOutput Json
+  isSample Boolean @default(false)
+  order Int
+  weight Int @default(1)
+  isHidden Boolean @default(true)
+
+  problem Problem @relation(fields:[problemId], references:[id], onDelete:Cascade)
+}
+
+model ProblemJudge {
+
+  id String @id @default(cuid())
+  problemId String @unique
+  checker CheckerType
+  customChecker String?
+  parser String?
+  validator String?
+
+  problem Problem @relation(fields:[problemId], references:[id], onDelete:Cascade)
 }
 
 model Match {

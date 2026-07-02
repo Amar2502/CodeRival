@@ -19,7 +19,7 @@ export const getDashboard = async (req: Request, res: Response) => {
 
     const problems = await db.problem.findMany({
       select: {
-        id: true,
+        problemNumber: true,
         title: true,
         slug: true,
         difficulty: true,
