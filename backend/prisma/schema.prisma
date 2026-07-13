@@ -7,19 +7,18 @@ datasource db {
   provider = "postgresql"
 }
 
-enum MatchStatus {
-  WAITING
-  RUNNING
-  FINISHED
-  CANCELLED
-}
-
 enum Verdict {
   AC
   WA
   TLE
   MLE
   RTE
+}
+
+enum SubmissionStatus {
+  QUEUED
+  RUNNING
+  FINISHED
 }
 
 enum Difficulty {
@@ -34,20 +33,6 @@ enum Language {
   PYTHON
 }
 
-enum SubmissionStatus {
-  QUEUED
-  RUNNING
-  FINISHED
-}
-
-enum CheckerType {
-  NORMAL
-  FLOAT
-  TREE
-  GRAPH
-  CUSTOM
-}
-
 model User {
   id           String  @id @default(cuid())
   name         String
@@ -56,15 +41,9 @@ model User {
   avatar       String?
   username     String  @unique
 
-  rating        Int @default(1200)
-  wins          Int @default(0)
-  losses        Int @default(0)
-  draws         Int @default(0)
-  matchesPlayed Int @default(0)
+  problemsSolved Int @default(0)
 
-  country  String?
-  isOnline Boolean   @default(false)
-  lastSeen DateTime?
+  country String?
 
   googleId      String?
   githubId      String?
@@ -73,50 +52,36 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  player1Matches Match[] @relation("Player1Matches")
-  player2Matches Match[] @relation("Player2Matches")
-  winnerMatches  Match[] @relation("WinnerMatches")
-
   submissions Submission[]
 
-  @@index([rating])
   @@index([username])
 }
 
 model Problem {
   id String @id @default(cuid())
 
-  problemNumber Int    @unique
+  problemNumber Int        @unique
   title         String
-  slug          String @unique
-  difficulty Difficulty
-  description String // Markdown
-  constraints String[]
+  slug          String     @unique
+  difficulty    Difficulty
+  description   String     @db.Text
+  constraints   String     @db.Text
 
-  timeLimitMs   Int
-  memoryLimitMb Int
-
-  isActive Boolean @default(true)
+  timeLimitMs   Int @default(1000)
+  memoryLimitMb Int @default(256)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  judge ProblemJudge?
-
-  topics Topic[]
-  examples     ProblemExample[]
-  starterCodes ProblemStarterCode[]
-  signatures   ProblemSignature[]
-  testCases    ProblemTestCase[]
-  submissions Submission[]
-  matches     Match[]
-
-  @@unique([title])
+  topics              Topic[]
+  examples            ProblemExample[]
+  submissions         Submission[]
+  problemStarterCodes ProblemStarterCode[]
+  problemTestCases    ProblemTestCase[]
 }
 
 model ProblemExample {
-
-  id          String @id @default(cuid())
+  id          String  @id @default(cuid())
   problemId   String
   input       String
   output      String
@@ -126,94 +91,34 @@ model ProblemExample {
   problem Problem @relation(fields: [problemId], references: [id], onDelete: Cascade)
 }
 
-model Topic { 
-
-  id String @id @default(cuid()) 
-  name String @unique 
-  problems Problem[] 
-}
-
-model ProblemSignature {
-
+model ProblemStarterCode {
   id String @id @default(cuid())
+
   problemId String
-  functionName String
-  returnType String
-  parameters Json
+  language  Language
+  code      String   @db.Text
 
   problem Problem @relation(fields: [problemId], references: [id], onDelete: Cascade)
-}
-
-model ProblemStarterCode {
-
-  id String @id @default(cuid())
-  problemId String
-  language Language
-  starterCode String
-  solutionClass String?
-  imports String?
-
-  problem Problem @relation(fields:[problemId], references:[id], onDelete:Cascade)
 
   @@unique([problemId, language])
 }
 
-model LanguageTemplate {
-
-  id String @id @default(cuid())
-  language Language @unique
-  wrapperTemplate String
-  compileCommand String
-  runCommand String
-  fileName String
-  extension String
-}
-
 model ProblemTestCase {
-
   id String @id @default(cuid())
-  problemId String
-  input Json
-  expectedOutput Json
-  isSample Boolean @default(false)
-  order Int
-  weight Int @default(1)
-  isHidden Boolean @default(true)
 
-  problem Problem @relation(fields:[problemId], references:[id], onDelete:Cascade)
+  problemId String
+  problem   Problem @relation(fields: [problemId], references: [id], onDelete: Cascade)
+
+  input    Json
+  expected Json
 }
 
-model ProblemJudge {
-
-  id String @id @default(cuid())
-  problemId String @unique
-  checker CheckerType
-  customChecker String?
-  parser String?
-  validator String?
-
-  problem Problem @relation(fields:[problemId], references:[id], onDelete:Cascade)
-}
-
-model Match {
+model Topic {
   id String @id @default(cuid())
 
-  player1Id String
-  player2Id String
-  winnerId  String?
-  problemId String
+  name String @unique
 
-  status    MatchStatus @default(WAITING)
-  startedAt DateTime?
-  endedAt   DateTime?
-  createdAt DateTime    @default(now())
-
-  winner  User?   @relation("WinnerMatches", fields: [winnerId], references: [id])
-  problem Problem @relation(fields: [problemId], references: [id], onDelete: Cascade)
-  player1 User    @relation("Player1Matches", fields: [player1Id], references: [id])
-  player2 User    @relation("Player2Matches", fields: [player2Id], references: [id])
-
-  submissions Submission[]
+  problems Problem[]
 }
 
 model Submission {
@@ -233,6 +138,5 @@ model Submission {
   submittedAt DateTime         @default(now())
 
   user    User    @relation(fields: [userId], references: [id])
-  match   Match?  @relation(fields: [matchId], references: [id])
   problem Problem @relation(fields: [problemId], references: [id])
 }

@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken"
 import { config } from "../config/config"
+import crypto from "crypto"
 
 type JwtUser = {
   id: string;
@@ -7,7 +8,7 @@ type JwtUser = {
   email: string;
 };
 
-export const generateToken = (user: JwtUser) => {
+export const generateAuthToken = (user: JwtUser) => {
   return jwt.sign(
     {
       userId: user.id,
@@ -18,3 +19,7 @@ export const generateToken = (user: JwtUser) => {
     { expiresIn: "30d" }
   )
 }
+
+export const generatePasswordResetToken = () => {
+  return crypto.randomBytes(32).toString("hex");
+};

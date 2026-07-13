@@ -1,0 +1,12 @@
+services:
+  coderival-redis:
+    image: redis:8
+    container_name: coderival-redis
+    ports:
+      - "6380:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+
+volumes:
+  redis-data:

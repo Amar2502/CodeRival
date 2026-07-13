@@ -1,152 +1,85 @@
 import { db } from "../src/config/db";
 import fs from "fs";
-import { Difficulty, Language} from "../src/generated/prisma/client";
-
-type Example = {
-  input: string;
-  output: string;
-};
-
-type ProblemSeed = {
-  title: string;
-  slug: string;
-  difficulty: string;
-  description: string;
-  topics: string[];
-  examples: Example[];
-  starter_code: {
-    python?: string;
-    java?: string;
-    cpp?: string;
-  };
-};
-
-const data: ProblemSeed[] = JSON.parse(
-  fs.readFileSync("problems.json", "utf-8")
-);
-
-// -----------------------------
-// HELPERS
-// -----------------------------
-function mapDifficulty(d: string): Difficulty {
-  const val = d.toLowerCase();
-  if (val === "easy") return Difficulty.EASY;
-  if (val === "medium") return Difficulty.MEDIUM;
-  return Difficulty.HARD;
-}
+import { Difficulty, Language } from "../src/generated/prisma/client";
+import path from "path";
 
 async function main() {
-  for (const p of data) {
 
-    await db.$transaction(async (tx) => {
+  const filePath = path.join(__dirname, "problems.json");
 
-      // -----------------------------
-      // 1. UPSERT PROBLEM
-      // -----------------------------
-      const problem = await tx.problem.upsert({
-        where: { slug: p.slug },
-        update: {
-          description: p.description,
-        },
-        create: {
-          title: p.title,
-          slug: p.slug,
-          description: p.description,
-          difficulty: mapDifficulty(p.difficulty),
-          constraints: [],
-          timeLimitMs: 1000,
-          memoryLimitMb: 256,
-          isActive: true,
-        },
-      });
+  const problems = JSON.parse(
+    fs.readFileSync(filePath, "utf-8")
+  );
 
-      // -----------------------------
-      // 2. TOPICS (DEDUPED)
-      // -----------------------------
-      const topicIds: string[] = [];
 
-      for (const t of p.topics || []) {
-        const topic = await tx.topic.upsert({
-          where: { name: t },
-          update: {},
-          create: { name: t },
-        });
+  for (const problem of problems) {
 
-        topicIds.push(topic.id);
+    console.log(`Seeding: ${problem.title}`);
+
+
+    const createdProblem = await db.problem.upsert({
+      where: {
+        slug: problem.slug,
+      },
+      update: {},
+      create: {
+        problemNumber: problem.problemNumber,
+        title: problem.title,
+        slug: problem.slug,
+        difficulty: problem.difficulty as Difficulty,
+        description: problem.description,
+        constraints: problem.constraints,
+        timeLimitMs: problem.timeLimitMs,
+        memoryLimitMb: problem.memoryLimitMb,
       }
-
-      // connect topics in one go (avoids duplicates)
-      await tx.problem.update({
-        where: { id: problem.id },
-        data: {
-          topics: {
-            set: topicIds.map(id => ({ id })),
-          },
-        },
-      });
-
-      // -----------------------------
-      // 3. STARTER CODE (CPP / JAVA / PYTHON)
-      // -----------------------------
-      const starter = p.starter_code || {};
-
-      const starterData = [
-        { lang: Language.CPP, code: starter.cpp },
-        { lang: Language.JAVA, code: starter.java },
-        { lang: Language.PYTHON, code: starter.python },
-      ];
-
-      for (const s of starterData) {
-        if (!s.code) continue;
-
-        await tx.problemStarterCode.upsert({
-          where: {
-            problemId_language: {
-              problemId: problem.id,
-              language: s.lang,
-            },
-          },
-          update: {
-            starterCode: s.code,
-          },
-          create: {
-            problemId: problem.id,
-            language: s.lang,
-            starterCode: s.code,
-          },
-        });
-      }
-
-      // -----------------------------
-      // 4. TEST CASES (BULK INSERT)
-      // -----------------------------
-      if (p.examples?.length) {
-
-        await tx.problemTestCase.deleteMany({
-          where: { problemId: problem.id },
-        });
-
-        await tx.problemTestCase.createMany({
-          data: p.examples.map((ex, i) => ({
-            problemId: problem.id,
-            input: ex.input,
-            output: ex.output,
-            isSample: i < 2,
-            isHidden: i >= 2,
-          })),
-        });
-      }
-
     });
+    // -----------------------
+    // Examples
+    // -----------------------
+    await db.problemExample.createMany({
+      data: problem.examples.map((example: any) => ({
+        problemId: createdProblem.id,
+        input: example.input,
+        output: example.output,
+        explanation: example.explanation,
+        order: example.order,
+      })),
+    });
+    // -----------------------
+    // Starter Codes
+    // -----------------------
 
-    console.log(`Seeded: ${p.slug}`);
+    await db.problemStarterCode.createMany({
+      data: problem.starterCodes.map((starter: any) => ({
+        problemId: createdProblem.id,
+        language: starter.language as Language,
+        code: starter.code,
+      })),
+    });
+    // -----------------------
+    // Test Cases
+    // -----------------------
+
+    await db.problemTestCase.createMany({
+      data: problem.testCases.map((test: any) => ({
+        problemId: createdProblem.id,
+        input: test.input,
+        expected: test.expected,
+      }))
+    });
+    console.log(`✓ Completed: ${problem.title}`);
   }
-
-  console.log("🔥 All problems seeded successfully");
 }
 
+
+
 main()
-  .catch((e) => console.error(e))
-  .finally(async () => {
+
+  .then(async () => {
     await db.$disconnect();
+  })
+  .catch(async (error) => {
+    console.error(error);
+    await db.$disconnect();
+    process.exit(1);
   });

@@ -126,3 +126,78 @@ export const getUserProfile = async (req: Request, res: Response) => {
     });
   }
 };
+
+export const updateUserProfile = async (req: Request, res: Response) => {
+  const { name, username } = req.body;
+
+  try {
+    const userId = req.user?.userId;
+
+    if (!userId) {
+      return res.status(401).json({
+        message: "Unauthorized",
+      });
+    }
+
+    // At least one field must be provided
+    if (name === undefined && username === undefined) {
+      return res.status(400).json({
+        message: "Provide at least one field to update.",
+      });
+    }
+
+    const updateData: {
+      name?: string;
+      username?: string;
+    } = {};
+
+    // Update name if provided
+    if (name !== undefined) {
+      updateData.name = name;
+    }
+
+    // Update username if provided
+    if (username !== undefined) {
+      const trimmedUsername = username.trim();
+
+      // Check if username is already taken by another user
+      const existingUser = await db.user.findUnique({
+        where: {
+          username: trimmedUsername,
+        },
+      });
+
+      if (existingUser && existingUser.id !== userId) {
+        return res.status(409).json({
+          message: "Username is already taken.",
+        });
+      }
+
+      updateData.username = trimmedUsername;
+    }
+
+    const updatedUser = await db.user.update({
+      where: {
+        id: userId,
+      },
+      data: updateData,
+      select: {
+        id: true,
+        name: true,
+        username: true,
+        email: true,
+      },
+    });
+
+    return res.status(200).json({
+      message: "Profile updated successfully.",
+      user: updatedUser,
+    });
+  } catch (error) {
+    console.error("Update Profile Error:", error);
+
+    return res.status(500).json({
+      message: "Internal Server Error",
+    });
+  }
+};
