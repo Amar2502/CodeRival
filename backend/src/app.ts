@@ -5,7 +5,7 @@ import authRoutes from "./routes/auth.routes";
 import userRoutes from "./routes/user.routes";
 import problemRoutes from "./routes/problems.routes";
 import dashboardRoutes from "./routes/dashboard.routes";
-import runcodeRoutes from "./routes/runcode.routes";    
+import codeRoutes from "./routes/code.routes";    
 import { config } from "./config/config";
 
 const app = express();
@@ -24,6 +24,6 @@ app.use("/auth", authRoutes);
 app.use("/user", userRoutes);
 app.use("/dashboard", dashboardRoutes);
 app.use("/problem", problemRoutes);
-app.use("/code", runcodeRoutes);
+app.use("/code", codeRoutes);
 
 export default app;

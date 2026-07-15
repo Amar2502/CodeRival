@@ -7,3 +7,5 @@ build/
 Thumbs.db
 backend/src/generated/
 problems.json
+
+backend/scripts/
