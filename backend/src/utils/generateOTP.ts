@@ -1,5 +1,5 @@
-export const generateOTPKey = (email: string): string => {
-  return `otp:forgot-password:${email}`;
+export const generateOTPKey = (email: string, task: "forgot-password" | "verify-email"): string => {
+  return `otp:${task}:${email}`;
 }
 
 export const generateOTP = (): string => {

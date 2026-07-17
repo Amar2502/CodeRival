@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect } from "react";
-import { api } from "@/lib/axios";
-import { useAuthStore } from "@/lib/auth_store";
+import { api } from "../lib/axios";
+import { useAuthStore } from "@/lib/authStore";
 
 export default function AuthProvider({
   children,

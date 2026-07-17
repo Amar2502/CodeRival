@@ -4,16 +4,12 @@ import { db } from "../config/db";
 import { generateAuthToken } from "../utils/generateToken";
 import { otpService } from "../services/otp.service";  
 import { emailService } from "../services/email.service";
-import { verifyPasswordResetToken } from "../services/passwordReset.service";
+import { verifyToken } from "../services/passwordReset.service";
 
 export const register = async (req: Request, res: Response) => {
-  const { name, email, username, password } = req.body;
+  const { name, email, username, password, confirmPassword } = req.body;
 
-  if (!name || !email || !password || !username) {
-    res.status(400).json({ message: "All fields are required" });
-    return;
-  }
-
+  console.log("Register request body:", req.body);
   try {
     const passwordHash = await bcrypt.hash(password, 10);
 
@@ -30,6 +26,8 @@ export const register = async (req: Request, res: Response) => {
     if (usernameExists) {
       return res.status(400).json({ message: "Username already exists" });
     }
+
+
 
     const user = await db.user.create({
       data: {
@@ -54,7 +52,7 @@ export const register = async (req: Request, res: Response) => {
         id: user.id,
         username: user.username,
         email: user.email,
-      },
+      }
     });
   } catch (err) {
     console.log(err);
@@ -138,7 +136,7 @@ export const requestPasswordReset = async (req: Request, res: Response) => {
       return;
     }
     
-    const otp = await otpService.saveOTP(email);
+    const otp = await otpService.saveOTP(email, "forgot-password");
 
     await emailService.sendEmail(email, otp);
 
@@ -154,7 +152,7 @@ export const requestPasswordReset = async (req: Request, res: Response) => {
 
 };
 
-export const verifyOTP = async (req: Request, res: Response) => {
+export const verifyPasswordResetOTP = async (req: Request, res: Response) => {
 
   const { email, otp } = req.body;
 
@@ -165,7 +163,7 @@ export const verifyOTP = async (req: Request, res: Response) => {
 
   try {
 
-    const token = await otpService.verifyOTP(email, otp);
+    const token = await otpService.verifyOTP(email, otp, "forgot-password");
 
     res.status(200).json({
       message: "OTP verified successfully",
@@ -190,7 +188,7 @@ export const resetPassword = async (req: Request, res: Response) => {
 
   try {
 
-    const isValidToken = await verifyPasswordResetToken(email, token);
+    const isValidToken = await verifyToken(email, token, "forgot-password");
 
     if (!isValidToken) {
       res.status(400).json({ message: "Expired Service, Try Again" });
@@ -214,3 +212,70 @@ export const resetPassword = async (req: Request, res: Response) => {
   }
 
 };
+
+export const getVerifyEmailOTP = async (req: Request, res: Response) => {
+
+  const {email} = req.body;
+
+  if (!email) {
+    res.status(400).json({ message: "Email is required" });
+    return;
+  }
+
+  try {
+
+    const user = await db.user.findUnique({
+      where: { email },
+    })
+
+    if (!user) {
+      res.status(400).json({ message: "User does not exist" });
+      return;
+    }
+    
+    const otp = await otpService.saveOTP(email, "verify-email");
+
+    await emailService.sendEmail(email, otp);
+
+    res.status(200).json({
+      message: "OTP sent successfully",
+    });
+    
+  } catch (err) {
+    console.log(err);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+
+};
+
+export const checkVerifyEmailOTP = async (req: Request, res: Response) => {
+
+  const { email, otp } = req.body;
+
+  if(!otp) {
+    res.status(400).json({ message: "OTP is required" });
+    return;
+  }
+
+  try {
+
+    const token = await otpService.verifyOTP(email, otp, "verify-email");
+
+    if (token === true) {
+      await db.user.update({
+        where: { email },
+        data: { emailVerified: true },
+      });
+    }
+
+    res.status(200).json({
+      message: "Email verified successfully",
+      token,
+    });
+
+  } catch (err) {
+    console.log(err);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+  
+}

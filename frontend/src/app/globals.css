@@ -1,15 +1,23 @@
-@import "tailwindcss";
-@import "tw-animate-css";
-@import "shadcn/tailwind.css";
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
 
 @custom-variant dark (&:is(.dark *));
 
+/* ============================================================
+   CodeRival design tokens
+   Reference points, on purpose:
+   - Canvas / surfaces / borders  -> GitHub Dark (#0d1117 family)
+   - Difficulty colors            -> LeetCode (easy/medium/hard)
+   - Rating tiers                 -> Codeforces / chess.com ELO bands
+   - Editor chrome / scrollbars   -> VSCode Dark+
+   - --color-you / --color-rival  -> CodeRival-specific: the two
+     sides of a duel, used on versus screens, player cards, and
+     live match UI. They alias primary/accent so you only ever
+     set one pair of brand colors.
+   ============================================================ */
+
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -26,6 +34,7 @@
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
+  --color-border-muted: var(--border-muted);
   --color-destructive: var(--destructive);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
@@ -39,6 +48,33 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-info: var(--info);
+
+  --color-easy: var(--easy);
+  --color-medium: var(--medium);
+  --color-hard: var(--hard);
+
+  --color-rating-gray: var(--rating-gray);
+  --color-rating-blue: var(--rating-blue);
+  --color-rating-purple: var(--rating-purple);
+  --color-rating-orange: var(--rating-orange);
+  --color-rating-gold: var(--rating-gold);
+  --color-rating-legendary: var(--rating-legendary);
+
+  --color-you: var(--you);
+  --color-rival: var(--rival);
+
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -48,92 +84,395 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-html {
-  background: #0f172a;
-}
-
-body {
-  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
-  min-height: 100vh;
-}
-
+/* ---- Dark (default) ----
+   GitHub Dark canvas, VSCode surface layering, LeetCode difficulty
+   colors, signal red + electric-blue as the CodeRival brand pair. */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  color-scheme: dark;
+
+  --background: #090c10;
+  --foreground: #e6edf3;
+
+  --card: #0d1117;
+  --card-foreground: #e6edf3;
+  --popover: #161b22;
+  --popover-foreground: #e6edf3;
+
+  --surface: #0d1117;      /* editor / problem-panel surface */
+  --surface-2: #161b22;    /* hovered rows, dropdowns, code toolbar */
+
+  --primary: #f43f5e;              /* signal red — CTA, brand, "rival" energy */
+  --primary-foreground: #ffffff;
+  --secondary: #21262d;
+  --secondary-foreground: #e6edf3;
+
+  --muted: #161b22;
+  --muted-foreground: #8b949e;
+
+  --accent: #58a6ff;                /* electric blue — links, focus, "you" */
+  --accent-foreground: #0a0a0a;
+
+  --destructive: #f85149;
+  --border: #21262d;
+  --border-muted: #30363d;
+  --input: #0d1117;
+  --ring: #58a6ff;
+
+  --chart-1: #f43f5e;
+  --chart-2: #58a6ff;
+  --chart-3: #a855f7;
+  --chart-4: #3fb950;
+  --chart-5: #d29922;
+
+  --radius: 0.375rem; /* 6px — GitHub's own button/card radius */
+
+  --sidebar: #0d1117;
+  --sidebar-foreground: #e6edf3;
+  --sidebar-primary: #f43f5e;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #161b22;
+  --sidebar-accent-foreground: #e6edf3;
+  --sidebar-border: #21262d;
+  --sidebar-ring: #58a6ff;
+
+  --success: #3fb950;
+  --warning: #d29922;
+  --danger: #f85149;
+  --info: #58a6ff;
+
+  /* LeetCode-faithful difficulty colors — don't reinvent these,
+     they're recognition shortcuts for anyone who's solved problems before. */
+  --easy: #00b8a3;
+  --medium: #ffc01e;
+  --hard: #ff375f;
+
+  /* Competitive-programming rating bands (Codeforces/chess.com convention) */
+  --rating-gray: #808080;
+  --rating-blue: #4d9fff;
+  --rating-purple: #a855f7;
+  --rating-orange: #ff8c1a;
+  --rating-gold: #f2b705;
+  --rating-legendary: #ff3333;
+
+  --you: var(--accent);
+  --rival: var(--primary);
+
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  color-scheme: dark;
+  --background: #090c10;
+  --foreground: #e6edf3;
+  --card: #0d1117;
+  --card-foreground: #e6edf3;
+  --popover: #161b22;
+  --popover-foreground: #e6edf3;
+  --surface: #0d1117;
+  --surface-2: #161b22;
+  --primary: #f43f5e;
+  --primary-foreground: #ffffff;
+  --secondary: #21262d;
+  --secondary-foreground: #e6edf3;
+  --muted: #161b22;
+  --muted-foreground: #8b949e;
+  --accent: #58a6ff;
+  --accent-foreground: #0a0a0a;
+  --destructive: #f85149;
+  --border: #21262d;
+  --border-muted: #30363d;
+  --input: #0d1117;
+  --ring: #58a6ff;
+  --chart-1: #f43f5e;
+  --chart-2: #58a6ff;
+  --chart-3: #a855f7;
+  --chart-4: #3fb950;
+  --chart-5: #d29922;
+  --sidebar: #0d1117;
+  --sidebar-foreground: #e6edf3;
+  --sidebar-primary: #f43f5e;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #161b22;
+  --sidebar-accent-foreground: #e6edf3;
+  --sidebar-border: #21262d;
+  --sidebar-ring: #58a6ff;
+  --success: #3fb950;
+  --warning: #d29922;
+  --danger: #f85149;
+  --info: #58a6ff;
+  --easy: #00b8a3;
+  --medium: #ffc01e;
+  --hard: #ff375f;
+  --rating-gray: #808080;
+  --rating-blue: #4d9fff;
+  --rating-purple: #a855f7;
+  --rating-orange: #ff8c1a;
+  --rating-gold: #f2b705;
+  --rating-legendary: #ff3333;
+  --you: var(--accent);
+  --rival: var(--primary);
+}
+
+/* ---- Light ----
+   GitHub Light canvas + darkened brand colors for AA contrast on white.
+   Difficulty/rating hues stay recognizable, just re-tuned for contrast. */
+.light {
+  color-scheme: light;
+  --background: #ffffff;
+  --foreground: #1f2328;
+  --card: #ffffff;
+  --card-foreground: #1f2328;
+  --popover: #ffffff;
+  --popover-foreground: #1f2328;
+  --surface: #f6f8fa;
+  --surface-2: #eaeef2;
+  --primary: #e11d48;
+  --primary-foreground: #ffffff;
+  --secondary: #eaeef2;
+  --secondary-foreground: #1f2328;
+  --muted: #f6f8fa;
+  --muted-foreground: #656d76;
+  --accent: #0969da;
+  --accent-foreground: #ffffff;
+  --destructive: #cf222e;
+  --border: #d0d7de;
+  --border-muted: #d8dee4;
+  --input: #ffffff;
+  --ring: #0969da;
+  --chart-1: #e11d48;
+  --chart-2: #0969da;
+  --chart-3: #8250df;
+  --chart-4: #1a7f37;
+  --chart-5: #9a6700;
+  --sidebar: #f6f8fa;
+  --sidebar-foreground: #1f2328;
+  --sidebar-primary: #e11d48;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #eaeef2;
+  --sidebar-accent-foreground: #1f2328;
+  --sidebar-border: #d0d7de;
+  --sidebar-ring: #0969da;
+  --success: #1a7f37;
+  --warning: #9a6700;
+  --danger: #cf222e;
+  --info: #0969da;
+  --easy: #00a884;
+  --medium: #e8a300;
+  --hard: #e6394f;
+  --rating-gray: #656d76;
+  --rating-blue: #0969da;
+  --rating-purple: #8250df;
+  --rating-orange: #bc4c00;
+  --rating-gold: #9a6700;
+  --rating-legendary: #cf222e;
+  --you: var(--accent);
+  --rival: var(--primary);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    color-scheme: dark;
+    --background: #090c10;
+    --foreground: #e6edf3;
+    --card: #0d1117;
+    --card-foreground: #e6edf3;
+    --popover: #161b22;
+    --popover-foreground: #e6edf3;
+    --surface: #0d1117;
+    --surface-2: #161b22;
+    --primary: #f43f5e;
+    --primary-foreground: #ffffff;
+    --secondary: #21262d;
+    --secondary-foreground: #e6edf3;
+    --muted: #161b22;
+    --muted-foreground: #8b949e;
+    --accent: #58a6ff;
+    --accent-foreground: #0a0a0a;
+    --destructive: #f85149;
+    --border: #21262d;
+    --border-muted: #30363d;
+    --input: #0d1117;
+    --ring: #58a6ff;
+    --chart-1: #f43f5e;
+    --chart-2: #58a6ff;
+    --chart-3: #a855f7;
+    --chart-4: #3fb950;
+    --chart-5: #d29922;
+    --sidebar: #0d1117;
+    --sidebar-foreground: #e6edf3;
+    --sidebar-primary: #f43f5e;
+    --sidebar-primary-foreground: #ffffff;
+    --sidebar-accent: #161b22;
+    --sidebar-accent-foreground: #e6edf3;
+    --sidebar-border: #21262d;
+    --sidebar-ring: #58a6ff;
+    --success: #3fb950;
+    --warning: #d29922;
+    --danger: #f85149;
+    --info: #58a6ff;
+    --easy: #00b8a3;
+    --medium: #ffc01e;
+    --hard: #ff375f;
+    --rating-gray: #808080;
+    --rating-blue: #4d9fff;
+    --rating-purple: #a855f7;
+    --rating-orange: #ff8c1a;
+    --rating-gold: #f2b705;
+    --rating-legendary: #ff3333;
+    --you: var(--accent);
+    --rival: var(--primary);
+  }
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+  }
+
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
-  html {
-    @apply font-sans;
+
+  /* Anything that touches code — problem statements, submissions,
+     the editor itself — switches to the mono stack automatically. */
+  code,
+  pre,
+  kbd,
+  samp,
+  .monaco-editor,
+  .cm-editor {
+    font-family: var(--font-mono);
+    font-feature-settings: 'liga' 1, 'calt' 1; /* ligatures if the loaded font has them */
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--accent) 35%, transparent);
+    color: var(--foreground);
+  }
+
+  /* VSCode-style thin scrollbars instead of the default OS chrome */
+  ::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: color-mix(in oklab, var(--foreground) 18%, transparent);
+    border: 3px solid transparent;
+    background-clip: padding-box;
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in oklab, var(--foreground) 30%, transparent);
+    border: 3px solid transparent;
+    background-clip: padding-box;
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklab, var(--foreground) 18%, transparent) transparent;
+  }
+}
+
+@layer utilities {
+  @keyframes slide-in-right {
+    from {
+      opacity: 0;
+      transform: translateX(100%);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  @keyframes slide-out-left {
+    from {
+      opacity: 1;
+      transform: translateX(0);
+    }
+    to {
+      opacity: 0;
+      transform: translateX(-100%);
+    }
+  }
+
+  .animate-slide-in-right {
+    animation: slide-in-right 0.3s ease-out;
+  }
+
+  .animate-slide-out-left {
+    animation: slide-out-left 0.3s ease-out;
+  }
+
+  /* Live-match pulse — for "LIVE" badges, active duel timers, connecting states */
+  @keyframes pulse-live {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+  .animate-pulse-live {
+    animation: pulse-live 1.4s ease-in-out infinite;
+  }
+
+  /* Difficulty pill — text-only tint, no background block, matches
+     how LeetCode renders difficulty right next to the problem title. */
+  .text-easy   { color: var(--easy); }
+  .text-medium { color: var(--medium); }
+  .text-hard   { color: var(--hard); }
+
+  .bg-easy-subtle   { background: color-mix(in oklab, var(--easy) 15%, transparent);   color: var(--easy); }
+  .bg-medium-subtle { background: color-mix(in oklab, var(--medium) 15%, transparent); color: var(--medium); }
+  .bg-hard-subtle   { background: color-mix(in oklab, var(--hard) 15%, transparent);   color: var(--hard); }
+
+  /* Rating text color, for usernames/handles next to a rank number */
+  .text-rating-gray      { color: var(--rating-gray); }
+  .text-rating-blue      { color: var(--rating-blue); }
+  .text-rating-purple    { color: var(--rating-purple); }
+  .text-rating-orange    { color: var(--rating-orange); }
+  .text-rating-gold      { color: var(--rating-gold); }
+  .text-rating-legendary { color: var(--rating-legendary); font-weight: 700; }
+
+  /* Duel-side accents for versus screens / spectator view */
+  .text-you   { color: var(--you); }
+  .text-rival { color: var(--rival); }
+  .border-you   { border-color: var(--you); }
+  .border-rival { border-color: var(--rival); }
+
+  /* Mac-style window chrome for embedding a code snippet outside the
+     real editor (landing page previews, share cards, empty states). */
+  .editor-chrome {
+    position: relative;
+    padding-top: 2.25rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+  }
+  .editor-chrome::before {
+    content: '';
+    position: absolute;
+    top: 0.85rem;
+    left: 1rem;
+    width: 0.6rem;
+    height: 0.6rem;
+    border-radius: 999px;
+    background: var(--hard);
+    box-shadow: 1.1rem 0 0 var(--medium), 2.2rem 0 0 var(--easy);
+  }
+
+  /* Focus ring that matches VSCode's blue command-palette outline
+     rather than the browser default */
+  .focus-editor:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
   }
 }

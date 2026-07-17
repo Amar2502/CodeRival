@@ -1,10 +1,10 @@
 import { redis } from "../config/redis";
-import { generateOTP, generateOTPKey } from "../utils/generateOTP";
-import { generatePasswordResetToken } from "../utils/generateToken";
+import { generateOTPKey, generateOTP } from "../utils/generateOTP";
+import { generateOTPToken } from "../utils/generateToken";
 
-export const saveOTP = async (email: string) => {
+export const saveOTP = async (email: string, task: "forgot-password" | "verify-email") => {
 
-    const otpkey = generateOTPKey(email);
+    const otpkey = generateOTPKey(email, task);
     const otp = generateOTP();
 
     await redis.set(otpkey, otp, "EX", 600); // 10 minutes
@@ -13,9 +13,9 @@ export const saveOTP = async (email: string) => {
 
 };
 
-export const verifyOTP = async (email: string, otp: string) => {
+export const verifyOTP = async (email: string, otp: string, task: "forgot-password" | "verify-email") => {
 
-    const otpkey = generateOTPKey(email);
+    const otpkey = generateOTPKey(email, task);
     const storedOTP = await redis.get(otpkey);
 
     if (!storedOTP) {
@@ -28,11 +28,14 @@ export const verifyOTP = async (email: string, otp: string) => {
 
     await redis.del(otpkey);
 
-    const token = generatePasswordResetToken();
+    const token = generateOTPToken();
 
-    await redis.set(`password-reset-token:${email}`, token, "EX", 600); // 10 minutes
-
-    return token;
+    if(task === "forgot-password") {
+        await redis.set(`${task}-token:${email}`, token, "EX", 600); // 10 minutes
+        return token;
+    }
+    
+    return true;
 
 };
 

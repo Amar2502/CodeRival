@@ -20,6 +20,6 @@ export const generateAuthToken = (user: JwtUser) => {
   )
 }
 
-export const generatePasswordResetToken = () => {
+export const generateOTPToken = () => {
   return crypto.randomBytes(32).toString("hex");
 };
