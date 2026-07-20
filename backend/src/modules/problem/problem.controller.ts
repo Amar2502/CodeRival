@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
-import { db } from "../config/db";
-import { Difficulty } from "../generated/prisma/client";
+import { db } from "../../config/db";
+import { Difficulty } from "../../generated/prisma/client";
 
 export const getProblem = async (req: Request, res: Response) => {
   try {

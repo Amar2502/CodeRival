@@ -1,6 +1,6 @@
-import { resend } from "../config/resend";
+import { resend } from "../../config/resend";
 import { render } from "@react-email/render";
-import resetPasswordEmail from "../emails/resetPassword";
+import resetPasswordEmail from "./emails.templates/resetPassword";
 
 export async function renderForgotPasswordEmail(otp: string) {
   return render(resetPasswordEmail({ otp }));

@@ -1,11 +1,13 @@
 import { Request, Response } from "express";
 import bcrypt from "bcrypt";
-import { db } from "../config/db";
-import { generateAuthToken } from "../utils/generateToken";
-import { otpService } from "../services/otp.service";  
-import { emailService } from "../services/email.service";
-import { verifyToken } from "../services/passwordReset.service";
+import { db } from "../../config/db";
+import { generateAuthToken } from "../../utils/generateToken";
+import { otpService } from "../../services/otp.service";  
+import { emailService } from "../../services/emails/emails.service";
+import { verifyToken } from "../../services/passwordReset.service";
 
+
+// --------------------------- Register -------------------------------
 export const register = async (req: Request, res: Response) => {
   const { name, email, username, password, confirmPassword } = req.body;
 
@@ -26,8 +28,6 @@ export const register = async (req: Request, res: Response) => {
     if (usernameExists) {
       return res.status(400).json({ message: "Username already exists" });
     }
-
-
 
     const user = await db.user.create({
       data: {
@@ -60,6 +60,7 @@ export const register = async (req: Request, res: Response) => {
   }
 };
 
+// --------------------------- signin -------------------------------
 export const signin = async (req: Request, res: Response) => {
   const { id, password } = req.body;
 
@@ -116,6 +117,8 @@ export const signin = async (req: Request, res: Response) => {
   }
 };
 
+
+// --------------------------- Password Reset -------------------------------
 export const requestPasswordReset = async (req: Request, res: Response) => {
 
   const {email} = req.body;

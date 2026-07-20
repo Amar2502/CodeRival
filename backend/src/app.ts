@@ -1,11 +1,9 @@
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
-import authRoutes from "./routes/auth.routes";
-import userRoutes from "./routes/user.routes";
-import problemRoutes from "./routes/problems.routes";
-import dashboardRoutes from "./routes/dashboard.routes";
-import codeRoutes from "./routes/code.routes";    
+import { authRoutes } from "./modules/auth";
+import { userRoutes } from "./modules/user";
+import { problemRoutes } from "./modules/problem";
 import { config } from "./config/config";
 
 const app = express();
@@ -20,10 +18,8 @@ app.use(cors(
     }
 ));
 app.use(cookieParser());
-app.use("/auth", authRoutes);
-app.use("/user", userRoutes);
-app.use("/dashboard", dashboardRoutes);
-app.use("/problem", problemRoutes);
-app.use("/code", codeRoutes);
+app.use("/api/auth", authRoutes);
+app.use("/api/user", userRoutes);
+app.use("/api/problem", problemRoutes);
 
 export default app;

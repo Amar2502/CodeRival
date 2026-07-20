@@ -2,26 +2,28 @@ import { db } from "../src/config/db";
 import fs from "fs";
 import { Difficulty, Language } from "../src/generated/prisma/client";
 import path from "path";
+import { generateStarterCode, generateDriver } from "../src/utils/driverGenerator";
 
 async function main() {
-
   const filePath = path.join(__dirname, "problems.json");
-
-  const problems = JSON.parse(
-    fs.readFileSync(filePath, "utf-8")
-  );
-
+  const problems = JSON.parse(fs.readFileSync(filePath, "utf-8"));
 
   for (const problem of problems) {
-
     console.log(`Seeding: ${problem.title}`);
-
 
     const createdProblem = await db.problem.upsert({
       where: {
         slug: problem.slug,
       },
-      update: {},
+      update: {
+        problemNumber: problem.problemNumber,
+        title: problem.title,
+        difficulty: problem.difficulty as Difficulty,
+        description: problem.description,
+        constraints: problem.constraints,
+        timeLimitMs: problem.timeLimitMs,
+        memoryLimitMb: problem.memoryLimitMb,
+      },
       create: {
         problemNumber: problem.problemNumber,
         title: problem.title,
@@ -33,6 +35,13 @@ async function main() {
         memoryLimitMb: problem.memoryLimitMb,
       }
     });
+
+    // Clean old related records to prevent unique constraint violations or duplicates
+    await db.problemExample.deleteMany({ where: { problemId: createdProblem.id } });
+    await db.problemStarterCode.deleteMany({ where: { problemId: createdProblem.id } });
+    await db.problemDriver.deleteMany({ where: { problemId: createdProblem.id } });
+    await db.problemTestCase.deleteMany({ where: { problemId: createdProblem.id } });
+
     // -----------------------
     // Examples
     // -----------------------
@@ -45,36 +54,67 @@ async function main() {
         order: example.order,
       })),
     });
-    // -----------------------
-    // Starter Codes
-    // -----------------------
 
-    await db.problemStarterCode.createMany({
-      data: problem.starterCodes.map((starter: any) => ({
+    // -----------------------
+    // Signature
+    // -----------------------
+    await db.problemSignature.upsert({
+      where: { problemId: createdProblem.id },
+      update: {
+        functionName: problem.signature.functionName,
+        returnType: problem.signature.returnType,
+        params: problem.signature.params,
+      },
+      create: {
         problemId: createdProblem.id,
-        language: starter.language as Language,
-        code: starter.code,
-      })),
+        functionName: problem.signature.functionName,
+        returnType: problem.signature.returnType,
+        params: problem.signature.params,
+      }
     });
+
+    // -----------------------
+    // Starter Codes & Drivers
+    // -----------------------
+    const languages = [Language.CPP, Language.JAVA, Language.PYTHON];
+    for (const lang of languages) {
+      const starterCode = generateStarterCode(lang, problem.signature);
+      const driverCode = generateDriver(lang, problem.signature);
+
+      await db.problemStarterCode.create({
+        data: {
+          problemId: createdProblem.id,
+          language: lang,
+          code: starterCode,
+        }
+      });
+
+      await db.problemDriver.create({
+        data: {
+          problemId: createdProblem.id,
+          language: lang,
+          code: driverCode,
+        }
+      });
+    }
+
     // -----------------------
     // Test Cases
     // -----------------------
-
     await db.problemTestCase.createMany({
-      data: problem.testCases.map((test: any) => ({
+      data: problem.testCases.map((test: any, index: number) => ({
         problemId: createdProblem.id,
         input: test.input,
         expected: test.expected,
+        order: index + 1,
       }))
     });
+
     console.log(`✓ Completed: ${problem.title}`);
   }
 }
 
-
-
 main()
-
   .then(async () => {
     await db.$disconnect();
   })

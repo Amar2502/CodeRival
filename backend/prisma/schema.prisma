@@ -7,19 +7,7 @@ datasource db {
   provider = "postgresql"
 }
 
-enum Verdict {
-  AC
-  WA
-  TLE
-  MLE
-  RTE
-}
-
-enum SubmissionStatus {
-  QUEUED
-  RUNNING
-  FINISHED
-}
+// ─── ENUMS ─────────────────────────────────────────────────
 
 enum Difficulty {
   EASY
@@ -33,6 +21,37 @@ enum Language {
   PYTHON
 }
 
+enum Verdict {
+  AC  // Accepted
+  WA  // Wrong Answer
+  TLE // Time Limit Exceeded
+  MLE // Memory Limit Exceeded
+  RTE // Runtime Error
+  CE  // Compilation Error
+}
+
+enum SubmissionStatus {
+  QUEUED
+  RUNNING
+  FINISHED
+}
+
+enum MatchStatus {
+  WAITING
+  ACTIVE
+  FINISHED
+  CANCELLED
+}
+
+enum MatchResult {
+  PLAYER1
+  PLAYER2
+  DRAW
+  ABANDONED
+}
+
+// ─── USER & PROGRESSION ────────────────────────────────────
+
 model User {
   id           String  @id @default(cuid())
   name         String
@@ -40,11 +59,17 @@ model User {
   passwordHash String?
   avatar       String?
   username     String  @unique
+  country      String?
 
+  // Competitive stats (denormalized for fast reads)
+  rating         Int @default(1200)
+  wins           Int @default(0)
+  losses         Int @default(0)
+  draws          Int @default(0)
+  matchesPlayed  Int @default(0)
   problemsSolved Int @default(0)
 
-  country String?
-
+  // OAuth & verification
   googleId      String?
   githubId      String?
   emailVerified Boolean @default(false)
@@ -52,91 +77,178 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  submissions Submission[]
+  // Relations
+  matchesAsPlayer1 Match[]         @relation("Player1")
+  matchesAsPlayer2 Match[]         @relation("Player2")
+  matchesWon       Match[]         @relation("Winner")
+  submissions      Submission[]
+  ratingHistory    RatingHistory[]
 
   @@index([username])
+  @@index([rating(sort: Desc)]) // Leaderboard queries
 }
 
-model Problem {
-  id String @id @default(cuid())
+/// Tracks rating changes after each match for profile charts
+model RatingHistory {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  matchId   String?
+  match     Match?   @relation(fields: [matchId], references: [id], onDelete: SetNull)
+  rating    Int      // Rating after match
+  delta     Int      // Change amount (+25 or -15)
+  createdAt DateTime @default(now())
 
+  @@index([userId, createdAt])
+}
+
+// ─── PROBLEM BANK ──────────────────────────────────────────
+
+model Problem {
+  id            String     @id @default(cuid())
   problemNumber Int        @unique
   title         String
   slug          String     @unique
   difficulty    Difficulty
-  description   String     @db.Text
+  description   String     @db.Text // Supports markdown
   constraints   String     @db.Text
+  timeLimitMs   Int        @default(1000)
+  memoryLimitMb Int        @default(256)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
 
-  timeLimitMs   Int @default(1000)
-  memoryLimitMb Int @default(256)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  topics              Topic[]
-  examples            ProblemExample[]
-  submissions         Submission[]
-  problemStarterCodes ProblemStarterCode[]
-  problemTestCases    ProblemTestCase[]
+  // Relations
+  topics       Topic[]
+  examples     ProblemExample[]
+  signature    ProblemSignature?    // Function metadata (one-to-one)
+  starterCodes ProblemStarterCode[] // Skeleton per language
+  drivers      ProblemDriver[]      // Wrapper per language
+  testCases    ProblemTestCase[]
+  matches      Match[]
+  submissions  Submission[]
 }
 
+model Topic {
+  id       String    @id @default(cuid())
+  name     String    @unique
+  problems Problem[]
+}
+
+/// Display-only examples shown in the problem description (with explanations)
 model ProblemExample {
   id          String  @id @default(cuid())
   problemId   String
-  input       String
-  output      String
-  explanation String?
+  problem     Problem @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  input       String  @db.Text
+  output      String  @db.Text
+  explanation String? @db.Text
   order       Int
-
-  problem Problem @relation(fields: [problemId], references: [id], onDelete: Cascade)
 }
 
-model ProblemStarterCode {
-  id String @id @default(cuid())
+// ─── SIGNATURE, STARTER CODE & DRIVER ──────────────────────
 
+/// Language-agnostic function metadata used for UI display and driver generation
+/// Example params: [{"name": "nums", "type": "int[]"}, {"name": "target", "type": "int"}]
+model ProblemSignature {
+  id           String  @id @default(cuid())
+  problemId    String  @unique
+  problem      Problem @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  functionName String  // e.g. "twoSum"
+  returnType   String  // e.g. "int[]"
+  params       Json    // Ordered array of {name, type} objects
+}
+
+/// The class/function skeleton the user sees in the editor
+model ProblemStarterCode {
+  id        String   @id @default(cuid())
   problemId String
+  problem   Problem  @relation(fields: [problemId], references: [id], onDelete: Cascade)
   language  Language
   code      String   @db.Text
-
-  problem Problem @relation(fields: [problemId], references: [id], onDelete: Cascade)
 
   @@unique([problemId, language])
 }
 
-model ProblemTestCase {
-  id String @id @default(cuid())
+/// The hidden wrapper that calls the user's Solution class
+/// Contains a {{USER_CODE}} placeholder replaced at execution time
+model ProblemDriver {
+  id        String   @id @default(cuid())
+  problemId String
+  problem   Problem  @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  language  Language
+  code      String   @db.Text
 
+  @@unique([problemId, language])
+}
+
+// ─── TEST CASES ────────────────────────────────────────────
+
+/// Judge test cases stored as JSON
+/// input: positional args array, e.g. [[2,7,11,15], 9]
+/// expected: expected return value, e.g. [0,1]
+model ProblemTestCase {
+  id        String  @id @default(cuid())
   problemId String
   problem   Problem @relation(fields: [problemId], references: [id], onDelete: Cascade)
-
-  input    Json
-  expected Json
+  input     Json    // Positional args matching param order
+  expected  Json    // Expected return value
+  order     Int     // Deterministic execution order
+  isSample  Boolean @default(false) // true = can be shown on failed submission
 }
 
-model Topic {
-  id String @id @default(cuid())
+// ─── MATCHES (1v1 BATTLES) ─────────────────────────────────
 
-  name String @unique
+model Match {
+  id        String      @id @default(cuid())
+  player1Id String
+  player1   User        @relation("Player1", fields: [player1Id], references: [id])
+  player2Id String
+  player2   User        @relation("Player2", fields: [player2Id], references: [id])
+  problemId String
+  problem   Problem     @relation(fields: [problemId], references: [id])
 
-  problems Problem[]
+  status    MatchStatus @default(WAITING)
+  winnerId  String?
+  winner    User?       @relation("Winner", fields: [winnerId], references: [id])
+  result    MatchResult?
+
+  startedAt DateTime?
+  endedAt   DateTime?
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  submissions     Submission[]
+  ratingHistories RatingHistory[]
+
+  @@index([player1Id])
+  @@index([player2Id])
+  @@index([status])
 }
+
+// ─── SUBMISSIONS ───────────────────────────────────────────
 
 model Submission {
-  id String @id @default(cuid())
-
-  userId    String
-  matchId   String?
-  problemId String
+  id         String           @id @default(cuid())
+  userId     String
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  problemId  String
+  problem    Problem          @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  matchId    String?
+  match      Match?           @relation(fields: [matchId], references: [id], onDelete: SetNull)
 
   language   Language
-  sourceCode String
+  sourceCode String           @db.Text
+  status     SubmissionStatus @default(QUEUED)
   verdict    Verdict?
-  runtimeMs  Int?
-  memoryKb   Int?
 
-  status      SubmissionStatus @default(QUEUED)
-  submittedAt DateTime         @default(now())
+  runtimeMs       Int?
+  memoryKb        Int?
+  totalTestCases  Int @default(0)
+  passedTestCases Int @default(0)
 
-  user    User    @relation(fields: [userId], references: [id])
-  problem Problem @relation(fields: [problemId], references: [id])
+  submittedAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([problemId])
+  @@index([matchId])
 }

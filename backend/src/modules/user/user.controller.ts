@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { db } from "../config/db";
+import { db } from "../../config/db";
 
 export const checkUsername = async (req: Request, res: Response) => {
   const username = req.query.username;
