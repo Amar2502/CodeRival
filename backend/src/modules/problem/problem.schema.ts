@@ -25,3 +25,20 @@ export const getAllProblemsSchema = z.object({
     limit: z.coerce.number().int().min(1).max(100),
   }),
 });
+
+export const runCodeSchema = z.object({
+  body: z.object({
+    problemId: z.string().trim().min(1),
+    language: z.enum(["CPP", "JAVA", "PYTHON"]),
+    sourceCode: z.string().min(1),
+  }),
+});
+
+export const submitCodeSchema = z.object({
+  body: z.object({
+    problemId: z.string().trim().min(1),
+    language: z.enum(["CPP", "JAVA", "PYTHON"]),
+    sourceCode: z.string().min(1),
+    matchId: z.string().optional(),
+  }),
+});

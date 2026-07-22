@@ -13,7 +13,7 @@ export const RegisterSchema = z.object({
 });
 
 export const SigninSchema = z.object({
-  id: z.string().trim().min(3).max(20),
+  id: z.string().trim().min(3).max(30),
 
   password: z.string().min(8).max(100),
 });

@@ -11,6 +11,19 @@ async function main() {
   for (const problem of problems) {
     console.log(`Seeding: ${problem.title}`);
 
+    // Process topics if present
+    const topicConnections = [];
+    if (problem.topics && Array.isArray(problem.topics)) {
+      for (const topicName of problem.topics) {
+        const topic = await db.topic.upsert({
+          where: { name: topicName },
+          update: {},
+          create: { name: topicName },
+        });
+        topicConnections.push({ id: topic.id });
+      }
+    }
+
     const createdProblem = await db.problem.upsert({
       where: {
         slug: problem.slug,
@@ -21,8 +34,11 @@ async function main() {
         difficulty: problem.difficulty as Difficulty,
         description: problem.description,
         constraints: problem.constraints,
-        timeLimitMs: problem.timeLimitMs,
-        memoryLimitMb: problem.memoryLimitMb,
+        timeLimitMs: problem.timeLimitMs || 2000,
+        memoryLimitMb: problem.memoryLimitMb || 256,
+        topics: {
+          set: topicConnections,
+        },
       },
       create: {
         problemNumber: problem.problemNumber,
@@ -31,9 +47,12 @@ async function main() {
         difficulty: problem.difficulty as Difficulty,
         description: problem.description,
         constraints: problem.constraints,
-        timeLimitMs: problem.timeLimitMs,
-        memoryLimitMb: problem.memoryLimitMb,
-      }
+        timeLimitMs: problem.timeLimitMs || 2000,
+        memoryLimitMb: problem.memoryLimitMb || 256,
+        topics: {
+          connect: topicConnections,
+        },
+      },
     });
 
     // Clean old related records to prevent unique constraint violations or duplicates
@@ -45,15 +64,17 @@ async function main() {
     // -----------------------
     // Examples
     // -----------------------
-    await db.problemExample.createMany({
-      data: problem.examples.map((example: any) => ({
-        problemId: createdProblem.id,
-        input: example.input,
-        output: example.output,
-        explanation: example.explanation,
-        order: example.order,
-      })),
-    });
+    if (problem.examples && Array.isArray(problem.examples)) {
+      await db.problemExample.createMany({
+        data: problem.examples.map((example: any) => ({
+          problemId: createdProblem.id,
+          input: example.input,
+          output: example.output,
+          explanation: example.explanation,
+          order: example.order,
+        })),
+      });
+    }
 
     // -----------------------
     // Signature
@@ -70,7 +91,7 @@ async function main() {
         functionName: problem.signature.functionName,
         returnType: problem.signature.returnType,
         params: problem.signature.params,
-      }
+      },
     });
 
     // -----------------------
@@ -86,7 +107,7 @@ async function main() {
           problemId: createdProblem.id,
           language: lang,
           code: starterCode,
-        }
+        },
       });
 
       await db.problemDriver.create({
@@ -94,21 +115,24 @@ async function main() {
           problemId: createdProblem.id,
           language: lang,
           code: driverCode,
-        }
+        },
       });
     }
 
     // -----------------------
     // Test Cases
     // -----------------------
-    await db.problemTestCase.createMany({
-      data: problem.testCases.map((test: any, index: number) => ({
-        problemId: createdProblem.id,
-        input: test.input,
-        expected: test.expected,
-        order: index + 1,
-      }))
-    });
+    if (problem.testCases && Array.isArray(problem.testCases)) {
+      await db.problemTestCase.createMany({
+        data: problem.testCases.map((test: any, index: number) => ({
+          problemId: createdProblem.id,
+          input: test.input,
+          expected: test.expected,
+          order: index + 1,
+          isSample: test.isSample !== undefined ? test.isSample : index < 2,
+        })),
+      });
+    }
 
     console.log(`✓ Completed: ${problem.title}`);
   }

@@ -5,6 +5,7 @@ import { authRoutes } from "./modules/auth";
 import { userRoutes } from "./modules/user";
 import { problemRoutes } from "./modules/problem";
 import { config } from "./config/config";
+import { errorHandler } from "./middleware/error.middleware";
 
 const app = express();
 
@@ -21,5 +22,7 @@ app.use(cookieParser());
 app.use("/api/auth", authRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/problem", problemRoutes);
+
+app.use(errorHandler);
 
 export default app;
