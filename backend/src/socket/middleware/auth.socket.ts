@@ -6,6 +6,7 @@ import { JwtPayload } from "../../types/auth.types";
 
 export const authSocket = (socket: Socket, next: (err?: Error) => void) => {
   try {
+
     const cookies = cookie.parseCookie(socket.handshake.headers.cookie || "");
 
     const token = cookies.token;

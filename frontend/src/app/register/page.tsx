@@ -128,7 +128,7 @@ export default function RegisterPage() {
   useEffect(() => {
     const username = formData.username.trim()
 
-    if (!username) {
+    if (!username || username.length < 3) {
       setUsernameStatus('idle')
       setErrors(prev => {
         const { username, ...rest } = prev

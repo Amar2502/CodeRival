@@ -69,10 +69,7 @@ export function generateStarterCode(language: Language, signature: ProblemSignat
       return isArray ? `${baseType}& ${p.name}` : `${baseType} ${p.name}`;
     }).join(", ");
 
-    return `#include <bits/stdc++.h>
-using namespace std;
-
-class Solution {
+    return `class Solution {
 public:
     ${getCppType(returnType)} ${functionName}(${cppParams}) {
         // Write your code here
@@ -85,9 +82,7 @@ public:
       return `${getJavaType(p.type)} ${p.name}`;
     }).join(", ");
 
-    return `import java.util.*;
-
-class Solution {
+    return `class Solution {
     public ${getJavaType(returnType)} ${functionName}(${javaParams}) {
         // Write your code here
     }
@@ -99,9 +94,7 @@ class Solution {
       return `${p.name}: ${getPythonType(p.type)}`;
     }).join(", ");
 
-    return `from typing import List, Dict, Tuple, Optional
-
-class Solution:
+    return `class Solution:
     def ${functionName}(self, ${pyParams}) -> ${getPythonType(returnType)}:
         # Write your code here
         pass`;
