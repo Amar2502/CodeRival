@@ -1,6 +1,6 @@
-import { db } from "../config/db";
-import { Difficulty } from "../generated/prisma/client";
-import { NotFoundError, BadRequestError } from "../utils/errors";
+import { db } from "../../config/db";
+import { Difficulty } from "../../generated/prisma/client";
+import { NotFoundError, BadRequestError } from "../../utils/errors";
 
 export class ProblemService {
   static async getProblemBySlug(slug: string, userId?: string) {

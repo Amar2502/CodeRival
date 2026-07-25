@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { asyncHandler } from "../../utils/asyncHandler";
-import { ProblemService } from "../../services/problem.service";
-import { SubmissionService } from "../../services/submission.service";
+import { ProblemService } from "./problem.repository";
+import { SubmissionService } from "../submission/submission.service";
 import { SubmissionType } from "../../generated/prisma/client";
 
 export const getProblem = asyncHandler(async (req: Request, res: Response) => {

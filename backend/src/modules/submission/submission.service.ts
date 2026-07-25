@@ -1,5 +1,5 @@
-import { db } from "../config/db";
-import { Language, SubmissionStatus, SubmissionType, Verdict } from "../generated/prisma/client";
+import { db } from "../../config/db";
+import { Language, SubmissionStatus, SubmissionType, Verdict } from "../../generated/prisma/client";
 import { ExecutionService, ExecutionResult } from "./execution.service";
 
 export interface ProcessSubmissionInput {

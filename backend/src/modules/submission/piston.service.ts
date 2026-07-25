@@ -1,6 +1,6 @@
 import axios from "axios";
-import { Language } from "../generated/prisma/client";
-import { AppError } from "../utils/errors";
+import { Language } from "../../generated/prisma/client";
+import { AppError } from "../../utils/errors";
 
 export interface PistonFile {
   name?: string;

@@ -1,13 +1,13 @@
-import { db } from "../config/db";
-import { Language, Verdict } from "../generated/prisma/client";
+import { db } from "../../config/db";
+import { Language, Verdict } from "../../generated/prisma/client";
 import { PistonService } from "./piston.service";
 import {
   ParamSignature,
   serializeInputToStdin,
   formatExpectedOutput,
   normalizeOutput,
-} from "../utils/inputSerializer";
-import { NotFoundError, BadRequestError } from "../utils/errors";
+} from "../../utils/inputSerializer";
+import { NotFoundError, BadRequestError } from "../../utils/errors";
 
 export interface ExecutionOptions {
   problemId: string;

@@ -1,7 +1,7 @@
 import { Server, Socket } from "socket.io";
 import { db } from "../../config/db";
 import { Language, MatchResult, MatchStatus, SubmissionType } from "../../generated/prisma/client";
-import { SubmissionService } from "../../services/submission.service";
+import { SubmissionService } from "../submission/submission.service";
 import {
   endMatch,
   handleMatchSubmission,
