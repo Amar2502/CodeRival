@@ -22,7 +22,12 @@ export const authenticate = (
       config.jwtSecret
     ) as JwtPayload;
 
-    req.user = decoded;
+    req.user = {
+      id: decoded.userId,
+      userId: decoded.userId,
+      username: decoded.username,
+      email: decoded.email,
+    };
 
     next();
   } catch {

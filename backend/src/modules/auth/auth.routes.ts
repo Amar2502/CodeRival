@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { register, signin, requestPasswordReset, verifyPasswordResetOTP, resetPassword, getVerifyEmailOTP, checkVerifyEmailOTP } from "../auth/auth.controller"
+import { register, signin, requestPasswordReset, verifyPasswordResetOTP, resetPassword, getVerifyEmailOTP, checkVerifyEmailOTP, handleOAuthSuccess } from "../auth/auth.controller"
 import { validate } from "../../middleware/validate.middleware";
 import { RegisterSchema, SigninSchema, RequestPasswordResetSchema, VerifyPasswordResetOTPSchema, ResetPasswordSchema } from "./auth.schema";
 import {
@@ -11,6 +11,8 @@ import {
   getVerifyEmailOTPLimiter,
   checkVerifyEmailOTPLimiter,
 } from "./auth.ratelimit";
+import passport from "../../config/passport";
+import { config } from "../../config/config";
 
 const router = Router();
 
@@ -21,5 +23,29 @@ router.post("/verify-password-reset-otp", verifyPasswordResetOTPLimiter, validat
 router.post("/reset-password", resetPasswordLimiter, validate(ResetPasswordSchema), resetPassword);
 router.post("/verify-email", getVerifyEmailOTPLimiter, validate(RequestPasswordResetSchema), getVerifyEmailOTP);
 router.post("/check-verify-email-otp", checkVerifyEmailOTPLimiter, validate(VerifyPasswordResetOTPSchema), checkVerifyEmailOTP);
+
+// Google OAuth
+router.get(
+  "/google",
+  passport.authenticate("google", { scope: ["profile", "email"], session: false })
+);
+
+router.get(
+  "/google/callback",
+  passport.authenticate("google", { session: false, failureRedirect: `${config.FRONTEND_URL}/signin?error=GoogleOAuthFailed` }),
+  handleOAuthSuccess
+);
+
+// GitHub OAuth
+router.get(
+  "/github",
+  passport.authenticate("github", { scope: ["user:email"], session: false })
+);
+
+router.get(
+  "/github/callback",
+  passport.authenticate("github", { session: false, failureRedirect: `${config.FRONTEND_URL}/signin?error=GitHubOAuthFailed` }),
+  handleOAuthSuccess
+);
 
 export default router;  

@@ -33,6 +33,16 @@ export default function SignInPage() {
     router.push('/dashboard')
   }
 
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+
+  const handleGoogleSignIn = () => {
+    window.location.href = `${API_URL}/auth/google`;
+  };
+
+  const handleGitHubSignIn = () => {
+    window.location.href = `${API_URL}/auth/github`;
+  };
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
@@ -136,6 +146,7 @@ export default function SignInPage() {
                     <Button
                       type="button"
                       variant="outline"
+                      onClick={handleGitHubSignIn}
                       className="border-border hover:bg-surface text-foreground"
                     >
                       GitHub
@@ -143,6 +154,7 @@ export default function SignInPage() {
                     <Button
                       type="button"
                       variant="outline"
+                      onClick={handleGoogleSignIn}
                       className="border-border hover:bg-surface text-foreground"
                     >
                       Google

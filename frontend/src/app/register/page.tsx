@@ -125,6 +125,16 @@ export default function RegisterPage() {
     if (otpError) setOtpError('')
   }
 
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+
+  const handleGoogleSignIn = () => {
+    window.location.href = `${API_URL}/auth/google`;
+  };
+
+  const handleGitHubSignIn = () => {
+    window.location.href = `${API_URL}/auth/github`;
+  };
+
   useEffect(() => {
     const username = formData.username.trim()
 
@@ -365,11 +375,21 @@ export default function RegisterPage() {
 
                     {/* OAuth Buttons */}
                     <div className="grid grid-cols-2 gap-3">
-                      <Button variant="outline" className="border-border hover:bg-surface rounded-lg h-10">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleGitHubSignIn}
+                        className="border-border hover:bg-surface rounded-lg h-10"
+                      >
                         <span>↗</span>
                         GitHub
                       </Button>
-                      <Button variant="outline" className="border-border hover:bg-surface rounded-lg h-10">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleGoogleSignIn}
+                        className="border-border hover:bg-surface rounded-lg h-10"
+                      >
                         <Mail className="w-4 h-4" />
                         Google
                       </Button>

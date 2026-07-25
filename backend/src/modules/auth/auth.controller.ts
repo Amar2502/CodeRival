@@ -5,6 +5,7 @@ import { generateAuthToken } from "../../utils/generateToken";
 import { otpService } from "../../services/otp.service";  
 import { emailService } from "../../services/emails/emails.service";
 import { verifyToken } from "../../services/passwordReset.service";
+import { config } from "../../config/config";
 
 
 // --------------------------- Register -------------------------------
@@ -281,4 +282,28 @@ export const checkVerifyEmailOTP = async (req: Request, res: Response) => {
     return res.status(500).json({ message: "Internal server error" });
   }
   
-}
+};
+
+// --------------------------- OAuth Success Callback -------------------------------
+export const handleOAuthSuccess = async (req: Request, res: Response) => {
+  try {
+    const user = req.user as any;
+    if (!user) {
+      return res.redirect(`${config.FRONTEND_URL}/signin?error=OAuthFailed`);
+    }
+
+    const token = generateAuthToken(user);
+
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 30 * 24 * 60 * 60 * 1000,
+    });
+
+    return res.redirect(`${config.FRONTEND_URL}/dashboard`);
+  } catch (err) {
+    console.error("OAuth success handler error:", err);
+    return res.redirect(`${config.FRONTEND_URL}/signin?error=OAuthServerError`);
+  }
+};

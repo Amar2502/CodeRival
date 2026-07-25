@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
+import passport from "./config/passport";
 import { authRoutes } from "./modules/auth";
 import { userRoutes } from "./modules/user";
 import { problemRoutes } from "./modules/problem";
@@ -18,6 +19,7 @@ app.use(
   })
 );
 app.use(cookieParser());
+app.use(passport.initialize());
 app.use("/api/auth", authRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/problem", problemRoutes);
