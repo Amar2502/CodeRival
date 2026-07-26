@@ -15,27 +15,56 @@ export const checkUsername = async (req: Request, res: Response) => {
   return res.status(200).json({ available: !user });
 };
 
-export const getMe = (req: Request, res: Response) => {
-  if (!req.user) {
+export const getMe = async (req: Request, res: Response) => {
+  if (!req.user?.userId) {
     return res.status(401).json({
       message: "Unauthorized",
     });
   }
 
-  return res.status(200).json({
-    user: {
-      id: req.user.userId,
-      username: req.user.username,
-      email: req.user.email,
-    },
-  });
+  try {
+    const user = await db.user.findUnique({
+      where: { id: req.user.userId },
+      select: {
+        id: true,
+        name: true,
+        username: true,
+        email: true,
+        avatar: true,
+        country: true,
+        rating: true,
+        wins: true,
+        losses: true,
+        draws: true,
+        matchesPlayed: true,
+        problemsSolved: true,
+        googleId: true,
+        githubId: true,
+        emailVerified: true,
+        createdAt: true,
+      },
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    return res.status(200).json({ user });
+  } catch (error) {
+    console.error("getMe error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
 };
 
 export const getUserProfile = async (req: Request, res: Response) => {
   try {
-    const userId = req.user?.userId;
+    const requestedId = req.params.userId;
+    const targetUserId =
+      (typeof requestedId === "string" && requestedId !== "me"
+        ? requestedId
+        : req.user?.userId) as string;
 
-    if (!userId) {
+    if (!targetUserId) {
       return res.status(401).json({
         message: "Unauthorized",
       });
@@ -43,7 +72,7 @@ export const getUserProfile = async (req: Request, res: Response) => {
 
     const user = await db.user.findUnique({
       where: {
-        id: userId,
+        id: targetUserId,
       },
       select: {
         id: true,
@@ -51,23 +80,19 @@ export const getUserProfile = async (req: Request, res: Response) => {
         email: true,
         avatar: true,
         username: true,
-
+        country: true,
         rating: true,
         wins: true,
         losses: true,
         draws: true,
         matchesPlayed: true,
-
-        country: true,
-
+        problemsSolved: true,
         googleId: true,
         githubId: true,
         emailVerified: true,
+        createdAt: true,
 
         submissions: {
-          where: {
-            userId: userId,
-          },
           orderBy: {
             submittedAt: "desc",
           },
@@ -75,9 +100,12 @@ export const getUserProfile = async (req: Request, res: Response) => {
           select: {
             id: true,
             submittedAt: true,
+            status: true,
+            verdict: true,
             problem: {
               select: {
                 title: true,
+                slug: true,
               },
             },
           },
@@ -85,9 +113,13 @@ export const getUserProfile = async (req: Request, res: Response) => {
       },
     });
 
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
     const recentMatches = await db.match.findMany({
       where: {
-        OR: [{ player1Id: userId }, { player2Id: userId }],
+        OR: [{ player1Id: targetUserId }, { player2Id: targetUserId }],
       },
       orderBy: {
         createdAt: "desc",
@@ -111,15 +143,46 @@ export const getUserProfile = async (req: Request, res: Response) => {
 
     const formattedRecentMatches = recentMatches.map((match) => ({
       ...match,
-      win: match.winnerId === userId,
+      win: match.winnerId === targetUserId,
     }));
+
+    const ratingHistory = await db.ratingHistory.findMany({
+      where: {
+        userId: targetUserId,
+      },
+      orderBy: {
+        createdAt: "asc",
+      },
+      select: {
+        id: true,
+        rating: true,
+        delta: true,
+        createdAt: true,
+        matchId: true,
+      },
+    });
+
+    // If no rating history records exist yet, construct an initial entry based on baseline rating
+    const formattedRatingHistory =
+      ratingHistory.length > 0
+        ? ratingHistory
+        : [
+            {
+              id: "initial",
+              rating: user.rating || 1200,
+              delta: 0,
+              createdAt: user.createdAt,
+              matchId: null,
+            },
+          ];
 
     return res.status(200).json({
       user,
       formattedRecentMatches,
+      ratingHistory: formattedRatingHistory,
     });
   } catch (error) {
-    console.error("Dashboard Error:", error);
+    console.error("Dashboard/Profile Error:", error);
 
     return res.status(500).json({
       message: "Internal Server Error",
@@ -128,7 +191,7 @@ export const getUserProfile = async (req: Request, res: Response) => {
 };
 
 export const updateUserProfile = async (req: Request, res: Response) => {
-  const { name, username } = req.body;
+  const { name, username, country } = req.body;
 
   try {
     const userId = req.user?.userId;
@@ -139,8 +202,11 @@ export const updateUserProfile = async (req: Request, res: Response) => {
       });
     }
 
-    // At least one field must be provided
-    if (name === undefined && username === undefined) {
+    if (
+      name === undefined &&
+      username === undefined &&
+      country === undefined
+    ) {
       return res.status(400).json({
         message: "Provide at least one field to update.",
       });
@@ -149,18 +215,20 @@ export const updateUserProfile = async (req: Request, res: Response) => {
     const updateData: {
       name?: string;
       username?: string;
+      country?: string;
     } = {};
 
-    // Update name if provided
     if (name !== undefined) {
       updateData.name = name;
     }
 
-    // Update username if provided
+    if (country !== undefined) {
+      updateData.country = country;
+    }
+
     if (username !== undefined) {
       const trimmedUsername = username.trim();
 
-      // Check if username is already taken by another user
       const existingUser = await db.user.findUnique({
         where: {
           username: trimmedUsername,
@@ -186,6 +254,17 @@ export const updateUserProfile = async (req: Request, res: Response) => {
         name: true,
         username: true,
         email: true,
+        avatar: true,
+        country: true,
+        rating: true,
+        wins: true,
+        losses: true,
+        draws: true,
+        matchesPlayed: true,
+        problemsSolved: true,
+        googleId: true,
+        githubId: true,
+        emailVerified: true,
       },
     });
 
@@ -199,5 +278,94 @@ export const updateUserProfile = async (req: Request, res: Response) => {
     return res.status(500).json({
       message: "Internal Server Error",
     });
+  }
+};
+
+export const verifyEmail = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.userId;
+
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const updatedUser = await db.user.update({
+      where: { id: userId },
+      data: { emailVerified: true },
+      select: {
+        id: true,
+        name: true,
+        username: true,
+        email: true,
+        avatar: true,
+        country: true,
+        rating: true,
+        wins: true,
+        losses: true,
+        draws: true,
+        matchesPlayed: true,
+        problemsSolved: true,
+        googleId: true,
+        githubId: true,
+        emailVerified: true,
+      },
+    });
+
+    return res.status(200).json({
+      message: "Email verified successfully! Blue badge unlocked.",
+      user: updatedUser,
+    });
+  } catch (error) {
+    console.error("Verify Email Error:", error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+export const linkOAuth = async (req: Request, res: Response) => {
+  const { provider } = req.body; // "google" or "github"
+
+  try {
+    const userId = req.user?.userId;
+
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    if (provider !== "google" && provider !== "github") {
+      return res.status(400).json({ message: "Provider must be 'google' or 'github'." });
+    }
+
+    const mockId = `${provider}_${Math.random().toString(36).substring(2, 10)}`;
+    const updateData = provider === "google" ? { googleId: mockId } : { githubId: mockId };
+
+    const updatedUser = await db.user.update({
+      where: { id: userId },
+      data: updateData,
+      select: {
+        id: true,
+        name: true,
+        username: true,
+        email: true,
+        avatar: true,
+        country: true,
+        rating: true,
+        wins: true,
+        losses: true,
+        draws: true,
+        matchesPlayed: true,
+        problemsSolved: true,
+        googleId: true,
+        githubId: true,
+        emailVerified: true,
+      },
+    });
+
+    return res.status(200).json({
+      message: `${provider === "google" ? "Google" : "GitHub"} account linked successfully!`,
+      user: updatedUser,
+    });
+  } catch (error) {
+    console.error("Link OAuth Error:", error);
+    return res.status(500).json({ message: "Internal Server Error" });
   }
 };

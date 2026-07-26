@@ -13,6 +13,10 @@ export type User = {
   matchesPlayed?: number;
   problemsSolved?: number;
   country?: string;
+  googleId?: string | null;
+  githubId?: string | null;
+  emailVerified?: boolean;
+  createdAt?: string;
 };
 
 type AuthStore = {

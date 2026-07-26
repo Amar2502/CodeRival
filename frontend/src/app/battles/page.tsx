@@ -62,7 +62,7 @@ interface MatchFoundPayload {
 
 export default function BattlesPage() {
   const router = useRouter()
-  const { user } = useAuthStore()
+  const { user, setUser } = useAuthStore()
 
   // Matchmaking Queue State
   const [isSearching, setIsSearching] = useState(false)
@@ -146,11 +146,20 @@ export default function BattlesPage() {
 
   // Fetch match history & check active match on mount
   useEffect(() => {
-    if (user) {
-      fetchMatchHistory()
-      checkActiveMatch()
+    const refreshUser = async () => {
+      try {
+        const res = await api.get('/user/me')
+        if (res.data?.user) {
+          setUser(res.data.user)
+        }
+      } catch (err) {
+        // ignore
+      }
     }
-  }, [user])
+    refreshUser()
+    fetchMatchHistory()
+    checkActiveMatch()
+  }, [])
 
   const checkActiveMatch = async () => {
     try {

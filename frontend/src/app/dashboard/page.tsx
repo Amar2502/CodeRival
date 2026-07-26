@@ -61,7 +61,7 @@ interface RecentMatchData {
 }
 
 export default function DashboardPage() {
-  const { user: authUser } = useAuthStore()
+  const { user: authUser, setUser } = useAuthStore()
   const [profile, setProfile] = useState<UserProfileData | null>(null)
   const [matches, setMatches] = useState<RecentMatchData[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -75,6 +75,9 @@ export default function DashboardPage() {
     try {
       const res = await api.get('/user/profile/me')
       setProfile(res.data.user)
+      if (res.data?.user) {
+        setUser(res.data.user)
+      }
       setMatches(res.data.formattedRecentMatches || [])
     } catch (err) {
       console.error('Failed to load dashboard:', err)

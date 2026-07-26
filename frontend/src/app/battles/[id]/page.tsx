@@ -121,7 +121,7 @@ interface MatchEndedPayload {
 export default function BattleRoomPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: matchId } = use(params)
   const router = useRouter()
-  const { user } = useAuthStore()
+  const { user, setUser } = useAuthStore()
 
   // Match Details State
   const [matchStatus, setMatchStatus] = useState<'LOADING' | 'ACTIVE' | 'FINISHED'>('LOADING')
@@ -231,7 +231,7 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
       }
     }
 
-    const onMatchEnded = (payload: MatchEndedPayload) => {
+    const onMatchEnded = async (payload: MatchEndedPayload) => {
       setMatchStatus('FINISHED')
       setMatchEndedData(payload)
 
@@ -242,6 +242,15 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
         addActivityLog('🤝 Match ended in a DRAW.', 'info')
       } else {
         addActivityLog('💀 DEFEAT! Opponent claimed victory.', 'warning')
+      }
+
+      try {
+        const res = await api.get('/user/me')
+        if (res.data?.user) {
+          setUser(res.data.user)
+        }
+      } catch (err) {
+        // ignore
       }
     }
 

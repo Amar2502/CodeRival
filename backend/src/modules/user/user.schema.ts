@@ -16,6 +16,12 @@ const nameSchema = z
   .min(2, "Name must be at least 2 characters.")
   .max(50, "Name cannot exceed 50 characters.");
 
+const countrySchema = z
+  .string()
+  .trim()
+  .max(60, "Country name cannot exceed 60 characters.")
+  .optional();
+
 export const checkUsernameSchema = z.object({
   query: z.object({
     username: usernameSchema,
@@ -26,11 +32,14 @@ export const updateUserProfileSchema = z.object({
   body: z
     .object({
       name: nameSchema.optional(),
-
       username: usernameSchema.optional(),
+      country: countrySchema,
     })
     .refine(
-      (data) => data.name !== undefined || data.username !== undefined,
+      (data) =>
+        data.name !== undefined ||
+        data.username !== undefined ||
+        data.country !== undefined,
       {
         message: "Provide at least one field to update.",
       }
