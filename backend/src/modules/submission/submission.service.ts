@@ -1,32 +1,20 @@
 import { db } from "../../config/db";
 import { Language, SubmissionStatus, SubmissionType, Verdict } from "../../generated/prisma/client";
 import { ExecutionService, ExecutionResult } from "./execution.service";
-
-export interface ProcessSubmissionInput {
-  userId: string;
-  problemId: string;
-  matchId?: string;
-  language: Language;
-  sourceCode: string;
-  submissionType?: SubmissionType;
-}
+import { addSubmissionToQueue } from "./submission.queue";
+import { ProcessSubmissionInput } from "./submission.types";
+import { NotFoundError } from "../../utils/errors";
 
 export class SubmissionService {
-  public static async processSubmission(input: ProcessSubmissionInput) {
+  /**
+   * Enqueues a submission for asynchronous execution via BullMQ worker.
+   * Creates initial database record in QUEUED state and pushes job to Redis queue.
+   */
+  public static async createAndEnqueueSubmission(input: ProcessSubmissionInput) {
     const { userId, problemId, matchId, language, sourceCode } = input;
     const submissionType = input.submissionType || SubmissionType.SUBMIT;
 
-    const isSampleOnly = submissionType === SubmissionType.RUN;
-
-    // 1. Execute user code against test cases via ExecutionService
-    const result: ExecutionResult = await ExecutionService.executeCode({
-      problemId,
-      language,
-      sourceCode,
-      isSampleOnly,
-    });
-
-    // Resolve the database problem ID if problemId was passed as a slug
+    // 1. Resolve problem ID if problemId is a slug or ID
     const problem = await db.problem.findFirst({
       where: {
         OR: [{ id: problemId }, { slug: problemId }],
@@ -35,10 +23,74 @@ export class SubmissionService {
     });
 
     if (!problem) {
-      return result;
+      throw new NotFoundError("Problem not found");
     }
 
-    // 2. Persist submission record in DB
+    // 2. Persist initial Submission record with status QUEUED
+    const submission = await db.submission.create({
+      data: {
+        userId,
+        problemId: problem.id,
+        matchId: matchId || null,
+        language,
+        sourceCode,
+        submissionType,
+        status: SubmissionStatus.QUEUED,
+      },
+    });
+
+    // 3. Enqueue job to BullMQ
+    await addSubmissionToQueue({
+      submissionId: submission.id,
+      userId,
+      problemId: problem.id,
+      matchId: matchId || undefined,
+      language,
+      sourceCode,
+      submissionType,
+    });
+
+    return {
+      submissionId: submission.id,
+      problemId: problem.id,
+      status: SubmissionStatus.QUEUED,
+      submittedAt: submission.submittedAt,
+    };
+  }
+
+  /**
+   * Alias for createAndEnqueueSubmission (default behavior).
+   */
+  public static async processSubmission(input: ProcessSubmissionInput) {
+    return await this.createAndEnqueueSubmission(input);
+  }
+
+  /**
+   * Direct/Synchronous submission processing without queueing (useful for testing/fallback).
+   */
+  public static async processSubmissionDirect(input: ProcessSubmissionInput) {
+    const { userId, problemId, matchId, language, sourceCode } = input;
+    const submissionType = input.submissionType || SubmissionType.SUBMIT;
+    const isSampleOnly = submissionType === SubmissionType.RUN;
+
+    const problem = await db.problem.findFirst({
+      where: {
+        OR: [{ id: problemId }, { slug: problemId }],
+      },
+      select: { id: true },
+    });
+
+    if (!problem) {
+      throw new NotFoundError("Problem not found");
+    }
+
+    const result: ExecutionResult = await ExecutionService.executeCode({
+      problemId: problem.id,
+      language,
+      sourceCode,
+      isSampleOnly,
+    });
+
     const submission = await db.submission.create({
       data: {
         userId,
@@ -57,7 +109,6 @@ export class SubmissionService {
       },
     });
 
-    // 3. If official submission and AC, check if user solved problem for first time & update stats
     if (submissionType === SubmissionType.SUBMIT && result.verdict === Verdict.AC) {
       const existingAc = await db.submission.findFirst({
         where: {
@@ -84,6 +135,9 @@ export class SubmissionService {
     };
   }
 
+  /**
+   * Gets details and current execution status of a specific submission.
+   */
   public static async getSubmissionById(submissionId: string, userId: string) {
     return await db.submission.findFirst({
       where: {
@@ -101,6 +155,9 @@ export class SubmissionService {
     });
   }
 
+  /**
+   * Retrieves all past submissions by a user for a given problem.
+   */
   public static async getUserSubmissionsForProblem(problemId: string, userId: string) {
     const problem = await db.problem.findFirst({
       where: {
@@ -126,6 +183,7 @@ export class SubmissionService {
         passedTestCases: true,
         totalTestCases: true,
         submittedAt: true,
+        status: true,
       },
     });
   }

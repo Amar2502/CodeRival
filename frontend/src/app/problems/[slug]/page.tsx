@@ -6,19 +6,20 @@ import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 
-const MonacoEditor = dynamic(
-  () => import('@/components/editor/MonacoEditor').then((m) => m.MonacoEditor),
+const NormalMonacoEditor = dynamic(
+  () => import('@/components/editor/NormalMonacoEditor').then((m) => m.NormalMonacoEditor),
   {
     ssr: false,
     loading: () => (
       <div className="flex items-center justify-center h-full gap-2 text-sm text-muted-foreground bg-[#0d1117]">
         <div className="w-4 h-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-        Loading Code Editor...
+        Loading Practice Code Editor...
       </div>
     ),
   }
 )
 import { api } from '@/lib/axios'
+import { socket } from '@/lib/socket'
 import {
   ArrowLeft,
   Play,
@@ -156,6 +157,33 @@ export default function ProblemWorkspacePage({ params }: { params: Promise<{ slu
     return () => clearInterval(interval)
   }, [isTimerRunning])
 
+  // Real-Time Socket Event Listener for Submission Results (Pure Event-Driven Push)
+  useEffect(() => {
+    if (!socket.connected) {
+      socket.connect()
+    }
+
+    const onSubmissionResult = (result: any) => {
+      setExecutionResult({
+        verdict: result.verdict,
+        passedTestCases: result.passedTestCases || 0,
+        totalTestCases: result.totalTestCases || 0,
+        runtimeMs: result.runtimeMs || 0,
+        stderr: result.stderr,
+        testCaseResults: result.testCaseResults,
+      })
+      setIsRunning(false)
+      setIsSubmitting(false)
+      setSelectedTestCaseIndex(0)
+      fetchProblemDetails()
+    }
+
+    socket.on('submission:result', onSubmissionResult)
+    return () => {
+      socket.off('submission:result', onSubmissionResult)
+    }
+  }, [])
+
   const formatTimer = (totalSeconds: number) => {
     const mins = Math.floor(totalSeconds / 60)
     const secs = totalSeconds % 60
@@ -210,6 +238,25 @@ export default function ProblemWorkspacePage({ params }: { params: Promise<{ slu
     return `class Solution {\n    public void ${prob.signature?.functionName || 'solve'}() {\n        // Write your code here\n    }\n}`
   }
 
+  const pollSubmissionStatus = async (submissionId: string) => {
+    let attempts = 0
+    const maxAttempts = 30
+    while (attempts < maxAttempts) {
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+      attempts++
+      try {
+        const res = await api.get(`/problem/submission/${submissionId}`)
+        const sub = res.data?.submission
+        if (sub && (sub.status === 'FINISHED' || sub.verdict)) {
+          return sub
+        }
+      } catch (err) {
+        console.error('Polling submission error:', err)
+      }
+    }
+    throw new Error('Submission execution timed out.')
+  }
+
   const handleRunCode = async () => {
     if (!problem || isRunning || isSubmitting) return
     setIsRunning(true)
@@ -223,7 +270,20 @@ export default function ProblemWorkspacePage({ params }: { params: Promise<{ slu
         language: selectedLanguage,
         sourceCode: code,
       })
-      setExecutionResult(res.data)
+
+      if (res.data?.submissionId) {
+        const sub = await pollSubmissionStatus(res.data.submissionId)
+        setExecutionResult({
+          verdict: sub.verdict,
+          passedTestCases: sub.passedTestCases || 0,
+          totalTestCases: sub.totalTestCases || 0,
+          runtimeMs: sub.runtimeMs || 0,
+          stderr: sub.stderr,
+          testCaseResults: sub.testCaseResults,
+        })
+      } else {
+        setExecutionResult(res.data)
+      }
       setSelectedTestCaseIndex(0)
     } catch (err: any) {
       console.error('Run code error:', err)
@@ -252,7 +312,20 @@ export default function ProblemWorkspacePage({ params }: { params: Promise<{ slu
         language: selectedLanguage,
         sourceCode: code,
       })
-      setExecutionResult(res.data)
+
+      if (res.data?.submissionId) {
+        const sub = await pollSubmissionStatus(res.data.submissionId)
+        setExecutionResult({
+          verdict: sub.verdict,
+          passedTestCases: sub.passedTestCases || 0,
+          totalTestCases: sub.totalTestCases || 0,
+          runtimeMs: sub.runtimeMs || 0,
+          stderr: sub.stderr,
+          testCaseResults: sub.testCaseResults,
+        })
+      } else {
+        setExecutionResult(res.data)
+      }
       setSelectedTestCaseIndex(0)
       // Refresh submissions tab list in background
       fetchProblemDetails()
@@ -585,7 +658,7 @@ export default function ProblemWorkspacePage({ params }: { params: Promise<{ slu
         <div className="flex-1 flex flex-col bg-[#0d1117] overflow-hidden">
           {/* Monaco Editor */}
           <div className="flex-1 relative overflow-hidden">
-            <MonacoEditor
+            <NormalMonacoEditor
               language={selectedLanguage}
               value={code}
               onChange={(v) => setCode(v || '')}

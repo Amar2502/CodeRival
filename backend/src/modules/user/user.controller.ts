@@ -22,6 +22,8 @@ export const getMe = async (req: Request, res: Response) => {
     });
   }
 
+  console.log("getMe called for userId:", req.user.userId);
+
   try {
     const user = await db.user.findUnique({
       where: { id: req.user.userId },

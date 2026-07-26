@@ -47,4 +47,8 @@ export const initializeSocket = (httpServer: HTTPServer) => {
   });
 };
 
+export const getIO = (): Server | null => {
+  return io || null;
+};
+
 export { io };

@@ -31,19 +31,21 @@ import {
   Flag,
   Sparkles,
   Zap,
+  ShieldAlert,
+  ShieldCheck,
 } from 'lucide-react'
 import { useAuthStore } from '@/lib/authStore'
 import { socket } from '@/lib/socket'
 import { api } from '@/lib/axios'
 
-const MonacoEditor = dynamic(
-  () => import('@/components/editor/MonacoEditor').then((m) => m.MonacoEditor),
+const SecureMonacoEditor = dynamic(
+  () => import('@/components/editor/SecureMonacoEditor').then((m) => m.SecureMonacoEditor),
   {
     ssr: false,
     loading: () => (
       <div className="flex items-center justify-center h-full gap-2 text-sm text-muted-foreground bg-[#0d1117]">
         <div className="w-4 h-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-        Loading Code Editor...
+        Loading Secure Battle Editor...
       </div>
     ),
   }
@@ -162,6 +164,15 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
   // Remaining Match Time Countdown (ms)
   const [remainingMs, setRemainingMs] = useState<number>(15 * 60 * 1000)
 
+  // Anti-Cheat State
+  const [antiCheatWarnings, setAntiCheatWarnings] = useState<number>(0)
+  const [antiCheatBanner, setAntiCheatBanner] = useState<{
+    show: boolean
+    message: string
+    type: 'TAB_SWITCH' | 'PASTE_ATTEMPT' | 'WINDOW_RESIZE'
+  } | null>(null)
+  const lastAntiCheatTimeRef = useRef<number>(0)
+
   const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // 1. Initialize Match & Socket Listeners
@@ -231,6 +242,24 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
       }
     }
 
+    const onOpponentAntiCheatWarning = (data: {
+      userId: string
+      type: 'TAB_SWITCH' | 'PASTE_ATTEMPT' | 'WINDOW_RESIZE'
+      details?: string
+      warningCount?: number
+    }) => {
+      const typeLabel =
+        data.type === 'TAB_SWITCH'
+          ? 'Tab Switch / Background Focus'
+          : data.type === 'PASTE_ATTEMPT'
+          ? `Paste Attempt (${data.details || ''})`
+          : 'Window Resized Below Threshold'
+      addActivityLog(
+        `⚠️ Rival received Anti-Cheat Warning: ${typeLabel} (Warning ${data.warningCount || 1}/3)`,
+        'warning'
+      )
+    }
+
     const onMatchEnded = async (payload: MatchEndedPayload) => {
       setMatchStatus('FINISHED')
       setMatchEndedData(payload)
@@ -264,7 +293,9 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
     socket.on('match:sync_state', onSyncState)
     socket.on('match:opponent_code_sync', onOpponentCodeSync)
     socket.on('match:submission_result', onSubmissionResult)
+    socket.on('submission:result', onSubmissionResult)
     socket.on('match:opponent_status', onOpponentStatus)
+    socket.on('match:opponent_anti_cheat_warning', onOpponentAntiCheatWarning)
     socket.on('match:ended', onMatchEnded)
     socket.on('match:error', onError)
 
@@ -274,7 +305,9 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
       socket.off('match:sync_state', onSyncState)
       socket.off('match:opponent_code_sync', onOpponentCodeSync)
       socket.off('match:submission_result', onSubmissionResult)
+      socket.off('submission:result', onSubmissionResult)
       socket.off('match:opponent_status', onOpponentStatus)
+      socket.off('match:opponent_anti_cheat_warning', onOpponentAntiCheatWarning)
       socket.off('match:ended', onMatchEnded)
       socket.off('match:error', onError)
     }
@@ -344,6 +377,125 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
     return () => clearInterval(interval)
   }, [opponentDisconnected, disconnectTimer])
 
+  // 4. Anti-Cheat Event Listeners (Tab Switch, Focus Loss, Window Resize)
+  useEffect(() => {
+    if (matchStatus !== 'ACTIVE') return
+
+    const triggerAntiCheatWarning = (
+      type: 'TAB_SWITCH' | 'WINDOW_RESIZE',
+      msg: string
+    ) => {
+      const now = Date.now()
+      if (now - lastAntiCheatTimeRef.current < 2500) return
+      lastAntiCheatTimeRef.current = now
+
+      setAntiCheatWarnings((prev) => {
+        const nextCount = prev + 1
+
+        if (nextCount === 1) {
+          // 1st Violation: Warning 1/1 (Final Warning)
+          const warningMsg = `⚠️ Anti-Cheat Warning (1/1): ${msg} NEXT SWITCH WILL RESULT IN IMMEDIATE MATCH DISQUALIFICATION!`
+          addActivityLog(warningMsg, 'warning')
+
+          setAntiCheatBanner({
+            show: true,
+            message: `⚠️ WARNING (1/1): ${msg} Next switch = INSTANT DISQUALIFICATION & LOSS!`,
+            type,
+          })
+
+          socket.emit('match:anti_cheat_warning', {
+            matchId,
+            type,
+            warningCount: 1,
+            details: 'FINAL WARNING',
+          })
+
+          return 1
+        } else {
+          // 2nd Violation: INSTANT DISQUALIFICATION & MATCH LOSS
+          const disqMsg = `💀 DISQUALIFIED: Repeated tab switch / focus loss! Match forfeited.`
+          addActivityLog(disqMsg, 'warning')
+
+          setAntiCheatBanner({
+            show: true,
+            message: `💀 DISQUALIFIED! Match forfeited due to anti-cheat violation.`,
+            type,
+          })
+
+          socket.emit('match:anti_cheat_warning', {
+            matchId,
+            type,
+            warningCount: 2,
+            details: 'DISQUALIFIED',
+          })
+
+          // Forfeit match immediately
+          socket.emit('match:leave', { matchId })
+
+          return 2
+        }
+      })
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        triggerAntiCheatWarning(
+          'TAB_SWITCH',
+          'Tab switch / background app detected!'
+        )
+      }
+    }
+
+    const handleWindowBlur = () => {
+      triggerAntiCheatWarning(
+        'TAB_SWITCH',
+        'Window lost focus / application switched!'
+      )
+    }
+
+    const handleWindowResize = () => {
+      if (window.innerWidth < 800 || window.innerHeight < 500) {
+        triggerAntiCheatWarning(
+          'WINDOW_RESIZE',
+          'Window dimensions reduced below competitive threshold!'
+        )
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('blur', handleWindowBlur)
+    window.addEventListener('resize', handleWindowResize)
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('blur', handleWindowBlur)
+      window.removeEventListener('resize', handleWindowResize)
+    }
+  }, [matchStatus, matchId])
+
+  // Handle Code Editor Paste Interception
+  const handlePasteAttempt = (pastedLength: number) => {
+    if (matchStatus !== 'ACTIVE') return
+    const now = Date.now()
+    if (now - lastAntiCheatTimeRef.current < 2000) return
+    lastAntiCheatTimeRef.current = now
+
+    const msg = `🚫 Pasting code is strictly blocked during 1v1 ranked duels!`
+    addActivityLog(`⚠️ Anti-Cheat Notice: ${msg}`, 'warning')
+
+    setAntiCheatBanner({
+      show: true,
+      message: msg,
+      type: 'PASTE_ATTEMPT',
+    })
+
+    socket.emit('match:anti_cheat_warning', {
+      matchId,
+      type: 'PASTE_ATTEMPT',
+      details: 'Paste Blocked',
+    })
+  }
+
   // Activity Log Helper
   const addActivityLog = (text: string, type: ActivityLog['type']) => {
     const newLog: ActivityLog = {
@@ -399,6 +551,25 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
     }
   }
 
+  const pollSubmissionStatus = async (submissionId: string) => {
+    let attempts = 0
+    const maxAttempts = 30
+    while (attempts < maxAttempts) {
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+      attempts++
+      try {
+        const res = await api.get(`/problem/submission/${submissionId}`)
+        const sub = res.data?.submission
+        if (sub && (sub.status === 'FINISHED' || sub.verdict)) {
+          return sub
+        }
+      } catch (err) {
+        console.error('Polling submission error:', err)
+      }
+    }
+    throw new Error('Submission execution timed out.')
+  }
+
   // Run Code Action (Sample Testcases)
   const handleRunCode = async () => {
     if (!problem || isRunning || isSubmitting) return
@@ -415,7 +586,20 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
         language: selectedLanguage,
         sourceCode: code,
       })
-      setExecutionResult(res.data)
+
+      if (res.data?.submissionId) {
+        const sub = await pollSubmissionStatus(res.data.submissionId)
+        setExecutionResult({
+          verdict: sub.verdict,
+          passedTestCases: sub.passedTestCases || 0,
+          totalTestCases: sub.totalTestCases || 0,
+          runtimeMs: sub.runtimeMs || 0,
+          stderr: sub.stderr,
+          testCaseResults: sub.testCaseResults,
+        })
+      } else {
+        setExecutionResult(res.data)
+      }
       setSelectedTestCaseIndex(0)
     } catch (err: any) {
       console.error('Run code error:', err)
@@ -564,6 +748,29 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
 
         {/* Right: Controls & Surrender */}
         <div className="flex items-center gap-3">
+          {/* Anti-Cheat Status Badge */}
+          <div
+            className={`hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-mono border ${
+              antiCheatWarnings > 0
+                ? 'bg-amber-500/10 border-amber-500/30 text-amber-400 animate-pulse'
+                : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+            }`}
+            title="Anti-Cheat Active: Tab focus, paste control, and window dimensions are monitored"
+          >
+            {antiCheatWarnings > 0 ? (
+              <ShieldAlert className="w-3.5 h-3.5" />
+            ) : (
+              <ShieldCheck className="w-3.5 h-3.5" />
+            )}
+            <span>
+              {antiCheatWarnings >= 2
+                ? '💀 Disqualified'
+                : antiCheatWarnings === 1
+                ? '⚠️ Warning 1/1 (Final)'
+                : 'Anti-Cheat Active'}
+            </span>
+          </div>
+
           {/* Rival Status Indicator */}
           <div
             className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-mono border ${
@@ -598,6 +805,22 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
             Opponent lost connection! Waiting for reconnection. Forfeit victory will be granted in{' '}
             <strong>{disconnectTimer} seconds</strong>.
           </span>
+        </div>
+      )}
+
+      {/* Anti-Cheat Warning Banner */}
+      {antiCheatBanner?.show && (
+        <div className="bg-amber-500/20 border-b border-amber-500/40 px-4 py-2 text-center text-xs text-amber-300 font-semibold flex items-center justify-between gap-2 animate-pulse shrink-0 z-40">
+          <div className="flex items-center gap-2 mx-auto">
+            <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0" />
+            <span>{antiCheatBanner.message}</span>
+          </div>
+          <button
+            onClick={() => setAntiCheatBanner(null)}
+            className="text-amber-400 hover:text-white text-xs underline font-mono shrink-0"
+          >
+            Dismiss
+          </button>
         </div>
       )}
 
@@ -832,12 +1055,13 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
             </div>
           </div>
 
-          {/* Monaco Editor Component */}
+          {/* Secure Monaco Editor Component */}
           <div className="flex-1 relative overflow-hidden">
-            <MonacoEditor
+            <SecureMonacoEditor
               language={selectedLanguage}
               value={code}
               onChange={handleCodeChange}
+              onPasteAttempt={handlePasteAttempt}
             />
           </div>
 
@@ -1017,6 +1241,8 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
                   ? 'VICTORY!'
                   : matchEndedData.result === 'DRAW'
                   ? 'MATCH DRAW'
+                  : antiCheatWarnings >= 2
+                  ? 'DISQUALIFIED'
                   : 'DEFEAT'}
               </h2>
 
@@ -1025,6 +1251,8 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
                   ? 'You submitted an Accepted solution first and won the duel!'
                   : matchEndedData.result === 'DRAW'
                   ? 'Both contenders finished with equal score.'
+                  : antiCheatWarnings >= 2
+                  ? 'Disqualified from match due to repeated tab switching / anti-cheat violation.'
                   : 'Opponent claimed the duel victory.'}
               </p>
             </div>

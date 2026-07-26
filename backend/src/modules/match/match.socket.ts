@@ -4,7 +4,6 @@ import { Language, MatchResult, MatchStatus, SubmissionType } from "../../genera
 import { SubmissionService } from "../submission/submission.service";
 import {
   endMatch,
-  handleMatchSubmission,
   handlePlayerMatchReconnect,
 } from "./match.service";
 
@@ -28,7 +27,7 @@ export const initializeMatchSocket = (
   socket.on("match:code_sync", async ({ matchId, code, language }: { matchId: string; code: string; language: string }) => {
     if (!matchId) return;
   
-      socket.to(`match:${matchId}`).emit("match:opponent_code_sync", {
+    socket.to(`match:${matchId}`).emit("match:opponent_code_sync", {
       userId,
       code,
       language,
@@ -42,7 +41,8 @@ export const initializeMatchSocket = (
         return;
       }
 
-      const result = await SubmissionService.processSubmission({
+      // Enqueue submission job to BullMQ queue
+      const queuedSubmission = await SubmissionService.processSubmission({
         userId,
         problemId: data.problemId,
         matchId: data.matchId,
@@ -51,10 +51,15 @@ export const initializeMatchSocket = (
         submissionType: SubmissionType.SUBMIT,
       });
 
-      await handleMatchSubmission(io, data.matchId, userId, result);
+      // Acknowledge queuing to submitting socket
+      socket.emit("match:submission_queued", {
+        submissionId: queuedSubmission.submissionId,
+        status: queuedSubmission.status,
+        matchId: data.matchId,
+      });
     } catch (error: any) {
       console.error("Match submission error:", error);
-      socket.emit("match:error", { message: error.message || "Submission execution failed." });
+      socket.emit("match:error", { message: error.message || "Submission queuing failed." });
     }
   });
 
@@ -70,4 +75,23 @@ export const initializeMatchSocket = (
       console.error("Match leave error:", error);
     }
   });
+
+  socket.on(
+    "match:anti_cheat_warning",
+    async (data: {
+      matchId: string;
+      type: "TAB_SWITCH" | "PASTE_ATTEMPT" | "WINDOW_RESIZE";
+      details?: string;
+      warningCount?: number;
+    }) => {
+      if (!data.matchId) return;
+
+      socket.to(`match:${data.matchId}`).emit("match:opponent_anti_cheat_warning", {
+        userId,
+        type: data.type,
+        details: data.details,
+        warningCount: data.warningCount,
+      });
+    }
+  );
 };

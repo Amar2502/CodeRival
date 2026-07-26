@@ -41,7 +41,7 @@ export const runCode = asyncHandler(async (req: Request, res: Response) => {
     submissionType: SubmissionType.RUN,
   });
 
-  return res.status(200).json(result);
+  return res.status(202).json(result);
 });
 
 export const submitCode = asyncHandler(async (req: Request, res: Response) => {
@@ -57,5 +57,26 @@ export const submitCode = asyncHandler(async (req: Request, res: Response) => {
     submissionType: SubmissionType.SUBMIT,
   });
 
-  return res.status(200).json(result);
+  return res.status(202).json(result);
+});
+
+export const getSubmissionStatus = asyncHandler(async (req: Request, res: Response) => {
+  const submissionId = String(req.params.submissionId);
+  const userId = req.user?.userId!;
+
+  const submission = await SubmissionService.getSubmissionById(submissionId, userId);
+
+  if (!submission) {
+    return res.status(404).json({ message: "Submission not found" });
+  }
+
+  return res.status(200).json({ submission });
+});
+
+export const getUserSubmissions = asyncHandler(async (req: Request, res: Response) => {
+  const problemId = String(req.params.problemId);
+  const userId = req.user?.userId!;
+
+  const submissions = await SubmissionService.getUserSubmissionsForProblem(problemId, userId);
+  return res.status(200).json({ submissions });
 });
