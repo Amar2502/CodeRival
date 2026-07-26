@@ -11,6 +11,7 @@ export const initializeMatchmakingSocket = (
   socket.on("matchmaking:join", async () => {
     try {
       const userId = socket.data.user.id;
+      socket.join(`user:${userId}`);
 
       const user = await db.user.findUnique({
         where: { id: userId },

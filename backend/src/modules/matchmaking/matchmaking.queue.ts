@@ -123,7 +123,7 @@ export const getOpponentFromQueue = async (
     const playerWait = now - player.joinedAt;
     const opponentWait = now - opponent.joinedAt;
 
-    const allowedDifference = Math.min(
+    const allowedDifference = Math.max(
       getAllowedDifference(playerWait),
       getAllowedDifference(opponentWait)
     );

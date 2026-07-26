@@ -8,8 +8,15 @@ export const connectUser = (userId: string, socket: Socket) => {
   connectedUsers.set(userId, socket);
 };
 
-export const disconnectUser = (userId: string) => {
-  connectedUsers.delete(userId);
+export const disconnectUser = (userId: string, socketId?: string) => {
+  if (socketId) {
+    const currentSocket = connectedUsers.get(userId);
+    if (currentSocket && currentSocket.id === socketId) {
+      connectedUsers.delete(userId);
+    }
+  } else {
+    connectedUsers.delete(userId);
+  }
 };
 
 export const getSocket = (userId: string): Socket | undefined => {

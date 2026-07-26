@@ -107,6 +107,10 @@ export const startMatch = async (
 
   const roomId = `match:${match.id}`;
 
+  // Make all connected sockets for both players join the match room
+  io.in(`user:${player1.userId}`).socketsJoin(roomId);
+  io.in(`user:${player2.userId}`).socketsJoin(roomId);
+
   if (player1Socket) {
     player1Socket.join(roomId);
   }
@@ -136,7 +140,12 @@ export const startMatch = async (
     player2: match.player2,
   };
 
-  // 5. Notify both clients directly and via room
+  // 5. Notify both clients directly via user rooms, direct sockets, and match room
+  io.to(`user:${player1.userId}`).emit("match:start", startPayload);
+  io.to(`user:${player1.userId}`).emit("match:found", startPayload);
+  io.to(`user:${player2.userId}`).emit("match:start", startPayload);
+  io.to(`user:${player2.userId}`).emit("match:found", startPayload);
+
   if (player1Socket) {
     player1Socket.emit("match:start", startPayload);
     player1Socket.emit("match:found", startPayload);

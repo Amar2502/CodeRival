@@ -27,6 +27,7 @@ export const initializeSocket = (httpServer: HTTPServer) => {
     const userId = socket.data.user.id;
     console.log(`Connected: ${socket.id} (User: ${userId})`);
 
+    socket.join(`user:${userId}`);
     connectUser(userId, socket);
     initializeMatchmakingSocket(io, socket);
     initializeMatchSocket(io, socket);
@@ -41,7 +42,7 @@ export const initializeSocket = (httpServer: HTTPServer) => {
       await handlePlayerMatchDisconnect(io, userId);
 
       // 3. Remove socket tracking
-      disconnectUser(userId);
+      disconnectUser(userId, socket.id);
     });
   });
 };
