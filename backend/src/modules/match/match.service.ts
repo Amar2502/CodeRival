@@ -11,6 +11,7 @@ import {
   isUserConnected,
 } from "../../socket/socketManager";
 import { QueuePlayer } from "../matchmaking/matchmaking.types";
+import { updateUserRatingInLeaderboard } from "../leaderboard/leaderboard.service";
 
 const activeMatchTimers = new Map<string, NodeJS.Timeout>();
 
@@ -260,6 +261,10 @@ export const endMatch = async (
       },
     }),
   ]);
+
+  // Update Redis Leaderboards
+  updateUserRatingInLeaderboard(p1.id, newR1);
+  updateUserRatingInLeaderboard(p2.id, newR2);
 
   clearUserActiveMatch(p1.id);
   clearUserActiveMatch(p2.id);

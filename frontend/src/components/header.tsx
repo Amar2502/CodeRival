@@ -77,6 +77,16 @@ export function Header() {
                 <span>Friends</span>
               </Button>
             </Link>
+            <Link href="/leaderboard">
+              <Button
+                variant={pathname.startsWith('/leaderboard') ? 'secondary' : 'ghost'}
+                size="sm"
+                className="gap-2 text-sm font-medium"
+              >
+                <Trophy className="w-4 h-4 text-amber-400" />
+                <span>Leaderboard</span>
+              </Button>
+            </Link>
           </div>
         ) : (
           <div className="hidden md:flex items-center gap-8">

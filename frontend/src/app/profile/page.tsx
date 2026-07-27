@@ -30,6 +30,7 @@ import {
 import { useAuthStore } from '@/lib/authStore'
 import { getRatingInfo } from '@/lib/rating'
 import { api } from '@/lib/axios'
+import { RatingChart } from '@/components/RatingChart'
 
 const GoogleIcon = () => (
   <svg className="w-3.5 h-3.5 fill-current text-rose-400" viewBox="0 0 24 24">
@@ -447,30 +448,7 @@ export default function ProfilePage() {
 
           <CardContent className="p-6 space-y-6">
             {/* Rating Trajectory Line Chart */}
-            <div className="p-4 rounded-2xl bg-surface border border-border space-y-2">
-              <div className="flex items-center justify-between text-xs text-muted-foreground font-mono">
-                <span>Rating Progression Chart</span>
-                <span>{ratingHistory.length} Matches Logged</span>
-              </div>
-              
-              {ratingHistory.length > 1 ? (
-                <div className="h-32 w-full pt-2">
-                  <svg className="w-full h-full overflow-visible" viewBox="0 0 300 90" preserveAspectRatio="none">
-                    <polyline
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2.5"
-                      className="text-accent"
-                      points={chartPoints}
-                    />
-                  </svg>
-                </div>
-              ) : (
-                <div className="py-8 text-center text-xs text-muted-foreground font-mono">
-                  Initial baseline rating set at {userRating} ELO. Complete 1v1 matches to build your rating history chart!
-                </div>
-              )}
-            </div>
+            <RatingChart history={ratingHistory} currentRating={userRating} />
 
             {/* Rating History List */}
             <div className="space-y-3">
