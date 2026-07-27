@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 
 interface UserAvatarProps {
   src?: string | null;
@@ -26,26 +26,24 @@ export function UserAvatar({
   size = "md",
   className = "",
 }: UserAvatarProps) {
+  const [imageError, setImageError] = useState(false);
   const initial = (name || username || "U").charAt(0).toUpperCase();
+
+  const showImage = src && !imageError;
 
   return (
     <div
-      className={`relative rounded-full overflow-hidden shrink-0 border border-border bg-surface flex items-center justify-center font-bold text-foreground ${sizeClasses[size]} ${className}`}
+      className={`relative rounded-full overflow-hidden shrink-0 border border-border/80 bg-surface flex items-center justify-center font-bold text-foreground transition-all duration-200 hover:ring-2 hover:ring-primary/40 hover:border-primary/50 shadow-xs ${sizeClasses[size]} ${className}`}
     >
-      {src ? (
+      {showImage ? (
         <img
           src={src}
           alt={username}
-          className="w-full h-full object-cover rounded-full"
-          onError={(e) => {
-            // Fallback to initials on broken image load
-            (e.target as HTMLElement).style.display = "none";
-          }}
+          className="w-full h-full object-cover rounded-full transition-opacity duration-300"
+          onError={() => setImageError(true)}
         />
-      ) : null}
-
-      {!src && (
-        <span className="bg-gradient-to-br from-primary/20 via-surface to-accent/20 w-full h-full flex items-center justify-center text-primary">
+      ) : (
+        <span className="bg-linear-to-br from-primary/20 via-surface-2 to-accent/20 w-full h-full flex items-center justify-center text-primary font-bold tracking-tight select-none">
           {initial}
         </span>
       )}

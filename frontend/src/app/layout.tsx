@@ -1,23 +1,41 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
 import AuthProvider from "@/providers/authProvider";
 import SocketProvider from "../providers/SocketProvider";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
 export const metadata: Metadata = {
-  title: "CodeRival",
-  description: "1v1 coding battles with ranked duels and live verdicts.",
+  title: {
+    default: "CodeRival — 1v1 Competitive Coding Battles",
+    template: "%s | CodeRival",
+  },
+  description:
+    "Challenge rivals to real-time 1v1 coding duels. Solve problems head-to-head, climb the ranked ladder, and prove your skills with live verdicts.",
+  keywords: [
+    "competitive programming",
+    "coding battles",
+    "1v1 coding",
+    "algorithm challenges",
+    "ranked coding",
+    "live coding duels",
+  ],
+  openGraph: {
+    title: "CodeRival — 1v1 Competitive Coding Battles",
+    description:
+      "Challenge rivals to real-time coding duels. Ranked matches, live verdicts, and ELO ratings.",
+    type: "website",
+    siteName: "CodeRival",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "CodeRival — 1v1 Competitive Coding Battles",
+    description:
+      "Challenge rivals to real-time coding duels. Ranked matches, live verdicts, and ELO ratings.",
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
 };
 
 export default function RootLayout({
@@ -29,9 +47,9 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className="h-full antialiased"
     >
-      <body className="min-h-full flex flex-col">
+      <body className="min-h-full flex flex-col font-sans">
         <AuthProvider>
           <SocketProvider>
             {children}

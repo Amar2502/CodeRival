@@ -6,6 +6,13 @@ import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
   ArrowLeft,
   Play,
   Send,
@@ -1008,22 +1015,20 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
         <div className="flex-1 flex flex-col bg-[#0d1117] overflow-hidden">
           {/* Top Bar Controls */}
           <div className="h-10 border-b border-border bg-card px-3 flex items-center justify-between shrink-0">
-            {/* Language Selector */}
-            <div className="flex items-center bg-surface border border-border rounded-lg p-0.5">
-              {(['CPP', 'JAVA', 'PYTHON'] as const).map((lang) => (
-                <button
-                  key={lang}
-                  onClick={() => handleLanguageChange(lang)}
-                  className={`px-2.5 py-0.5 rounded-md text-xs font-semibold transition-colors ${
-                    selectedLanguage === lang
-                      ? 'bg-card text-accent shadow-xs'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  {lang === 'CPP' ? 'C++' : lang === 'JAVA' ? 'Java' : 'Python 3'}
-                </button>
-              ))}
-            </div>
+            {/* Language Selector Dropdown (LeetCode style) */}
+            <Select
+              value={selectedLanguage}
+              onValueChange={(val) => handleLanguageChange(val as 'CPP' | 'JAVA' | 'PYTHON')}
+            >
+              <SelectTrigger className="h-7 w-[130px] bg-surface border border-border text-xs font-semibold text-foreground focus:ring-1 focus:ring-accent rounded-lg">
+                <SelectValue placeholder="Select Language" />
+              </SelectTrigger>
+              <SelectContent className="bg-popover border border-border text-foreground">
+                <SelectItem value="PYTHON" className="text-xs font-mono">Python 3</SelectItem>
+                <SelectItem value="CPP" className="text-xs font-mono">C++ (GCC 9.2)</SelectItem>
+                <SelectItem value="JAVA" className="text-xs font-mono">Java (OpenJDK 17)</SelectItem>
+              </SelectContent>
+            </Select>
 
             {/* Actions: Reset, Run, Submit */}
             <div className="flex items-center gap-2">

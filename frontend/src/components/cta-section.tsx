@@ -2,53 +2,56 @@
 
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { ArrowRight, Zap } from 'lucide-react'
+import { ArrowRight, Zap, Trophy } from 'lucide-react'
 
 export function CTASection() {
   return (
-    <section className="py-20 px-4">
-      <div className="max-w-4xl mx-auto">
-        <div className="relative rounded-2xl border border-border bg-card overflow-hidden p-12 md:p-16">
-          {/* Decorative elements */}
-          <div className="absolute -top-40 -right-40 w-80 h-80 bg-primary/10 rounded-full blur-3xl opacity-30"></div>
-          <div className="absolute -bottom-20 -left-20 w-60 h-60 bg-primary/5 rounded-full blur-3xl opacity-30"></div>
+    <section className="py-24 px-4 bg-background relative overflow-hidden">
+      <div className="max-w-5xl mx-auto">
+        <div className="relative rounded-3xl border border-primary/30 bg-linear-to-b from-card via-surface to-card overflow-hidden p-10 md:p-16 text-center shadow-2xl shadow-primary/10">
+          {/* Animated glow orbs */}
+          <div className="absolute -top-32 -right-32 w-80 h-80 bg-primary/15 rounded-full blur-3xl animate-float" />
+          <div className="absolute -bottom-32 -left-32 w-80 h-80 bg-accent/15 rounded-full blur-3xl animate-float-delayed" />
 
           {/* Content */}
-          <div className="relative z-10 text-center">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-border bg-surface mb-6">
-              <Zap className="w-4 h-4 text-primary" />
-              <span className="text-xs font-medium text-primary">Limited Time Offer</span>
+          <div className="relative z-10 max-w-3xl mx-auto space-y-6">
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-primary/20 bg-primary/5 text-primary text-xs font-semibold uppercase tracking-wider">
+              <Zap className="w-3.5 h-3.5 animate-pulse" />
+              Join The Arena
             </div>
 
-            <h2 className="text-4xl md:text-5xl font-bold mb-4 text-balance leading-tight text-foreground">
-              Ready to Start <span className="text-primary">Competing</span>?
+            <h2 className="text-4xl md:text-6xl font-extrabold tracking-tight text-foreground text-balance leading-[1.15]">
+              Ready to Prove Your <span className="bg-linear-to-r from-primary via-accent to-primary bg-clip-text text-transparent">Coding Mastery</span>?
             </h2>
 
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto mb-8">
-              Join thousands of programmers already competing on CodeRival. Get matched instantly, solve problems faster, and climb the global leaderboard.
+            <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
+              Join thousands of competitive programmers. Match instantly, battle 1v1 in real-time, and claim your place on the global podium.
             </p>
 
-            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center pt-4">
               <Link href="/register">
                 <Button
                   size="lg"
-                  className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg h-12 px-8 font-semibold group"
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl h-13 px-8 text-base font-bold shadow-lg shadow-primary/25 hover:shadow-primary/40 transition-all duration-300 group"
                 >
-                  Join the Competition
-                  <ArrowRight className="ml-2 w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                  Create Free Account
+                  <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
                 </Button>
               </Link>
-              <Button
-                variant="outline"
-                size="lg"
-                className="border-border hover:bg-surface rounded-lg h-12 px-8 font-semibold"
-              >
-                View Leaderboard
-              </Button>
+              <Link href="/leaderboard">
+                <Button
+                  variant="outline"
+                  size="lg"
+                  className="border-border hover:bg-surface rounded-xl h-13 px-8 text-base font-semibold text-foreground group"
+                >
+                  <Trophy className="mr-2 w-5 h-5 text-amber-400" />
+                  View Leaderboard
+                </Button>
+              </Link>
             </div>
 
-            <p className="text-sm text-muted-foreground mt-8">
-              No credit card required. Start competing instantly.
+            <p className="text-xs text-muted-foreground pt-4">
+              Free forever. No credit card required. Start competing in seconds.
             </p>
           </div>
         </div>

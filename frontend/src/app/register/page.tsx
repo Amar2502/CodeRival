@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { ArrowRight, Check, X, Zap, Mail, Lock } from 'lucide-react'
+import { FcGoogle } from 'react-icons/fc'
+import { FaGithub } from 'react-icons/fa6'
 import { api } from "../../lib/axios";
 import { socket } from '@/lib/socket'
 
@@ -380,18 +382,18 @@ export default function RegisterPage() {
                         type="button"
                         variant="outline"
                         onClick={handleGitHubSignIn}
-                        className="border-border hover:bg-surface rounded-lg h-10"
+                        className="border-border hover:bg-surface rounded-lg h-10 gap-2 font-medium"
                       >
-                        <span>↗</span>
+                        <FaGithub className="w-4 h-4" />
                         GitHub
                       </Button>
                       <Button
                         type="button"
                         variant="outline"
                         onClick={handleGoogleSignIn}
-                        className="border-border hover:bg-surface rounded-lg h-10"
+                        className="border-border hover:bg-surface rounded-lg h-10 gap-2 font-medium"
                       >
-                        <Mail className="w-4 h-4" />
+                        <FcGoogle className="w-4 h-4" />
                         Google
                       </Button>
                     </div>

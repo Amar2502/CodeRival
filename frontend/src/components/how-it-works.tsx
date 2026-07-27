@@ -1,52 +1,55 @@
 'use client'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { CheckCircle } from 'lucide-react'
+import { CheckCircle, Zap } from 'lucide-react'
 
 const steps = [
   {
     number: '01',
     title: 'Create Your Account',
-    description: 'Sign up in seconds with your email. Set your skill level and preferred programming languages.',
+    description: 'Sign up in seconds. Set your preferred programming languages and get your initial ELO rating.',
   },
   {
     number: '02',
-    title: 'Join Matchmaking',
-    description: 'Enter the queue for ranked or casual matches. Our system finds an opponent at your level.',
+    title: 'Join Matchmaking Queue',
+    description: 'Enter 1v1 ranked or casual queue. Our real-time engine pairs you with an equally skilled opponent.',
   },
   {
     number: '03',
-    title: 'Receive the Problem',
-    description: 'Both players get the same coding problem with a time limit. Read, analyze, and code your solution.',
+    title: 'Receive Problem Statement',
+    description: 'Both coders receive the exact same problem simultaneously with custom input/output specifications.',
   },
   {
     number: '04',
-    title: 'Submit & Compete',
-    description: 'Execute your code against multiple test cases. See real-time results and compete live.',
+    title: 'Code & Execute',
+    description: 'Write code in our VSCode-like editor with syntax highlighting, auto-complete, and instant test runs.',
   },
   {
     number: '05',
-    title: 'Get Ranked',
-    description: 'Winner is determined by correctness and speed. Your ELO rating updates instantly.',
+    title: 'Submit & Get Verdict',
+    description: 'Submit your solution. CodeRival judges your submission instantly against exhaustive test cases.',
   },
   {
     number: '06',
-    title: 'Track Progress',
-    description: 'View your match history, statistics, and performance analytics to improve your skills.',
+    title: 'Gain ELO & Rank Up',
+    description: 'First correct submission wins! ELO ratings update live, pushing you up the global leaderboard.',
   },
 ]
 
 export function HowItWorks() {
   return (
-    <section className="py-20 px-4 bg-background">
+    <section id="how-it-works" className="py-24 px-4 bg-background relative">
       <div className="max-w-6xl mx-auto">
         {/* Section Header */}
-        <div className="text-center mb-16">
-          <h2 className="text-4xl md:text-5xl font-bold mb-4 text-balance text-foreground">
+        <div className="text-center mb-16 space-y-4">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-primary/20 bg-primary/5 text-primary text-xs font-semibold uppercase tracking-wider">
+            Step-By-Step
+          </div>
+          <h2 className="text-4xl md:text-5xl font-extrabold tracking-tight text-balance text-foreground">
             How CodeRival Works
           </h2>
-          <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            Get started in minutes. Compete, improve, and dominate.
+          <p className="text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed">
+            Get started in under a minute. Battle, learn algorithms, and rise through the ranks.
           </p>
         </div>
 
@@ -55,19 +58,23 @@ export function HowItWorks() {
           {steps.map((step, index) => (
             <Card
               key={index}
-              className="border-border bg-card hover:border-primary/50 transition-all"
+              className="border-border bg-card/60 backdrop-blur-xs hover:border-primary/50 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg hover:shadow-primary/5 group relative overflow-hidden"
             >
-              <CardHeader>
-                <div className="flex items-start justify-between mb-4">
-                  <div className="text-4xl font-bold bg-linear-to-br from-primary to-accent bg-clip-text text-transparent">
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-3xl font-black font-mono text-primary/80 group-hover:text-primary transition-colors">
                     {step.number}
+                  </span>
+                  <div className="p-1.5 rounded-full bg-surface border border-border group-hover:border-primary/40 group-hover:bg-primary/10 transition-colors">
+                    <CheckCircle className="w-4 h-4 text-primary" />
                   </div>
-                  <CheckCircle className="w-5 h-5 text-primary/50" />
                 </div>
-                <CardTitle className="text-xl text-foreground">{step.title}</CardTitle>
+                <CardTitle className="text-xl font-bold text-foreground group-hover:text-primary transition-colors">
+                  {step.title}
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                <CardDescription className="text-base text-muted-foreground">
+                <CardDescription className="text-sm md:text-base text-muted-foreground leading-relaxed">
                   {step.description}
                 </CardDescription>
               </CardContent>
@@ -75,14 +82,17 @@ export function HowItWorks() {
           ))}
         </div>
 
-        {/* Connection lines for visual flow - decorative */}
-        <div className="mt-16 p-8 rounded-lg border border-border bg-card">
-          <h3 className="text-xl font-semibold mb-4 flex items-center gap-2 text-foreground">
-            <span className="inline-block w-2 h-2 rounded-full bg-primary"></span>
+        {/* Competitive Edge Card */}
+        <div className="mt-16 p-8 rounded-2xl border border-primary/20 bg-linear-to-br from-card via-surface to-card relative overflow-hidden shadow-xl shadow-black/20">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-primary/10 rounded-full blur-3xl pointer-events-none" />
+          <h3 className="text-2xl font-bold mb-3 flex items-center gap-3 text-foreground">
+            <div className="p-2 rounded-lg bg-primary/10">
+              <Zap className="w-5 h-5 text-primary animate-pulse" />
+            </div>
             The Competitive Edge
           </h3>
-          <p className="text-muted-foreground leading-relaxed">
-            Every match pushes you to think faster and code better. You&apos;re not just solving problems—you&apos;re competing against real programmers in real-time. The combination of skill-based matching, instant feedback, and continuous ranking keeps you engaged and motivated to improve. Whether you&apos;re preparing for interviews, sharpening your competitive programming skills, or simply enjoying the thrill of live coding battles, CodeRival is where programmers compete at their best.
+          <p className="text-muted-foreground leading-relaxed text-base max-w-4xl">
+            Every match pushes you to think faster and code cleaner. You&apos;re not just solving static problems—you&apos;re competing against real programmers under live pressure. The combination of instant sandbox execution, live test results, and dynamic ELO bands creates an unbeatable environment for rapid skill growth.
           </p>
         </div>
       </div>

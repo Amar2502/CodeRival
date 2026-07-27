@@ -5,7 +5,9 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { ArrowLeft, Zap } from 'lucide-react'
+import { ArrowLeft, Zap, Loader2, AlertCircle } from 'lucide-react'
+import { FcGoogle } from 'react-icons/fc'
+import { FaGithub } from 'react-icons/fa6'
 import { api } from "../../lib/axios";
 import { socket } from '@/lib/socket'
 import { useRouter } from 'next/navigation'
@@ -15,22 +17,30 @@ export default function SignInPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [errorMsg, setErrorMsg] = useState('')
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
+    setErrorMsg('')
 
-    const response = await api.post('/auth/signin', { id: email, password })
+    try {
+      const response = await api.post('/auth/signin', { id: email, password })
 
-    if (response.status !== 200) {
+      if (response.status !== 200) {
+        setIsLoading(false)
+        setErrorMsg('Login failed. Please check your credentials and try again.')
+        return
+      }
+
+      socket.connect()
       setIsLoading(false)
-      alert('Login failed. Please check your credentials and try again.')
-      return
+      router.push('/dashboard')
+    } catch (err: any) {
+      setIsLoading(false)
+      const msg = err.response?.data?.message || 'Login failed. Please check your email and password.'
+      setErrorMsg(msg)
     }
-
-    socket.connect()
-    setIsLoading(false)
-    router.push('/dashboard')
   }
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
@@ -44,9 +54,15 @@ export default function SignInPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-screen bg-background flex flex-col relative overflow-hidden">
+      {/* Background Orbs */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-1/4 -right-40 w-96 h-96 bg-primary/10 rounded-full blur-3xl animate-float"></div>
+        <div className="absolute bottom-1/4 -left-40 w-96 h-96 bg-accent/10 rounded-full blur-3xl animate-float-delayed"></div>
+      </div>
+
       {/* Header */}
-      <header className="border-b border-border bg-background/80 backdrop-blur-md">
+      <header className="border-b border-border bg-background/80 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2 font-bold text-lg text-foreground hover:opacity-80 transition-opacity">
             <div className="p-2 rounded-lg bg-linear-to-br from-primary to-accent">
@@ -64,119 +80,126 @@ export default function SignInPage() {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 flex items-center justify-center px-4 py-12">
+      <main className="flex-1 flex items-center justify-center px-4 py-12 relative z-10">
         <div className="w-full max-w-md">
-          {/* Decorative background elements */}
-          <div className="absolute inset-0 overflow-hidden pointer-events-none">
-            <div className="absolute -top-40 -right-40 w-80 h-80 bg-primary/5 rounded-full blur-3xl"></div>
-            <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-primary/5 rounded-full blur-3xl"></div>
-          </div>
+          <Card className="border-border bg-card/80 backdrop-blur-md shadow-2xl shadow-black/30">
+            <CardHeader className="space-y-2">
+              <CardTitle className="text-2xl text-foreground font-bold tracking-tight">Welcome Back</CardTitle>
+              <CardDescription>
+                Sign in to your CodeRival account to start competing
+              </CardDescription>
+            </CardHeader>
 
-          <div className="relative z-10">
-            <Card className="border-border bg-card">
-              <CardHeader className="space-y-2">
-                <CardTitle className="text-2xl text-foreground">Welcome Back</CardTitle>
-                <CardDescription>
-                  Sign in to your CodeRival account to start competing
-                </CardDescription>
-              </CardHeader>
+            <CardContent>
+              {errorMsg && (
+                <div className="mb-4 p-3 rounded-lg border border-danger/30 bg-danger/10 text-danger text-xs font-medium flex items-center gap-2 animate-fade-in-up">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{errorMsg}</span>
+                </div>
+              )}
 
-              <CardContent>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  {/* Email Field */}
-                  <div className="space-y-2">
-                    <label htmlFor="email" className="text-sm font-medium text-foreground">
-                      Email Address
-                    </label>
-                    <Input
-                      id="email"
-                      type="email"
-                      placeholder="you@example.com"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      required
-                      className="bg-surface border-border text-foreground placeholder:text-muted-foreground"
-                    />
-                  </div>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                {/* Email Field */}
+                <div className="space-y-2">
+                  <label htmlFor="email" className="text-sm font-medium text-foreground">
+                    Email Address
+                  </label>
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="you@example.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    className="bg-surface border-border text-foreground placeholder:text-muted-foreground focus:ring-2 focus:ring-primary/40 transition-all"
+                  />
+                </div>
 
-                  {/* Password Field */}
-                  <div className="space-y-2">
-                    <label htmlFor="password" className="text-sm font-medium text-foreground">
-                      Password
-                    </label>
-                    <Input
-                      id="password"
-                      type="password"
-                      placeholder="••••••••"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      required
-                      className="bg-surface border-border text-foreground placeholder:text-muted-foreground"
-                    />
-                  </div>
+                {/* Password Field */}
+                <div className="space-y-2">
+                  <label htmlFor="password" className="text-sm font-medium text-foreground">
+                    Password
+                  </label>
+                  <Input
+                    id="password"
+                    type="password"
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    className="bg-surface border-border text-foreground placeholder:text-muted-foreground focus:ring-2 focus:ring-primary/40 transition-all"
+                  />
+                </div>
 
-                  {/* Forgot Password Link */}
-                  <div className="flex justify-end">
-                    <Link href="/forgot-password" className="text-sm text-primary hover:text-primary/80 transition-colors">
-                      Forgot password?
-                    </Link>
-                  </div>
-
-                  {/* Sign In Button */}
-                  <Button
-                    type="submit"
-                    disabled={isLoading}
-                    className="w-full bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-semibold"
-                  >
-                    {isLoading ? 'Signing in...' : 'Sign In'}
-                  </Button>
-
-                  {/* Divider */}
-                  <div className="relative">
-                    <div className="absolute inset-0 flex items-center">
-                      <div className="w-full border-t border-border"></div>
-                    </div>
-                    <div className="relative flex justify-center text-sm">
-                      <span className="px-2 bg-card text-muted-foreground">Or continue with</span>
-                    </div>
-                  </div>
-
-                  {/* OAuth Buttons */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={handleGitHubSignIn}
-                      className="border-border hover:bg-surface text-foreground"
-                    >
-                      GitHub
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={handleGoogleSignIn}
-                      className="border-border hover:bg-surface text-foreground"
-                    >
-                      Google
-                    </Button>
-                  </div>
-                </form>
-
-                {/* Sign Up Link */}
-                <div className="mt-6 text-center text-sm">
-                  <span className="text-muted-foreground">Don&apos;t have an account? </span>
-                  <Link href="/register" className="text-primary hover:text-primary/80 font-medium transition-colors">
-                    Create one
+                {/* Forgot Password Link */}
+                <div className="flex justify-end">
+                  <Link href="/forgot-password" className="text-xs text-primary hover:underline transition-colors font-medium">
+                    Forgot password?
                   </Link>
                 </div>
-              </CardContent>
-            </Card>
 
-            {/* Additional Info */}
-            <p className="text-center text-xs text-muted-foreground mt-4">
-              By signing in, you agree to our Terms of Service and Privacy Policy
-            </p>
-          </div>
+                {/* Sign In Button */}
+                <Button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-semibold h-10 shadow-md shadow-primary/20 transition-all"
+                >
+                  {isLoading ? (
+                    <span className="flex items-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Signing in...
+                    </span>
+                  ) : (
+                    'Sign In'
+                  )}
+                </Button>
+
+                {/* Divider */}
+                <div className="relative my-4">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-border"></div>
+                  </div>
+                  <div className="relative flex justify-center text-xs">
+                    <span className="px-2 bg-card text-muted-foreground">Or continue with</span>
+                  </div>
+                </div>
+
+                {/* OAuth Buttons */}
+                <div className="grid grid-cols-2 gap-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleGitHubSignIn}
+                    className="border-border hover:bg-surface text-foreground gap-2 font-medium"
+                  >
+                    <FaGithub className="w-4 h-4" />
+                    GitHub
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleGoogleSignIn}
+                    className="border-border hover:bg-surface text-foreground gap-2 font-medium"
+                  >
+                    <FcGoogle className="w-4 h-4" />
+                    Google
+                  </Button>
+                </div>
+              </form>
+
+              {/* Sign Up Link */}
+              <div className="mt-6 text-center text-sm">
+                <span className="text-muted-foreground">Don&apos;t have an account? </span>
+                <Link href="/register" className="text-primary hover:underline font-medium transition-colors">
+                  Create one
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
+
+          <p className="text-center text-xs text-muted-foreground mt-4">
+            By signing in, you agree to our Terms of Service and Privacy Policy
+          </p>
         </div>
       </main>
     </div>

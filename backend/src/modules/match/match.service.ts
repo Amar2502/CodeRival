@@ -12,6 +12,7 @@ import {
 } from "../../socket/socketManager";
 import { QueuePlayer } from "../matchmaking/matchmaking.types";
 import { updateUserRatingInLeaderboard } from "../leaderboard/leaderboard.service";
+import { handleTournamentMatchFinished } from "../tournament/tournament.service";
 
 const activeMatchTimers = new Map<string, NodeJS.Timeout>();
 
@@ -296,6 +297,13 @@ export const endMatch = async (
   if (p2Socket) p2Socket.emit("match:ended", endPayload);
 
   io.to(`match:${matchId}`).emit("match:ended", endPayload);
+
+  // Trigger tournament bracket advancement if this match is part of a tournament
+  if (winnerId) {
+    handleTournamentMatchFinished(io, matchId, winnerId).catch((err) => {
+      console.error("Tournament match finish handler error:", err);
+    });
+  }
 
   return updatedMatch;
 };

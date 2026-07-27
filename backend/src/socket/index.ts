@@ -5,6 +5,7 @@ import { connectUser, disconnectUser } from "./socketManager";
 import { initializeMatchmakingSocket } from "../modules/matchmaking/matchmaking.socket";
 import { initializeMatchSocket } from "../modules/match/match.socket";
 import { initializeFriendsSocket } from "../modules/friends/friends.socket";
+import { initializeTournamentSocket } from "../modules/tournament/tournament.socket";
 import { leaveQueue, initMatchmakingTicker } from "../modules/matchmaking/matchmaking.service";
 import { handlePlayerMatchDisconnect } from "../modules/match/match.service";
 
@@ -33,6 +34,7 @@ export const initializeSocket = (httpServer: HTTPServer) => {
     initializeMatchmakingSocket(io, socket);
     initializeMatchSocket(io, socket);
     initializeFriendsSocket(io, socket);
+    initializeTournamentSocket(io, socket);
 
     socket.on("disconnect", async () => {
       console.log(`Disconnected: ${socket.id} (User: ${userId})`);

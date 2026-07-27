@@ -147,11 +147,11 @@ export default function DashboardPage() {
 
         {/* Quick Stat Cards Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card className="border-border bg-card">
+          <Card className="border-border bg-card hover-lift transition-all">
             <CardContent className="p-5 flex items-center justify-between">
               <div>
-                <p className="text-xs text-muted-foreground font-medium">Competitive Rating</p>
-                <h3 className={`text-2xl font-black mt-1 ${ratingInfo.colorClass}`}>
+                <p className="text-xs text-muted-foreground font-medium">Rating</p>
+                <h3 className={`text-2xl font-black ${ratingInfo.colorClass} mt-1`}>
                   {userRating}
                 </h3>
                 <p className="text-[11px] text-muted-foreground mt-0.5">{ratingInfo.title} tier</p>
@@ -162,7 +162,7 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          <Card className="border-border bg-card">
+          <Card className="border-border bg-card hover-lift transition-all">
             <CardContent className="p-5 flex items-center justify-between">
               <div>
                 <p className="text-xs text-muted-foreground font-medium">Problems Solved</p>
@@ -177,7 +177,7 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          <Card className="border-border bg-card">
+          <Card className="border-border bg-card hover-lift transition-all">
             <CardContent className="p-5 flex items-center justify-between">
               <div>
                 <p className="text-xs text-muted-foreground font-medium">Matches Played</p>
@@ -192,7 +192,7 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          <Card className="border-border bg-card">
+          <Card className="border-border bg-card hover-lift transition-all">
             <CardContent className="p-5 flex items-center justify-between">
               <div>
                 <p className="text-xs text-muted-foreground font-medium">Win Rate</p>
@@ -227,7 +227,14 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent className="p-4 space-y-3">
               {isLoading ? (
-                <p className="text-xs text-muted-foreground py-6 text-center">Loading matches...</p>
+                <div className="space-y-3 py-2">
+                  {[...Array(3)].map((_, i) => (
+                    <div key={i} className="p-3 rounded-lg border border-border/50 bg-surface/50 space-y-2">
+                      <div className="skeleton h-4 w-1/2" />
+                      <div className="skeleton h-3 w-1/4" />
+                    </div>
+                  ))}
+                </div>
               ) : matches.length === 0 ? (
                 <div className="py-8 text-center text-xs text-muted-foreground">
                   <Swords className="w-8 h-8 mx-auto mb-2 opacity-40" />
@@ -235,7 +242,7 @@ export default function DashboardPage() {
                 </div>
               ) : (
                 matches.map((match) => (
-                  <div key={match.id} className="p-3 rounded-lg border border-border bg-surface flex items-center justify-between">
+                  <div key={match.id} className="p-3 rounded-lg border border-border bg-surface flex items-center justify-between hover:border-border-muted transition-colors">
                     <div>
                       <span className="text-xs font-semibold text-foreground">{match.problem?.title || 'Coding Duel'}</span>
                       <p className="text-[11px] text-muted-foreground font-mono mt-0.5">
@@ -248,7 +255,7 @@ export default function DashboardPage() {
                           VICTORY
                         </span>
                       ) : (
-                        <span className="px-2.5 py-1 rounded-md text-xs font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                        <span className="px-2.5 py-1 rounded-md text-xs font-bold bg-rose-500/10 text-rose-500 border border-rose-500/20">
                           DEFEAT
                         </span>
                       )}
@@ -266,7 +273,7 @@ export default function DashboardPage() {
                 <CardTitle className="text-base font-bold text-foreground flex items-center gap-2">
                   <Code2 className="w-4 h-4 text-emerald-400" /> Recent Submissions
                 </CardTitle>
-                <CardDescription className="text-xs">Your recent problem attempts</CardDescription>
+                <CardDescription className="text-xs">Your latest problem solutions</CardDescription>
               </div>
               <Link href="/problems">
                 <Button size="sm" variant="ghost" className="text-xs text-accent gap-1">
@@ -276,15 +283,22 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent className="p-4 space-y-3">
               {isLoading ? (
-                <p className="text-xs text-muted-foreground py-6 text-center">Loading submissions...</p>
+                <div className="space-y-3 py-2">
+                  {[...Array(3)].map((_, i) => (
+                    <div key={i} className="p-3 rounded-lg border border-border/50 bg-surface/50 space-y-2">
+                      <div className="skeleton h-4 w-1/2" />
+                      <div className="skeleton h-3 w-1/4" />
+                    </div>
+                  ))}
+                </div>
               ) : !profile?.submissions || profile.submissions.length === 0 ? (
                 <div className="py-8 text-center text-xs text-muted-foreground">
                   <Code2 className="w-8 h-8 mx-auto mb-2 opacity-40" />
-                  No submissions yet. Pick a problem from the list to get started!
+                  No submissions yet. Practice problems to test your code!
                 </div>
               ) : (
                 profile.submissions.map((sub) => (
-                  <div key={sub.id} className="p-3 rounded-lg border border-border bg-surface flex items-center justify-between">
+                  <div key={sub.id} className="p-3 rounded-lg border border-border bg-surface flex items-center justify-between hover:border-border-muted transition-colors">
                     <div className="flex items-center gap-2.5">
                       <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
                       <div>

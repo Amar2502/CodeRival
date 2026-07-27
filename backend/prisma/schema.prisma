@@ -93,6 +93,14 @@ model User {
   sentFriendships     Friendship[]    @relation("SentFriendships")
   receivedFriendships Friendship[]    @relation("ReceivedFriendships")
 
+  createdTournaments          Tournament[]            @relation("CreatedTournaments")
+  tournamentsWon              Tournament[]            @relation("TournamentWinner")
+  tournamentParticipants     TournamentParticipant[]
+  receivedTournamentInvites   TournamentInvite[]      @relation("ReceivedTournamentInvites")
+  tournamentMatchesPlayer1    TournamentMatch[]       @relation("TournamentMatchPlayer1")
+  tournamentMatchesPlayer2    TournamentMatch[]       @relation("TournamentMatchPlayer2")
+  tournamentMatchesWon        TournamentMatch[]       @relation("TournamentMatchWinner")
+
   @@index([username])
   @@index([rating(sort: Desc)]) // Leaderboard queries
 }
@@ -226,8 +234,9 @@ model Match {
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
 
-  submissions     Submission[]
-  ratingHistories RatingHistory[]
+  submissions       Submission[]
+  ratingHistories   RatingHistory[]
+  tournamentMatches TournamentMatch[]
 
   @@index([player1Id])
   @@index([player2Id])
@@ -287,4 +296,91 @@ model Friendship {
   @@index([senderId])
   @@index([receiverId])
   @@index([status])
+}
+
+// ─── TOURNAMENT MODELS (8-PLAYER SINGLE ELIMINATION) ──────
+
+enum TournamentStatus {
+  WAITING_FOR_PLAYERS
+  IN_PROGRESS
+  FINISHED
+  CANCELLED
+}
+
+enum TournamentMatchRound {
+  QUARTERFINALS
+  SEMIFINALS
+  FINALS
+}
+
+model Tournament {
+  id          String           @id @default(cuid())
+  title       String           @default("8-Player Championship")
+  creatorId   String
+  creator     User             @relation("CreatedTournaments", fields: [creatorId], references: [id])
+  status      TournamentStatus @default(WAITING_FOR_PLAYERS)
+  winnerId    String?
+  winner      User?            @relation("TournamentWinner", fields: [winnerId], references: [id])
+
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  participants TournamentParticipant[]
+  matches      TournamentMatch[]
+  invites      TournamentInvite[]
+
+  @@index([creatorId])
+  @@index([status])
+}
+
+model TournamentParticipant {
+  id           String     @id @default(cuid())
+  tournamentId String
+  tournament   Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User       @relation(fields: [userId], references: [id])
+  seed         Int        // 1 to 8
+  joinedAt     DateTime   @default(now())
+
+  @@unique([tournamentId, userId])
+  @@unique([tournamentId, seed])
+}
+
+model TournamentInvite {
+  id           String     @id @default(cuid())
+  tournamentId String
+  tournament   Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  senderId     String
+  receiverId   String
+  receiver     User       @relation("ReceivedTournamentInvites", fields: [receiverId], references: [id], onDelete: Cascade)
+  status       String     @default("PENDING") // PENDING, ACCEPTED, DECLINED
+
+  createdAt    DateTime   @default(now())
+
+  @@unique([tournamentId, receiverId])
+}
+
+model TournamentMatch {
+  id           String               @id @default(cuid())
+  tournamentId String
+  tournament   Tournament           @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  round        TournamentMatchRound
+  matchIndex   Int                  // 0..3 QF, 0..1 SF, 0 Finals
+
+  player1Id    String?
+  player1      User?                @relation("TournamentMatchPlayer1", fields: [player1Id], references: [id])
+  player2Id    String?
+  player2      User?                @relation("TournamentMatchPlayer2", fields: [player2Id], references: [id])
+
+  winnerId     String?
+  winner       User?                @relation("TournamentMatchWinner", fields: [winnerId], references: [id])
+
+  matchId      String?
+  match        Match?               @relation(fields: [matchId], references: [id])
+
+  nextMatchId  String?
+  nextMatchSlot Int?                // 1 or 2
+
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
 }
