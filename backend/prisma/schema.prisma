@@ -84,11 +84,13 @@ model User {
   updatedAt DateTime @updatedAt
 
   // Relations
-  matchesAsPlayer1 Match[]         @relation("Player1")
-  matchesAsPlayer2 Match[]         @relation("Player2")
-  matchesWon       Match[]         @relation("Winner")
-  submissions      Submission[]
-  ratingHistory    RatingHistory[]
+  matchesAsPlayer1    Match[]         @relation("Player1")
+  matchesAsPlayer2    Match[]         @relation("Player2")
+  matchesWon          Match[]         @relation("Winner")
+  submissions         Submission[]
+  ratingHistory       RatingHistory[]
+  sentFriendships     Friendship[]    @relation("SentFriendships")
+  receivedFriendships Friendship[]    @relation("ReceivedFriendships")
 
   @@index([username])
   @@index([rating(sort: Desc)]) // Leaderboard queries
@@ -260,4 +262,28 @@ model Submission {
   @@index([userId])
   @@index([problemId])
   @@index([matchId])
+}
+
+// ─── FRIENDSHIPS ───────────────────────────────────────────
+
+enum FriendshipStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
+model Friendship {
+  id         String           @id @default(cuid())
+  senderId   String
+  sender     User             @relation("SentFriendships", fields: [senderId], references: [id], onDelete: Cascade)
+  receiverId String
+  receiver   User             @relation("ReceivedFriendships", fields: [receiverId], references: [id], onDelete: Cascade)
+  status     FriendshipStatus @default(PENDING)
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  @@unique([senderId, receiverId])
+  @@index([senderId])
+  @@index([receiverId])
+  @@index([status])
 }

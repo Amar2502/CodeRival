@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
-import { Zap, Code2, Swords, LayoutDashboard, User, LogOut, Trophy } from 'lucide-react'
+import { Zap, Code2, Swords, LayoutDashboard, User, LogOut, Trophy, Users } from 'lucide-react'
 import { useAuthStore } from '@/lib/authStore'
 import { getRatingInfo } from '@/lib/rating'
 
@@ -65,6 +65,16 @@ export function Header() {
               >
                 <Swords className="w-4 h-4 text-rose-500 animate-pulse" />
                 <span>1v1 Battles</span>
+              </Button>
+            </Link>
+            <Link href="/friends">
+              <Button
+                variant={pathname.startsWith('/friends') ? 'secondary' : 'ghost'}
+                size="sm"
+                className="gap-2 text-sm font-medium"
+              >
+                <Users className="w-4 h-4 text-accent" />
+                <span>Friends</span>
               </Button>
             </Link>
           </div>

@@ -37,6 +37,7 @@ import {
 import { useAuthStore } from '@/lib/authStore'
 import { socket } from '@/lib/socket'
 import { api } from '@/lib/axios'
+import { FriendButton } from '@/components/friends/FriendButton'
 
 const SecureMonacoEditor = dynamic(
   () => import('@/components/editor/SecureMonacoEditor').then((m) => m.SecureMonacoEditor),
@@ -743,6 +744,7 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
                 <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping" />
               )}
             </div>
+            {rival?.id && <FriendButton targetUserId={rival.id} targetUsername={rival.username} size="xs" />}
           </div>
         </div>
 
@@ -1281,8 +1283,8 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
                   </div>
 
                   {/* Opponent */}
-                  <div className="p-4 rounded-xl bg-surface border border-primary/30 text-center space-y-1">
-                    <div className="text-xs text-muted-foreground font-mono">Rival ELO</div>
+                  <div className="p-4 rounded-xl bg-surface border border-primary/30 text-center space-y-2">
+                    <div className="text-xs text-muted-foreground font-mono">Rival ({rival?.username}) ELO</div>
                     <div className="text-xl font-extrabold text-foreground">
                       {rivalRatingInfo.newRating}{' '}
                       <span
@@ -1293,6 +1295,11 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
                         ({rivalRatingInfo.delta >= 0 ? `+${rivalRatingInfo.delta}` : rivalRatingInfo.delta})
                       </span>
                     </div>
+                    {rival?.id && (
+                      <div className="pt-1 flex justify-center">
+                        <FriendButton targetUserId={rival.id} targetUsername={rival.username} size="xs" />
+                      </div>
+                    )}
                   </div>
                 </div>
               )

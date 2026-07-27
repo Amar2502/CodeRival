@@ -6,6 +6,7 @@ import { authRoutes } from "./modules/auth";
 import { userRoutes } from "./modules/user";
 import { problemRoutes } from "./modules/problem";
 import { matchRoutes } from "./modules/match";
+import friendsRoutes from "./modules/friends/friends.routes";
 import { config } from "./config/config";
 import { errorHandler } from "./middleware/error.middleware";
 
@@ -24,6 +25,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/problem", problemRoutes);
 app.use("/api/match", matchRoutes);
+app.use("/api/friends", friendsRoutes);
 
 app.use(errorHandler);
 

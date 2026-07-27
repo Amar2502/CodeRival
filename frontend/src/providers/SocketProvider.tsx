@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { socket } from "@/lib/socket";
 import { useAuthStore } from "@/lib/authStore";
+import { FriendChallengeModal } from "@/components/friends/FriendChallengeModal";
 
 export default function SocketProvider({
   children,
@@ -41,5 +42,10 @@ export default function SocketProvider({
     };
   }, [user, loading]);
 
-  return <>{children}</>;
+  return (
+    <>
+      {children}
+      {user && <FriendChallengeModal />}
+    </>
+  );
 }
