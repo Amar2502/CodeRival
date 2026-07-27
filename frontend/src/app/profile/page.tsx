@@ -110,7 +110,7 @@ export default function ProfilePage() {
       })
       if (res.data?.user) {
         setUser(res.data.user)
-        setMessage({ type: 'success', text: 'Avatar uploaded successfully to Cloudinary!' })
+        setMessage({ type: 'success', text: 'Avatar uploaded successfully to ImageKit!' })
       }
     } catch (err: any) {
       console.error('Failed to upload avatar:', err)
@@ -297,7 +297,7 @@ export default function ProfilePage() {
           
           <div className="relative z-10 flex flex-col md:flex-row items-center md:items-start justify-between gap-6">
             <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 text-center sm:text-left">
-              {/* Avatar Box with Cloudinary Upload */}
+              {/* Avatar Box with ImageKit Upload */}
               <div className="relative flex flex-col items-center gap-2">
                 <input
                   type="file"
@@ -325,7 +325,7 @@ export default function ProfilePage() {
                     onClick={() => fileInputRef.current?.click()}
                     disabled={isUploadingAvatar}
                     className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 rounded-2xl flex flex-col items-center justify-center text-white transition-opacity font-bold text-xs gap-1 cursor-pointer"
-                    title="Upload new avatar to Cloudinary"
+                    title="Upload new avatar to ImageKit"
                   >
                     {isUploadingAvatar ? (
                       <Loader2 className="w-6 h-6 animate-spin text-primary" />

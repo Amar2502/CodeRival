@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { db } from "../../config/db";
-import { uploadAvatarToCloudinary, deleteAvatarFromCloudinary } from "../../utils/cloudinaryUpload";
+import { uploadAvatarToImageKit, deleteAvatarFromImageKit } from "../../utils/imagekitUpload";
 
 export const checkUsername = async (req: Request, res: Response) => {
   const username = req.query.username;
@@ -404,7 +404,7 @@ export const uploadAvatarController = async (req: Request, res: Response) => {
       return res.status(400).json({ message: "No image file or avatar_data provided" });
     }
 
-    const uploadResult = await uploadAvatarToCloudinary(fileBuffer, user.avatar_id);
+    const uploadResult = await uploadAvatarToImageKit(fileBuffer, user.avatar_id);
 
     const updatedUser = await db.user.update({
       where: { id: userId },
@@ -454,7 +454,7 @@ export const removeAvatarController = async (req: Request, res: Response) => {
     });
 
     if (user?.avatar_id) {
-      await deleteAvatarFromCloudinary(user.avatar_id);
+      await deleteAvatarFromImageKit(user.avatar_id);
     }
 
     const updatedUser = await db.user.update({
