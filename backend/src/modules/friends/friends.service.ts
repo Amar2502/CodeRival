@@ -24,7 +24,8 @@ export const searchUsers = async (currentUserId: string, query: string) => {
       id: true,
       username: true,
       name: true,
-      avatar: true,
+      avatar_url: true,
+      avatar_id: true,
       rating: true,
       wins: true,
       losses: true,
@@ -109,7 +110,8 @@ export const sendFriendRequest = async (senderId: string, targetIdentifier: stri
       id: true,
       username: true,
       name: true,
-      avatar: true,
+      avatar_url: true,
+      avatar_id: true,
       rating: true,
     },
   });
@@ -182,7 +184,7 @@ export const acceptFriendRequest = async (receiverId: string, identifier: string
     },
     include: {
       sender: {
-        select: { id: true, username: true, name: true, avatar: true, rating: true },
+        select: { id: true, username: true, name: true, avatar_url: true, avatar_id: true, rating: true },
       },
     },
   });
@@ -196,10 +198,10 @@ export const acceptFriendRequest = async (receiverId: string, identifier: string
     data: { status: FriendshipStatus.ACCEPTED },
     include: {
       sender: {
-        select: { id: true, username: true, name: true, avatar: true, rating: true },
+        select: { id: true, username: true, name: true, avatar_url: true, avatar_id: true, rating: true },
       },
       receiver: {
-        select: { id: true, username: true, name: true, avatar: true, rating: true },
+        select: { id: true, username: true, name: true, avatar_url: true, avatar_id: true, rating: true },
       },
     },
   });
@@ -256,10 +258,10 @@ export const getFriendsAndRequests = async (userId: string) => {
     },
     include: {
       sender: {
-        select: { id: true, username: true, name: true, avatar: true, rating: true, wins: true, losses: true },
+        select: { id: true, username: true, name: true, avatar_url: true, avatar_id: true, rating: true, wins: true, losses: true },
       },
       receiver: {
-        select: { id: true, username: true, name: true, avatar: true, rating: true, wins: true, losses: true },
+        select: { id: true, username: true, name: true, avatar_url: true, avatar_id: true, rating: true, wins: true, losses: true },
       },
     },
     orderBy: { updatedAt: "desc" },

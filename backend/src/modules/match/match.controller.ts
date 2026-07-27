@@ -37,8 +37,8 @@ export class MatchController {
         },
         orderBy: { createdAt: "desc" },
         include: {
-          player1: { select: { id: true, username: true, avatar: true, rating: true } },
-          player2: { select: { id: true, username: true, avatar: true, rating: true } },
+          player1: { select: { id: true, username: true, avatar_url: true, avatar_id: true, rating: true } },
+          player2: { select: { id: true, username: true, avatar_url: true, avatar_id: true, rating: true } },
           problem: { select: { id: true, title: true, slug: true, difficulty: true } },
           winner: { select: { id: true, username: true } },
         },
@@ -68,8 +68,8 @@ export class MatchController {
           status: "ACTIVE",
         },
         include: {
-          player1: { select: { id: true, username: true, avatar: true, rating: true } },
-          player2: { select: { id: true, username: true, avatar: true, rating: true } },
+          player1: { select: { id: true, username: true, avatar_url: true, avatar_id: true, rating: true } },
+          player2: { select: { id: true, username: true, avatar_url: true, avatar_id: true, rating: true } },
           problem: {
             include: {
               examples: { orderBy: { order: "asc" } },

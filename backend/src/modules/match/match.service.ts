@@ -83,10 +83,10 @@ export const createMatch = async (
         },
       },
       player1: {
-        select: { id: true, username: true, name: true, avatar: true, rating: true },
+        select: { id: true, username: true, name: true, avatar_url: true, avatar_id: true, rating: true },
       },
       player2: {
-        select: { id: true, username: true, name: true, avatar: true, rating: true },
+        select: { id: true, username: true, name: true, avatar_url: true, avatar_id: true, rating: true },
       },
     },
   });
@@ -407,8 +407,8 @@ export const handlePlayerMatchReconnect = async (socket: Socket, io: Server, mat
           starterCodes: true,
         },
       },
-      player1: { select: { id: true, username: true, name: true, avatar: true, rating: true } },
-      player2: { select: { id: true, username: true, name: true, avatar: true, rating: true } },
+      player1: { select: { id: true, username: true, name: true, avatar_url: true, avatar_id: true, rating: true } },
+      player2: { select: { id: true, username: true, name: true, avatar_url: true, avatar_id: true, rating: true } },
     },
   });
 
@@ -439,8 +439,8 @@ export const getMatch = async (matchId: string) => {
   return await db.match.findUnique({
     where: { id: matchId },
     include: {
-      player1: { select: { id: true, username: true, name: true, avatar: true, rating: true } },
-      player2: { select: { id: true, username: true, name: true, avatar: true, rating: true } },
+      player1: { select: { id: true, username: true, name: true, avatar_url: true, avatar_id: true, rating: true } },
+      player2: { select: { id: true, username: true, name: true, avatar_url: true, avatar_id: true, rating: true } },
       problem: true,
       submissions: {
         orderBy: { submittedAt: "desc" },

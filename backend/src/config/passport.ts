@@ -51,12 +51,12 @@ if (config.GOOGLE_CLIENT_ID && config.GOOGLE_CLIENT_SECRET) {
 
           if (user) {
             // Link googleId if missing, update avatar if missing
-            if (!user.googleId || !user.emailVerified || (!user.avatar && profile.photos?.[0]?.value)) {
+            if (!user.googleId || !user.emailVerified || (!user.avatar_url && profile.photos?.[0]?.value)) {
               user = await db.user.update({
                 where: { id: user.id },
                 data: {
                   googleId: user.googleId || profile.id,
-                  avatar: user.avatar || profile.photos?.[0]?.value,
+                  avatar_url: user.avatar_url || profile.photos?.[0]?.value,
                   emailVerified: true,
                 },
               });
@@ -74,7 +74,7 @@ if (config.GOOGLE_CLIENT_ID && config.GOOGLE_CLIENT_SECRET) {
               email: normalizedEmail,
               username,
               googleId: profile.id,
-              avatar: profile.photos?.[0]?.value || null,
+              avatar_url: profile.photos?.[0]?.value || null,
               emailVerified: true,
             },
           });
@@ -100,12 +100,9 @@ if (config.GITHUB_CLIENT_ID && config.GITHUB_CLIENT_SECRET) {
       },
       async (accessToken: string, refreshToken: string, profile: any, done: any) => {
         try {
-          const email = profile.emails?.[0]?.value;
-          if (!email) {
-            return done(new Error("No public email returned from GitHub profile"));
-          }
-
-          const normalizedEmail = email.toLowerCase().trim();
+          const email =
+            profile.emails?.[0]?.value || `${profile.username}@github.noreply.com`;
+          const normalizedEmail = email.toLowerCase();
 
           // Check if user exists by githubId OR email
           let user = await db.user.findFirst({
@@ -116,12 +113,12 @@ if (config.GITHUB_CLIENT_ID && config.GITHUB_CLIENT_SECRET) {
 
           if (user) {
             // Link githubId if missing, update avatar if missing
-            if (!user.githubId || !user.emailVerified || (!user.avatar && profile.photos?.[0]?.value)) {
+            if (!user.githubId || !user.emailVerified || (!user.avatar_url && profile.photos?.[0]?.value)) {
               user = await db.user.update({
                 where: { id: user.id },
                 data: {
                   githubId: user.githubId || profile.id,
-                  avatar: user.avatar || profile.photos?.[0]?.value,
+                  avatar_url: user.avatar_url || profile.photos?.[0]?.value,
                   emailVerified: true,
                 },
               });
@@ -139,7 +136,7 @@ if (config.GITHUB_CLIENT_ID && config.GITHUB_CLIENT_SECRET) {
               email: normalizedEmail,
               username,
               githubId: profile.id,
-              avatar: profile.photos?.[0]?.value || null,
+              avatar_url: profile.photos?.[0]?.value || null,
               emailVerified: true,
             },
           });

@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { db } from "../../config/db";
+import { uploadAvatarToCloudinary, deleteAvatarFromCloudinary } from "../../utils/cloudinaryUpload";
 
 export const checkUsername = async (req: Request, res: Response) => {
   const username = req.query.username;
@@ -32,7 +33,8 @@ export const getMe = async (req: Request, res: Response) => {
         name: true,
         username: true,
         email: true,
-        avatar: true,
+        avatar_url: true,
+        avatar_id: true,
         country: true,
         rating: true,
         wins: true,
@@ -80,7 +82,8 @@ export const getUserProfile = async (req: Request, res: Response) => {
         id: true,
         name: true,
         email: true,
-        avatar: true,
+        avatar_url: true,
+        avatar_id: true,
         username: true,
         country: true,
         rating: true,
@@ -348,7 +351,8 @@ export const linkOAuth = async (req: Request, res: Response) => {
         name: true,
         username: true,
         email: true,
-        avatar: true,
+        avatar_url: true,
+        avatar_id: true,
         country: true,
         rating: true,
         wins: true,
@@ -369,5 +373,119 @@ export const linkOAuth = async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Link OAuth Error:", error);
     return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+export const uploadAvatarController = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const user = await db.user.findUnique({
+      where: { id: userId },
+      select: { avatar_id: true },
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    let fileBuffer: Buffer | string | undefined;
+
+    if (req.file) {
+      fileBuffer = req.file.buffer;
+    } else if (req.body.avatar_data) {
+      fileBuffer = req.body.avatar_data;
+    }
+
+    if (!fileBuffer) {
+      return res.status(400).json({ message: "No image file or avatar_data provided" });
+    }
+
+    const uploadResult = await uploadAvatarToCloudinary(fileBuffer, user.avatar_id);
+
+    const updatedUser = await db.user.update({
+      where: { id: userId },
+      data: {
+        avatar_url: uploadResult.avatar_url,
+        avatar_id: uploadResult.avatar_id,
+      },
+      select: {
+        id: true,
+        name: true,
+        username: true,
+        email: true,
+        avatar_url: true,
+        avatar_id: true,
+        country: true,
+        rating: true,
+        wins: true,
+        losses: true,
+        draws: true,
+        matchesPlayed: true,
+        problemsSolved: true,
+      },
+    });
+
+    return res.status(200).json({
+      message: "Avatar uploaded successfully",
+      user: updatedUser,
+      avatar_url: uploadResult.avatar_url,
+      avatar_id: uploadResult.avatar_id,
+    });
+  } catch (error: any) {
+    console.error("uploadAvatarController error:", error);
+    return res.status(500).json({ message: error.message || "Failed to upload avatar" });
+  }
+};
+
+export const removeAvatarController = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const user = await db.user.findUnique({
+      where: { id: userId },
+      select: { avatar_id: true },
+    });
+
+    if (user?.avatar_id) {
+      await deleteAvatarFromCloudinary(user.avatar_id);
+    }
+
+    const updatedUser = await db.user.update({
+      where: { id: userId },
+      data: {
+        avatar_url: null,
+        avatar_id: null,
+      },
+      select: {
+        id: true,
+        name: true,
+        username: true,
+        email: true,
+        avatar_url: true,
+        avatar_id: true,
+        country: true,
+        rating: true,
+        wins: true,
+        losses: true,
+        draws: true,
+        matchesPlayed: true,
+        problemsSolved: true,
+      },
+    });
+
+    return res.status(200).json({
+      message: "Avatar removed successfully",
+      user: updatedUser,
+    });
+  } catch (error: any) {
+    console.error("removeAvatarController error:", error);
+    return res.status(500).json({ message: error.message || "Failed to remove avatar" });
   }
 };

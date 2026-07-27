@@ -25,12 +25,15 @@ import {
 import { useAuthStore } from '@/lib/authStore'
 import { getRatingInfo } from '@/lib/rating'
 import { api } from '@/lib/axios'
+import { UserAvatar } from '@/components/UserAvatar'
 
 interface UserProfileData {
   id: string
   name: string
   username: string
   email: string
+  avatar_url?: string | null
+  avatar_id?: string | null
   avatar?: string
   rating: number
   wins: number
@@ -104,9 +107,12 @@ export default function DashboardPage() {
           <div className="absolute top-0 right-0 -mt-10 -mr-10 w-80 h-80 bg-primary/10 rounded-full blur-3xl pointer-events-none" />
           <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
             <div className="flex items-center gap-4">
-              <div className="w-16 h-16 rounded-2xl bg-linear-to-br from-primary via-accent to-purple-600 flex items-center justify-center text-white font-bold text-2xl shadow-md">
-                {profile?.name?.charAt(0) || authUser?.username?.charAt(0) || 'U'}
-              </div>
+              <UserAvatar
+                src={profile?.avatar_url || profile?.avatar || authUser?.avatar_url || authUser?.avatar}
+                username={profile?.username || authUser?.username}
+                name={profile?.name || authUser?.name}
+                size="xl"
+              />
               <div>
                 <div className="flex items-center gap-2">
                   <h1 className="text-2xl font-extrabold tracking-tight">

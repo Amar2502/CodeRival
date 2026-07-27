@@ -29,7 +29,9 @@ export const addPlayerToQueue = async (
 ): Promise<void> => {
   await redis.hset(PLAYER_KEY(player.userId), {
     userId: player.userId,
-    avatar: player.avatar || "",
+    avatar_url: player.avatar_url || "",
+    avatar_id: player.avatar_id || "",
+    avatar: player.avatar_url || player.avatar || "",
     socketId: player.socketId,
     rating: player.rating.toString(),
     joinedAt: player.joinedAt.toString(),
@@ -66,7 +68,9 @@ export const getPlayerFromQueue = async (
 
   return {
     userId: player.userId,
-    avatar: player.avatar || "",
+    avatar_url: player.avatar_url || null,
+    avatar_id: player.avatar_id || null,
+    avatar: player.avatar_url || player.avatar || "",
     socketId: player.socketId,
     rating: Number(player.rating),
     joinedAt: Number(player.joinedAt),
@@ -101,7 +105,9 @@ export const getWaitingPlayers = async (): Promise<QueuePlayer[]> => {
 
     players.push({
       userId: player.userId,
-      avatar: player.avatar || "",
+      avatar_url: player.avatar_url || null,
+      avatar_id: player.avatar_id || null,
+      avatar: player.avatar_url || player.avatar || "",
       socketId: player.socketId,
       rating: Number(player.rating),
       joinedAt: Number(player.joinedAt),

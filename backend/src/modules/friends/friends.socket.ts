@@ -58,7 +58,7 @@ export const initializeFriendsSocket = (io: Server, socket: Socket) => {
       // Fetch challenger details
       const challenger = await db.user.findUnique({
         where: { id: currentUserId },
-        select: { id: true, username: true, name: true, avatar: true, rating: true },
+        select: { id: true, username: true, name: true, avatar_url: true, avatar_id: true, rating: true },
       });
 
       if (!challenger) return;
@@ -128,12 +128,12 @@ export const initializeFriendsSocket = (io: Server, socket: Socket) => {
       // Fetch user profiles for both players
       const challengerUser = await db.user.findUnique({
         where: { id: challenge.challengerId },
-        select: { id: true, avatar: true, rating: true },
+        select: { id: true, avatar_url: true, avatar_id: true, rating: true },
       });
 
       const recipientUser = await db.user.findUnique({
         where: { id: currentUserId },
-        select: { id: true, avatar: true, rating: true },
+        select: { id: true, avatar_url: true, avatar_id: true, rating: true },
       });
 
       if (!challengerUser || !recipientUser) {
@@ -147,7 +147,8 @@ export const initializeFriendsSocket = (io: Server, socket: Socket) => {
       const player1: QueuePlayer = {
         userId: challengerUser.id,
         socketId: challengerSocket?.id || "",
-        avatar: challengerUser.avatar || "",
+        avatar_url: challengerUser.avatar_url,
+        avatar_id: challengerUser.avatar_id,
         rating: challengerUser.rating,
         joinedAt: Date.now(),
       };
@@ -155,7 +156,8 @@ export const initializeFriendsSocket = (io: Server, socket: Socket) => {
       const player2: QueuePlayer = {
         userId: recipientUser.id,
         socketId: recipientSocket?.id || "",
-        avatar: recipientUser.avatar || "",
+        avatar_url: recipientUser.avatar_url,
+        avatar_id: recipientUser.avatar_id,
         rating: recipientUser.rating,
         joinedAt: Date.now(),
       };

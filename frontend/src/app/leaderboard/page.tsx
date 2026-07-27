@@ -21,12 +21,15 @@ import { socket } from "@/lib/socket";
 import { getRatingInfo } from "@/lib/rating";
 import { useAuthStore } from "@/lib/authStore";
 import { FriendButton } from "@/components/friends/FriendButton";
+import { UserAvatar } from "@/components/UserAvatar";
 
 interface LeaderboardUser {
   rank: number;
   id: string;
   username: string;
   name?: string;
+  avatar_url?: string | null;
+  avatar_id?: string | null;
   avatar?: string;
   country?: string;
   rating: number;
@@ -147,8 +150,13 @@ export default function LeaderboardPage() {
                     <div className="absolute top-3 right-3 text-slate-400 font-black text-2xl">
                       #2
                     </div>
-                    <div className="w-16 h-16 rounded-full bg-slate-400/10 border-2 border-slate-400 flex items-center justify-center font-bold text-2xl text-slate-300 relative">
-                      {top3[1].username.charAt(0).toUpperCase()}
+                    <div className="relative">
+                      <UserAvatar
+                        src={top3[1].avatar_url || top3[1].avatar}
+                        username={top3[1].username}
+                        name={top3[1].name}
+                        size="xl"
+                      />
                       <Medal className="w-6 h-6 text-slate-400 absolute -bottom-2 -right-1" />
                     </div>
                     <div>
@@ -171,9 +179,14 @@ export default function LeaderboardPage() {
                     <div className="absolute top-3 right-3 text-amber-400 font-black text-3xl">
                       #1
                     </div>
-                    <div className="w-20 h-20 rounded-full bg-amber-500/20 border-2 border-amber-400 flex items-center justify-center font-black text-3xl text-amber-400 relative animate-pulse">
-                      {top3[0].username.charAt(0).toUpperCase()}
-                      <Crown className="w-7 h-7 text-amber-400 absolute -top-3" />
+                    <div className="relative">
+                      <UserAvatar
+                        src={top3[0].avatar_url || top3[0].avatar}
+                        username={top3[0].username}
+                        name={top3[0].name}
+                        size="2xl"
+                      />
+                      <Crown className="w-7 h-7 text-amber-400 absolute -top-3 left-1/2 -translate-x-1/2" />
                     </div>
                     <div>
                       <div className="font-extrabold text-foreground text-lg flex items-center gap-1.5 justify-center">
@@ -196,8 +209,13 @@ export default function LeaderboardPage() {
                     <div className="absolute top-3 right-3 text-amber-700 font-black text-2xl">
                       #3
                     </div>
-                    <div className="w-16 h-16 rounded-full bg-amber-700/10 border-2 border-amber-700 flex items-center justify-center font-bold text-2xl text-amber-600 relative">
-                      {top3[2].username.charAt(0).toUpperCase()}
+                    <div className="relative">
+                      <UserAvatar
+                        src={top3[2].avatar_url || top3[2].avatar}
+                        username={top3[2].username}
+                        name={top3[2].name}
+                        size="xl"
+                      />
                       <Award className="w-6 h-6 text-amber-700 absolute -bottom-2 -right-1" />
                     </div>
                     <div>
@@ -253,9 +271,12 @@ export default function LeaderboardPage() {
                         </div>
 
                         <div className="relative">
-                          <div className="w-10 h-10 rounded-full bg-surface border border-border flex items-center justify-center font-bold text-foreground text-sm">
-                            {player.username.charAt(0).toUpperCase()}
-                          </div>
+                          <UserAvatar
+                            src={player.avatar_url || player.avatar}
+                            username={player.username}
+                            name={player.name}
+                            size="md"
+                          />
                           <span
                             className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-card ${
                               player.isOnline ? "bg-emerald-500" : "bg-gray-500"

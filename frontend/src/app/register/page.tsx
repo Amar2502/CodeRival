@@ -165,10 +165,11 @@ export default function RegisterPage() {
             return rest
           })
         }
-      } catch (error) {
+      } catch (error: any) {
         if (!ignore) {
-          console.error('Error checking username:', error)
-          setUsernameStatus('idle')
+          const errMsg = error.response?.data?.errors?.[0]?.message || error.response?.data?.message || 'Invalid or taken username'
+          setUsernameStatus('taken')
+          setErrors(prev => ({ ...prev, username: errMsg }))
         }
       }
     }

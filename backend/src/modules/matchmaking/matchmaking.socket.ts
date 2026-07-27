@@ -18,7 +18,8 @@ export const initializeMatchmakingSocket = (
         select: {
           id: true,
           rating: true,
-          avatar: true,
+          avatar_url: true,
+          avatar_id: true,
         },
       });
 
@@ -33,7 +34,9 @@ export const initializeMatchmakingSocket = (
         userId: user.id,
         socketId: socket.id,
         rating: user.rating,
-        avatar: user.avatar ?? "",
+        avatar_url: user.avatar_url,
+        avatar_id: user.avatar_id,
+        avatar: user.avatar_url || "",
         joinedAt: Date.now(),
       };
 

@@ -64,7 +64,7 @@ export const sendRequestController = async (req: Request, res: Response) => {
     // Get current user profile for socket payload
     const currentUser = await db.user.findUnique({
       where: { id: userId },
-      select: { id: true, username: true, name: true, avatar: true, rating: true },
+      select: { id: true, username: true, name: true, avatar_url: true, avatar_id: true, rating: true },
     });
 
     const io = getIO();

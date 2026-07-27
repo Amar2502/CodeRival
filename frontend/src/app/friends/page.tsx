@@ -24,11 +24,14 @@ import { socket } from "@/lib/socket";
 import { getRatingInfo } from "@/lib/rating";
 import { FriendButton } from "@/components/friends/FriendButton";
 import { useAuthStore } from "@/lib/authStore";
+import { UserAvatar } from "@/components/UserAvatar";
 
 interface FriendUser {
   id: string;
   username: string;
   name?: string;
+  avatar_url?: string | null;
+  avatar_id?: string | null;
   avatar?: string;
   rating: number;
   wins?: number;
@@ -296,9 +299,12 @@ export default function FriendsPage() {
                         <div className="flex items-center gap-3">
                           {/* Avatar & Online status indicator */}
                           <div className="relative">
-                            <div className="w-12 h-12 rounded-full bg-primary/10 border border-primary/30 flex items-center justify-center font-bold text-lg text-primary">
-                              {friendUser.username.charAt(0).toUpperCase()}
-                            </div>
+                            <UserAvatar
+                              src={friendUser.avatar_url || friendUser.avatar}
+                              username={friendUser.username}
+                              name={friendUser.name}
+                              size="lg"
+                            />
                             <span
                               className={`absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full border-2 border-card ${
                                 friendUser.isOnline ? "bg-emerald-500 shadow-sm shadow-emerald-500" : "bg-gray-500"
@@ -387,9 +393,12 @@ export default function FriendsPage() {
                     >
                       <div className="flex items-center gap-3">
                         <div className="relative">
-                          <div className="w-11 h-11 rounded-full bg-surface border border-border flex items-center justify-center font-bold text-base text-foreground">
-                            {user.username.charAt(0).toUpperCase()}
-                          </div>
+                          <UserAvatar
+                            src={user.avatar_url || user.avatar}
+                            username={user.username}
+                            name={user.name}
+                            size="md"
+                          />
                           <span
                             className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-card ${
                               user.isOnline ? "bg-emerald-500" : "bg-gray-500"

@@ -39,8 +39,8 @@ interface MatchHistoryRecord {
   startedAt: string
   endedAt: string
   createdAt: string
-  player1: { id: string; username: string; avatar?: string; rating: number }
-  player2: { id: string; username: string; avatar?: string; rating: number }
+  player1: { id: string; username: string; avatar_url?: string | null; avatar_id?: string | null; avatar?: string; rating: number }
+  player2: { id: string; username: string; avatar_url?: string | null; avatar_id?: string | null; avatar?: string; rating: number }
   problem: { id: string; title: string; slug: string; difficulty: 'EASY' | 'MEDIUM' | 'HARD' }
   winner: { id: string; username: string } | null
 }
@@ -56,8 +56,8 @@ interface MatchFoundPayload {
     slug: string
     difficulty: 'EASY' | 'MEDIUM' | 'HARD'
   }
-  player1: { id: string; username: string; avatar?: string; rating: number }
-  player2: { id: string; username: string; avatar?: string; rating: number }
+  player1: { id: string; username: string; avatar_url?: string | null; avatar_id?: string | null; avatar?: string; rating: number }
+  player2: { id: string; username: string; avatar_url?: string | null; avatar_id?: string | null; avatar?: string; rating: number }
 }
 
 export default function BattlesPage() {
@@ -261,8 +261,8 @@ export default function BattlesPage() {
                 {/* Player 1 (You or Opponent) */}
                 <div className="sm:col-span-3 p-6 rounded-2xl bg-card border-2 border-accent/40 shadow-xl flex flex-col items-center text-center space-y-2">
                   <div className="w-20 h-20 rounded-full bg-surface border-2 border-accent flex items-center justify-center overflow-hidden text-2xl font-bold text-accent">
-                    {matchFoundData.player1.avatar ? (
-                      <img src={matchFoundData.player1.avatar} alt="Avatar" className="w-full h-full object-cover" />
+                    {(matchFoundData.player1.avatar_url || matchFoundData.player1.avatar) ? (
+                      <img src={matchFoundData.player1.avatar_url || matchFoundData.player1.avatar} alt="Avatar" className="w-full h-full object-cover" />
                     ) : (
                       matchFoundData.player1.username.charAt(0).toUpperCase()
                     )}
@@ -285,8 +285,8 @@ export default function BattlesPage() {
                 {/* Player 2 (Opponent or You) */}
                 <div className="sm:col-span-3 p-6 rounded-2xl bg-card border-2 border-primary/40 shadow-xl flex flex-col items-center text-center space-y-2">
                   <div className="w-20 h-20 rounded-full bg-surface border-2 border-primary flex items-center justify-center overflow-hidden text-2xl font-bold text-primary">
-                    {matchFoundData.player2.avatar ? (
-                      <img src={matchFoundData.player2.avatar} alt="Avatar" className="w-full h-full object-cover" />
+                    {(matchFoundData.player2.avatar_url || matchFoundData.player2.avatar) ? (
+                      <img src={matchFoundData.player2.avatar_url || matchFoundData.player2.avatar} alt="Avatar" className="w-full h-full object-cover" />
                     ) : (
                       matchFoundData.player2.username.charAt(0).toUpperCase()
                     )}
@@ -546,8 +546,8 @@ export default function BattlesPage() {
                       {/* Opponent Profile */}
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-full bg-surface border border-border flex items-center justify-center text-sm font-bold text-foreground">
-                          {rival.avatar ? (
-                            <img src={rival.avatar} alt="Avatar" className="w-full h-full rounded-full object-cover" />
+                          {(rival.avatar_url || rival.avatar) ? (
+                            <img src={rival.avatar_url || rival.avatar} alt="Avatar" className="w-full h-full rounded-full object-cover" />
                           ) : (
                             rival.username.charAt(0).toUpperCase()
                           )}

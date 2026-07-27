@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react'
 import { Header } from '@/components/header'
 import { Footer } from '@/components/footer'
 import { Button } from '@/components/ui/button'
@@ -25,7 +25,9 @@ import {
   Zap,
   ArrowUpRight,
   ArrowDownRight,
-  Minus
+  Minus,
+  Camera,
+  Trash2,
 } from 'lucide-react'
 import { useAuthStore } from '@/lib/authStore'
 import { getRatingInfo } from '@/lib/rating'
@@ -89,6 +91,51 @@ export default function ProfilePage() {
   const [isVerifyingEmail, setIsVerifyingEmail] = useState(false)
   const [linkingProvider, setLinkingProvider] = useState<'google' | 'github' | null>(null)
   const [isLoadingProfile, setIsLoadingProfile] = useState(true)
+
+  // Avatar Upload Refs & State
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
+
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const formData = new FormData()
+    formData.append('avatar', file)
+
+    try {
+      setIsUploadingAvatar(true)
+      const res = await api.post('/user/upload_avatar', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      if (res.data?.user) {
+        setUser(res.data.user)
+        setMessage({ type: 'success', text: 'Avatar uploaded successfully to Cloudinary!' })
+      }
+    } catch (err: any) {
+      console.error('Failed to upload avatar:', err)
+      setMessage({ type: 'error', text: err.response?.data?.message || 'Failed to upload avatar' })
+    } finally {
+      setIsUploadingAvatar(false)
+    }
+  }
+
+  const handleRemoveAvatar = async () => {
+    if (!confirm('Are you sure you want to remove your avatar?')) return
+    try {
+      setIsUploadingAvatar(true)
+      const res = await api.delete('/user/remove_avatar')
+      if (res.data?.user) {
+        setUser(res.data.user)
+        setMessage({ type: 'success', text: 'Avatar removed successfully.' })
+      }
+    } catch (err: any) {
+      console.error('Failed to remove avatar:', err)
+      setMessage({ type: 'error', text: 'Failed to remove avatar' })
+    } finally {
+      setIsUploadingAvatar(false)
+    }
+  }
 
   // Profile Extended Data
   const [ratingHistory, setRatingHistory] = useState<RatingHistoryItem[]>([])
@@ -250,15 +297,61 @@ export default function ProfilePage() {
           
           <div className="relative z-10 flex flex-col md:flex-row items-center md:items-start justify-between gap-6">
             <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 text-center sm:text-left">
-              {/* Avatar Box */}
-              <div className="relative">
-                <div className="w-24 h-24 rounded-2xl bg-linear-to-br from-primary via-accent to-purple-600 flex items-center justify-center text-white font-black text-4xl shadow-xl border-2 border-background shrink-0">
-                  {user?.name?.charAt(0) || user?.username?.charAt(0) || 'U'}
-                </div>
-                {user?.emailVerified && (
-                  <div className="absolute -bottom-1.5 -right-1.5 p-1 bg-blue-600 rounded-full text-white shadow-md border-2 border-background" title="Verified Coder">
-                    <BadgeCheck className="w-5 h-5 fill-white text-blue-600" />
+              {/* Avatar Box with Cloudinary Upload */}
+              <div className="relative flex flex-col items-center gap-2">
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleAvatarChange}
+                  accept="image/*"
+                  className="hidden"
+                />
+
+                <div className="relative group">
+                  <div className="w-24 h-24 rounded-2xl overflow-hidden bg-linear-to-br from-primary via-accent to-purple-600 flex items-center justify-center text-white font-black text-4xl shadow-xl border-2 border-background shrink-0">
+                    {user?.avatar_url || user?.avatar ? (
+                      <img
+                        src={user.avatar_url || user.avatar}
+                        alt={user.username}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <span>{user?.name?.charAt(0) || user?.username?.charAt(0) || 'U'}</span>
+                    )}
                   </div>
+
+                  {/* Camera Upload Button Overlay */}
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploadingAvatar}
+                    className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 rounded-2xl flex flex-col items-center justify-center text-white transition-opacity font-bold text-xs gap-1 cursor-pointer"
+                    title="Upload new avatar to Cloudinary"
+                  >
+                    {isUploadingAvatar ? (
+                      <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                    ) : (
+                      <>
+                        <Camera className="w-5 h-5 text-primary" />
+                        <span className="text-[10px] uppercase font-mono">Upload</span>
+                      </>
+                    )}
+                  </button>
+
+                  {user?.emailVerified && (
+                    <div className="absolute -bottom-1.5 -right-1.5 p-1 bg-blue-600 rounded-full text-white shadow-md border-2 border-background z-10" title="Verified Coder">
+                      <BadgeCheck className="w-5 h-5 fill-white text-blue-600" />
+                    </div>
+                  )}
+                </div>
+
+                {(user?.avatar_url || user?.avatar_id) && (
+                  <button
+                    onClick={handleRemoveAvatar}
+                    disabled={isUploadingAvatar}
+                    className="text-[11px] text-muted-foreground hover:text-rose-400 flex items-center gap-1 font-mono hover:underline"
+                  >
+                    <Trash2 className="w-3 h-3" /> Remove Avatar
+                  </button>
                 )}
               </div>
 

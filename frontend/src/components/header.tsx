@@ -7,6 +7,8 @@ import { Zap, Code2, Swords, LayoutDashboard, User, LogOut, Trophy, Users } from
 import { useAuthStore } from '@/lib/authStore'
 import { getRatingInfo } from '@/lib/rating'
 
+import { UserAvatar } from '@/components/UserAvatar'
+
 export function Header() {
   const pathname = usePathname()
   const router = useRouter()
@@ -116,9 +118,7 @@ export function Header() {
                 </span>
               </Link>
               <Link href="/profile">
-                <Button variant="ghost" size="icon" className="rounded-full bg-surface border border-border">
-                  <User className="w-4 h-4 text-foreground" />
-                </Button>
+                <UserAvatar src={user.avatar_url || user.avatar} username={user.username} name={user.name} size="sm" />
               </Link>
               <Button
                 variant="ghost"

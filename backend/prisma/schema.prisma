@@ -63,7 +63,8 @@ model User {
   name         String
   email        String  @unique
   passwordHash String?
-  avatar       String?
+  avatar_url   String?
+  avatar_id    String?
   username     String  @unique
   country      String?
 
