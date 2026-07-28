@@ -4,6 +4,8 @@ import "./globals.css";
 import AuthProvider from "@/providers/authProvider";
 import SocketProvider from "../providers/SocketProvider";
 
+import { Toaster } from "@/components/ui/sonner"
+
 export const metadata: Metadata = {
   title: {
     default: "CodeRival — 1v1 Competitive Coding Battles",
@@ -53,6 +55,7 @@ export default function RootLayout({
         <AuthProvider>
           <SocketProvider>
             {children}
+            <Toaster position="bottom-right" richColors />
           </SocketProvider>
         </AuthProvider>
       </body>

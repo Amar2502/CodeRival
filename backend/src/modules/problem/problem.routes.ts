@@ -7,6 +7,7 @@ import {
   runCode,
   submitCode,
   getSubmissionStatus,
+  streamSubmissionStatus,
   getUserSubmissions,
 } from "./problem.controller";
 import { authenticate } from "../../middleware/auth.middleware";
@@ -31,6 +32,7 @@ router.get("/get/get-all/:page/:limit", authenticate, validate(getAllProblemsSch
 router.post("/run", authenticate, runCodeLimiter, validate(runCodeSchema), runCode);
 router.post("/submit", authenticate, submitCodeLimiter, validate(submitCodeSchema), submitCode);
 
+router.get("/submission/:submissionId/stream", authenticate, streamSubmissionStatus);
 router.get("/submission/:submissionId", authenticate, getSubmissionStatus);
 router.get("/submissions/:problemId", authenticate, getUserSubmissions);
 

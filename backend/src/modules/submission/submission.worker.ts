@@ -7,6 +7,7 @@ import { SUBMISSION_QUEUE_NAME } from "./submission.queue";
 import { SubmissionJobData } from "./submission.types";
 import { getIO } from "../../socket";
 import { handleMatchSubmission } from "../match/match.service";
+import { submissionEvents } from "./submission.events";
 
 let submissionWorker: Worker<SubmissionJobData> | null = null;
 
@@ -79,26 +80,45 @@ export const processSubmissionJob = async (job: Job<SubmissionJobData>) => {
       }
     }
 
-    // 6. Broadcast real-time result to user via Socket.io
+    const payload = {
+      submissionId,
+      problemId,
+      matchId,
+      submissionType,
+      status: SubmissionStatus.FINISHED,
+      verdict: result.verdict,
+      runtimeMs: result.runtimeMs,
+      totalTestCases: result.totalTestCases,
+      passedTestCases: result.passedTestCases,
+      stderr: result.stderr,
+      testCaseResults: result.testCaseResults,
+    };
+
+    // 6. Broadcast real-time result via SSE Server-Sent Events
+    submissionEvents.emit(`submission:${submissionId}`, payload);
+
+    // 7. Broadcast real-time result to user via Socket.io
     if (io) {
-      io.to(`user:${userId}`).emit("submission:result", {
-        submissionId,
-        problemId,
-        matchId,
-        submissionType,
-        verdict: result.verdict,
-        runtimeMs: result.runtimeMs,
-        totalTestCases: result.totalTestCases,
-        passedTestCases: result.passedTestCases,
-        stderr: result.stderr,
-        testCaseResults: result.testCaseResults,
-      });
+      io.to(`user:${userId}`).emit("submission:result", payload);
     }
 
     console.log(`[SubmissionWorker] Job ${job.id} finished with verdict: ${result.verdict}`);
     return { submissionId, verdict: result.verdict };
   } catch (error: any) {
     console.error(`[SubmissionWorker] Job ${job.id} failed with error:`, error);
+
+    const errorPayload = {
+      submissionId,
+      problemId,
+      matchId,
+      submissionType,
+      status: SubmissionStatus.FINISHED,
+      verdict: Verdict.IE,
+      runtimeMs: 0,
+      totalTestCases: 0,
+      passedTestCases: 0,
+      stderr: error.message || "Execution engine failure",
+    };
 
     // Update database record with Internal Error (IE) verdict
     await db.submission.update({
@@ -110,17 +130,13 @@ export const processSubmissionJob = async (job: Job<SubmissionJobData>) => {
       },
     });
 
-    // Notify client of failure
+    // Notify SSE listeners
+    submissionEvents.emit(`submission:${submissionId}`, errorPayload);
+
+    // Notify client of failure via socket.io
     const io = getIO();
     if (io) {
-      io.to(`user:${userId}`).emit("submission:result", {
-        submissionId,
-        problemId,
-        matchId,
-        submissionType,
-        verdict: Verdict.IE,
-        stderr: error.message || "Execution engine failure",
-      });
+      io.to(`user:${userId}`).emit("submission:result", errorPayload);
     }
 
     throw error;

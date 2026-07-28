@@ -2,7 +2,8 @@ import { Request, Response } from "express";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { ProblemService } from "./problem.repository";
 import { SubmissionService } from "../submission/submission.service";
-import { SubmissionType } from "../../generated/prisma/client";
+import { SubmissionStatus, SubmissionType } from "../../generated/prisma/client";
+import { submissionEvents } from "../submission/submission.events";
 
 export const getProblem = asyncHandler(async (req: Request, res: Response) => {
   const slug = String(req.params.slug);
@@ -71,6 +72,46 @@ export const getSubmissionStatus = asyncHandler(async (req: Request, res: Respon
   }
 
   return res.status(200).json({ submission });
+});
+
+export const streamSubmissionStatus = asyncHandler(async (req: Request, res: Response) => {
+  const submissionId = String(req.params.submissionId);
+  const userId = req.user?.userId;
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+
+  res.write(": ping\n\n");
+
+  const existing = await SubmissionService.getSubmissionById(submissionId, userId!);
+  if (existing && existing.status === SubmissionStatus.FINISHED) {
+    res.write(`data: ${JSON.stringify({
+      submissionId: existing.id,
+      status: existing.status,
+      verdict: existing.verdict,
+      runtimeMs: existing.runtimeMs,
+      totalTestCases: existing.totalTestCases,
+      passedTestCases: existing.passedTestCases,
+      stderr: existing.stderr,
+      testCaseResults: existing.testCaseResults,
+    })}\n\n`);
+    res.end();
+    return;
+  }
+
+  const onFinished = (data: any) => {
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+    res.end();
+  };
+
+  submissionEvents.once(`submission:${submissionId}`, onFinished);
+
+  req.on("close", () => {
+    submissionEvents.removeListener(`submission:${submissionId}`, onFinished);
+  });
 });
 
 export const getUserSubmissions = asyncHandler(async (req: Request, res: Response) => {

@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, use } from 'react'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
   Select,
@@ -12,6 +13,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  ResizablePanelGroup,
+  ResizablePanel,
+  ResizableHandle,
+} from '@/components/ui/resizable'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import {
   ArrowLeft,
   Play,
@@ -216,6 +228,13 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
       }
     }
 
+    const onOpponentSubmitted = (data: { userId: string }) => {
+      if (data.userId !== user?.id) {
+        toast.info('⚡ Opponent submitted a solution! Judging in progress...')
+        addActivityLog('⚡ Rival submitted a solution for judging...', 'rival')
+      }
+    }
+
     const onSubmissionResult = (result: SubmissionResult) => {
       const isMe = result.userId === user?.id
       const pName = isMe ? 'You' : 'Rival'
@@ -236,6 +255,25 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
         setIsSubmitting(false)
         setIsBottomOpen(true)
         setActiveBottomTab('result')
+
+        if (result.verdict === 'AC') {
+          toast.success('🎉 Accepted! All test cases passed!')
+        } else if (result.verdict === 'WA') {
+          toast.error(`❌ Wrong Answer (${result.passedTestCases}/${result.totalTestCases} passed)`)
+        } else if (result.verdict === 'TLE') {
+          toast.warning('⏱️ Time Limit Exceeded')
+        } else if (result.verdict === 'CE') {
+          toast.error('⚠️ Compilation Error')
+        } else {
+          toast.error(`Execution Result: ${result.verdict}`)
+        }
+      } else {
+        // Opponent submission result
+        if (result.verdict === 'AC') {
+          toast.error('💀 Opponent solved the problem! Match ending...')
+        } else {
+          toast.info(`Opponent result: ${result.verdict} (${result.passedTestCases}/${result.totalTestCases} passed)`)
+        }
       }
     }
 
@@ -244,9 +282,11 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
         setOpponentDisconnected(true)
         setDisconnectTimer(Math.round((data.gracePeriodMs || 30000) / 1000))
         addActivityLog('⚠️ Rival disconnected! 30-second grace period started.', 'warning')
+        toast.warning('⚠️ Rival disconnected! 30-second grace period started.')
       } else {
         setOpponentDisconnected(false)
         addActivityLog('🟢 Rival reconnected to the arena!', 'success')
+        toast.success('🟢 Rival reconnected to the arena!')
       }
     }
 
@@ -266,6 +306,7 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
         `⚠️ Rival received Anti-Cheat Warning: ${typeLabel} (Warning ${data.warningCount || 1}/3)`,
         'warning'
       )
+      toast.warning(`⚠️ Rival received Anti-Cheat warning: ${typeLabel}`)
     }
 
     const onMatchEnded = async (payload: MatchEndedPayload) => {
@@ -275,10 +316,13 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
       const isWinner = payload.winnerId === user?.id
       if (isWinner) {
         addActivityLog('🏆 VICTORY! You won the 1v1 duel!', 'success')
+        toast.success('🏆 VICTORY! You won the 1v1 duel!')
       } else if (payload.result === 'DRAW') {
         addActivityLog('🤝 Match ended in a DRAW.', 'info')
+        toast.info('🤝 Match ended in a DRAW.')
       } else {
         addActivityLog('💀 DEFEAT! Opponent claimed victory.', 'warning')
+        toast.error('💀 DEFEAT! Opponent claimed victory.')
       }
 
       try {
@@ -294,12 +338,14 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
     const onError = (data: { message: string }) => {
       console.error('Match socket error:', data)
       addActivityLog(`Error: ${data.message}`, 'warning')
+      toast.error(`Error: ${data.message}`)
     }
 
     socket.on('match:start', onStart)
     socket.on('match:found', onStart)
     socket.on('match:sync_state', onSyncState)
     socket.on('match:opponent_code_sync', onOpponentCodeSync)
+    socket.on('match:opponent_submitted', onOpponentSubmitted)
     socket.on('match:submission_result', onSubmissionResult)
     socket.on('submission:result', onSubmissionResult)
     socket.on('match:opponent_status', onOpponentStatus)
@@ -312,6 +358,7 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
       socket.off('match:found', onStart)
       socket.off('match:sync_state', onSyncState)
       socket.off('match:opponent_code_sync', onOpponentCodeSync)
+      socket.off('match:opponent_submitted', onOpponentSubmitted)
       socket.off('match:submission_result', onSubmissionResult)
       socket.off('submission:result', onSubmissionResult)
       socket.off('match:opponent_status', onOpponentStatus)
@@ -331,11 +378,23 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
     if (data.startedAt) setStartedAt(data.startedAt)
     if (data.durationMs) setDurationMs(data.durationMs)
 
-    // Set initial starter code if not set
-    if (data.problem?.starterCodes) {
-      const defaultStarter = data.problem.starterCodes.find((sc: StarterCode) => sc.language === 'PYTHON')
-      if (defaultStarter && !code) {
-        setCode(defaultStarter.code)
+    // Set initial starter code if not set (checking localStorage first)
+    if (data.problem?.starterCodes && !code) {
+      const savedPref = (typeof window !== 'undefined' ? localStorage.getItem('coderival_preferred_language') : null) as 'CPP' | 'JAVA' | 'PYTHON' | null
+      const defaultLang: 'CPP' | 'JAVA' | 'PYTHON' = (savedPref && ['CPP', 'JAVA', 'PYTHON'].includes(savedPref)) ? savedPref : 'PYTHON'
+      setSelectedLanguage(defaultLang)
+
+      const storageKey = `coderival_code_battle_${matchId}_${defaultLang}`
+      const saved = typeof window !== 'undefined' ? localStorage.getItem(storageKey) : null
+      if (saved && saved.trim()) {
+        setCode(saved)
+      } else {
+        const defaultStarter = data.problem.starterCodes.find((sc: StarterCode) => sc.language === defaultLang)
+        if (defaultStarter) {
+          setCode(defaultStarter.code)
+        } else {
+          setCode(getFallbackCode(defaultLang, data.problem))
+        }
       }
     }
   }
@@ -515,12 +574,12 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
     setActivityLogs((prev) => [newLog, ...prev])
   }
 
-  // Handle Code Editor Changes & Throttled Socket Sync
-  const handleCodeChange = (newCode: string | undefined) => {
-    const val = newCode || ''
+  // Handle Code Changes
+  const handleCodeChange = (val: string | undefined) => {
+    if (val === undefined) return
     setCode(val)
 
-    // Emit live code sync to opponent
+    // Debounced Socket Sync to server (500ms)
     if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current)
     syncTimeoutRef.current = setTimeout(() => {
       socket.emit('match:code_sync', {
@@ -534,11 +593,17 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
   // Handle Language Switch
   const handleLanguageChange = (lang: 'CPP' | 'JAVA' | 'PYTHON') => {
     setSelectedLanguage(lang)
-    const starter = problem?.starterCodes?.find((sc) => sc.language === lang)
-    if (starter) {
-      setCode(starter.code)
-    } else if (problem) {
-      setCode(getFallbackCode(lang, problem))
+    const storageKey = `coderival_code_battle_${matchId}_${lang}`
+    const saved = typeof window !== 'undefined' ? localStorage.getItem(storageKey) : null
+    if (saved && saved.trim()) {
+      setCode(saved)
+    } else {
+      const starter = problem?.starterCodes?.find((sc) => sc.language === lang)
+      if (starter) {
+        setCode(starter.code)
+      } else if (problem) {
+        setCode(getFallbackCode(lang, problem))
+      }
     }
   }
 
@@ -553,29 +618,49 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
   }
 
   const handleResetCode = () => {
+    const storageKey = `coderival_code_battle_${matchId}_${selectedLanguage}`
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(storageKey)
+    }
     const starter = problem?.starterCodes?.find((sc) => sc.language === selectedLanguage)
     if (starter) {
       setCode(starter.code)
+    } else if (problem) {
+      setCode(getFallbackCode(selectedLanguage, problem))
     }
   }
 
-  const pollSubmissionStatus = async (submissionId: string) => {
-    let attempts = 0
-    const maxAttempts = 30
-    while (attempts < maxAttempts) {
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-      attempts++
-      try {
-        const res = await api.get(`/problem/submission/${submissionId}`)
-        const sub = res.data?.submission
-        if (sub && (sub.status === 'FINISHED' || sub.verdict)) {
-          return sub
+  const subscribeToSubmissionStream = (submissionId: string): Promise<any> => {
+    return new Promise((resolve, reject) => {
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api'
+      const eventSource = new EventSource(`${baseUrl}/problem/submission/${submissionId}/stream`, {
+        withCredentials: true,
+      })
+
+      const timeoutId = setTimeout(() => {
+        eventSource.close()
+        reject(new Error('Submission execution timed out.'))
+      }, 60000)
+
+      eventSource.onmessage = (event) => {
+        try {
+          clearTimeout(timeoutId)
+          const data = JSON.parse(event.data)
+          eventSource.close()
+          resolve(data)
+        } catch (err) {
+          clearTimeout(timeoutId)
+          eventSource.close()
+          reject(err)
         }
-      } catch (err) {
-        console.error('Polling submission error:', err)
       }
-    }
-    throw new Error('Submission execution timed out.')
+
+      eventSource.onerror = () => {
+        clearTimeout(timeoutId)
+        eventSource.close()
+        reject(new Error('Server-sent event stream failed.'))
+      }
+    })
   }
 
   // Run Code Action (Sample Testcases)
@@ -587,6 +672,7 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
     setExecutionResult(null)
 
     addActivityLog('💡 Executing code against sample test cases...', 'you')
+    toast.info('💡 Executing code against sample test cases...')
 
     try {
       const res = await api.post('/problem/run', {
@@ -596,7 +682,7 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
       })
 
       if (res.data?.submissionId) {
-        const sub = await pollSubmissionStatus(res.data.submissionId)
+        const sub = await subscribeToSubmissionStream(res.data.submissionId)
         setExecutionResult({
           verdict: sub.verdict,
           passedTestCases: sub.passedTestCases || 0,
@@ -605,19 +691,26 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
           stderr: sub.stderr,
           testCaseResults: sub.testCaseResults,
         })
+        if (sub.verdict === 'AC') {
+          toast.success('Sample test cases passed!')
+        } else {
+          toast.error(`Sample run result: ${sub.verdict}`)
+        }
       } else {
         setExecutionResult(res.data)
       }
       setSelectedTestCaseIndex(0)
     } catch (err: any) {
       console.error('Run code error:', err)
+      const errorMsg = err.response?.data?.message || err.message || 'Execution error. Check backend server logs.'
       setExecutionResult({
         verdict: 'IE',
         runtimeMs: 0,
         totalTestCases: 0,
         passedTestCases: 0,
-        stderr: err.response?.data?.message || 'Execution error. Check backend server logs.',
+        stderr: errorMsg,
       })
+      toast.error(`Execution error: ${errorMsg}`)
     } finally {
       setIsRunning(false)
     }
@@ -632,6 +725,7 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
     setExecutionResult(null)
 
     addActivityLog('⚡ Submitting solution to competitive judge engine...', 'you')
+    toast.info('⚡ Submitting solution to competitive judge engine...')
 
     socket.emit('match:submit', {
       matchId,
@@ -683,127 +777,151 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
     <div className="h-screen bg-background text-foreground flex flex-col overflow-hidden select-none">
       {/* ─── 1. TOP ARENA HEADER & VERSUS BAR ─── */}
       <header className="h-14 border-b border-border bg-card px-4 flex items-center justify-between shrink-0 z-30 shadow-md">
-        {/* Left: Exit & Problem Info */}
-        <div className="flex items-center gap-3">
-          <Link
-            href="/battles"
-            className="p-1.5 rounded-lg hover:bg-surface text-muted-foreground hover:text-foreground transition-colors"
-            title="Leave duel to battles lobby"
-          >
-            <ArrowLeft className="w-4 h-4" />
-          </Link>
+        <TooltipProvider>
+          {/* Left: Exit & Problem Info */}
+          <div className="flex items-center gap-3">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Link
+                  href="/battles"
+                  className="p-1.5 rounded-lg hover:bg-surface text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                </Link>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="text-xs">
+                Leave duel to battles lobby
+              </TooltipContent>
+            </Tooltip>
 
-          <div className="h-4 w-px bg-border" />
+            <div className="h-4 w-px bg-border" />
 
-          <div className="flex items-center gap-2">
-            <Swords className="w-4 h-4 text-primary animate-pulse" />
-            <h1 className="text-sm font-extrabold text-foreground truncate max-w-xs sm:max-w-sm">
-              {problem.title}
-            </h1>
-            <span
-              className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${
-                problem.difficulty === 'EASY'
-                  ? 'bg-easy-subtle text-easy'
-                  : problem.difficulty === 'MEDIUM'
-                  ? 'bg-medium-subtle text-medium'
-                  : 'bg-hard-subtle text-hard'
-              }`}
-            >
-              {problem.difficulty}
-            </span>
-          </div>
-        </div>
-
-        {/* Center: VERSUS PLAYER CARDS & DUEL TIMER */}
-        <div className="flex items-center gap-4">
-          {/* You */}
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-full bg-accent/20 border border-accent flex items-center justify-center text-xs font-bold text-accent">
-              {me?.username.charAt(0).toUpperCase()}
+            <div className="flex items-center gap-2">
+              <Swords className="w-4 h-4 text-primary animate-pulse" />
+              <h1 className="text-sm font-extrabold text-foreground truncate max-w-xs sm:max-w-sm">
+                {problem.title}
+              </h1>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span
+                    className={`px-2 py-0.5 rounded-full text-[11px] font-bold cursor-help ${
+                      problem.difficulty === 'EASY'
+                        ? 'bg-easy-subtle text-easy'
+                        : problem.difficulty === 'MEDIUM'
+                        ? 'bg-medium-subtle text-medium'
+                        : 'bg-hard-subtle text-hard'
+                    }`}
+                  >
+                    {problem.difficulty}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">
+                  Problem Difficulty: {problem.difficulty}
+                </TooltipContent>
+              </Tooltip>
             </div>
-            <div className="hidden md:block text-left">
-              <div className="text-xs font-bold text-accent truncate max-w-[100px]">{me?.username}</div>
-              <div className="text-[10px] text-muted-foreground font-mono">{me?.rating} ELO</div>
-            </div>
-          </div>
-
-          {/* Countdown Timer */}
-          <div
-            className={`px-3 py-1 rounded-full border text-xs font-mono font-bold flex items-center gap-1.5 shadow-xs ${
-              remainingMs < 180000
-                ? 'bg-rose-500/20 border-rose-500 text-rose-400 animate-pulse'
-                : 'bg-surface border-border text-foreground'
-            }`}
-          >
-            <TimerIcon className="w-3.5 h-3.5 text-primary" />
-            <span>{formatTimer(remainingMs)}</span>
           </div>
 
-          {/* Rival */}
-          <div className="flex items-center gap-2">
-            <div className="hidden md:block text-right">
-              <div className="text-xs font-bold text-primary truncate max-w-[100px]">{rival?.username}</div>
-              <div className="text-[10px] text-muted-foreground font-mono">{rival?.rating} ELO</div>
+          {/* Center: VERSUS PLAYER CARDS & DUEL TIMER */}
+          <div className="flex items-center gap-4">
+            {/* You */}
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-full bg-accent/20 border border-accent flex items-center justify-center text-xs font-bold text-accent">
+                {me?.username.charAt(0).toUpperCase()}
+              </div>
+              <div className="hidden md:block text-left">
+                <div className="text-xs font-bold text-accent truncate max-w-[100px]">{me?.username}</div>
+                <div className="text-[10px] text-muted-foreground font-mono">{me?.rating} ELO</div>
+              </div>
             </div>
-            <div className="w-7 h-7 rounded-full bg-primary/20 border border-primary flex items-center justify-center text-xs font-bold text-primary relative">
-              {rival?.username.charAt(0).toUpperCase()}
-              {opponentDisconnected && (
-                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping" />
-              )}
-            </div>
-            {rival?.id && <FriendButton targetUserId={rival.id} targetUsername={rival.username} size="xs" />}
-          </div>
-        </div>
 
-        {/* Right: Controls & Surrender */}
-        <div className="flex items-center gap-3">
-          {/* Anti-Cheat Status Badge */}
-          <div
-            className={`hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-mono border ${
-              antiCheatWarnings > 0
-                ? 'bg-amber-500/10 border-amber-500/30 text-amber-400 animate-pulse'
-                : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
-            }`}
-            title="Anti-Cheat Active: Tab focus, paste control, and window dimensions are monitored"
-          >
-            {antiCheatWarnings > 0 ? (
-              <ShieldAlert className="w-3.5 h-3.5" />
-            ) : (
-              <ShieldCheck className="w-3.5 h-3.5" />
+            {/* Countdown Timer */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div
+                  className={`px-3 py-1 rounded-full border text-xs font-mono font-bold flex items-center gap-1.5 shadow-xs cursor-help ${
+                    remainingMs < 180000
+                      ? 'bg-rose-500/20 border-rose-500 text-rose-400 animate-pulse'
+                      : 'bg-surface border-border text-foreground'
+                  }`}
+                >
+                  <TimerIcon className="w-3.5 h-3.5 text-primary" />
+                  <span>{formatTimer(remainingMs)}</span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="text-xs">
+                1v1 Duel Match Time Remaining
+              </TooltipContent>
+            </Tooltip>
+
+            {/* Rival */}
+            <div className="flex items-center gap-2">
+              <div className="hidden md:block text-right">
+                <div className="text-xs font-bold text-primary truncate max-w-[100px]">{rival?.username}</div>
+                <div className="text-[10px] text-muted-foreground font-mono">{rival?.rating} ELO</div>
+              </div>
+              <div className="w-7 h-7 rounded-full bg-primary/20 border border-primary flex items-center justify-center text-xs font-bold text-primary relative">
+                {rival?.username.charAt(0).toUpperCase()}
+                {opponentDisconnected && (
+                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping" />
+                )}
+              </div>
+              {rival?.id && <FriendButton targetUserId={rival.id} targetUsername={rival.username} size="xs" />}
+            </div>
+          </div>
+
+          {/* Right: Controls & Surrender */}
+          <div className="flex items-center gap-3">
+            {/* Anti-Cheat Status Badge */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div
+                  className={`hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-mono border cursor-help ${
+                    antiCheatWarnings > 0
+                      ? 'bg-amber-500/10 border-amber-500/30 text-amber-400 animate-pulse'
+                      : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                  }`}
+                >
+                  {antiCheatWarnings > 0 ? (
+                    <ShieldAlert className="w-3.5 h-3.5" />
+                  ) : (
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                  )}
+                  <span>
+                    {antiCheatWarnings >= 2
+                      ? '💀 Disqualified'
+                      : antiCheatWarnings === 1
+                      ? '⚠️ Warning 1/1 (Final)'
+                      : 'Anti-Cheat Active'}
+                  </span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="text-xs max-w-xs">
+                Anti-Cheat Active: Tab focus, paste control, and window dimensions are monitored
+              </TooltipContent>
+            </Tooltip>
+
+            {/* Surrender Button */}
+            {matchStatus === 'ACTIVE' && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setShowSurrenderModal(true)}
+                    className="border-rose-500/30 text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 font-bold text-xs h-8 px-3 gap-1 cursor-pointer"
+                  >
+                    <Flag className="w-3.5 h-3.5" />
+                    <span>Surrender</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">
+                  Forfeit 1v1 duel & surrender match
+                </TooltipContent>
+              </Tooltip>
             )}
-            <span>
-              {antiCheatWarnings >= 2
-                ? '💀 Disqualified'
-                : antiCheatWarnings === 1
-                ? '⚠️ Warning 1/1 (Final)'
-                : 'Anti-Cheat Active'}
-            </span>
           </div>
-
-          {/* Rival Status Indicator */}
-          <div
-            className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-mono border ${
-              opponentDisconnected
-                ? 'bg-rose-500/10 border-rose-500/30 text-rose-400'
-                : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
-            }`}
-          >
-            {opponentDisconnected ? <WifiOff className="w-3.5 h-3.5" /> : <Wifi className="w-3.5 h-3.5" />}
-            <span>{opponentDisconnected ? `Reconnecting (${disconnectTimer}s)` : 'Live'}</span>
-          </div>
-
-          {/* Surrender Button */}
-          {matchStatus === 'ACTIVE' && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setShowSurrenderModal(true)}
-              className="text-xs font-semibold text-rose-400 border-rose-500/30 hover:bg-rose-500/10 gap-1 h-8"
-            >
-              <Flag className="w-3.5 h-3.5" /> Forfeit
-            </Button>
-          )}
-        </div>
+        </TooltipProvider>
       </header>
 
       {/* Disconnect Warning Banner */}
@@ -835,343 +953,425 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
 
       {/* ─── 2. MAIN BATTLE SPLIT WORKSPACE ─── */}
       <div className="flex-1 flex overflow-hidden">
-        {/* ─── LEFT PANE: PROBLEM STATEMENT & LIVE FEED ─── */}
-        <div className="w-[45%] border-r border-border bg-card flex flex-col overflow-hidden">
-          {/* Tab Bar */}
-          <div className="flex items-center border-b border-border bg-surface/40 px-2 shrink-0">
-            <button
-              onClick={() => setActiveLeftTab('problem')}
-              className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors ${
-                activeLeftTab === 'problem'
-                  ? 'border-accent text-accent bg-surface/60'
-                  : 'border-transparent text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <FileText className="w-3.5 h-3.5" /> Problem
-            </button>
-
-            <button
-              onClick={() => setActiveLeftTab('feed')}
-              className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors ${
-                activeLeftTab === 'feed'
-                  ? 'border-accent text-accent bg-surface/60'
-                  : 'border-transparent text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <Swords className="w-3.5 h-3.5 text-rose-400" /> Battle Feed
-              {activityLogs.length > 0 && (
-                <span className="px-1.5 py-0.2 rounded-full bg-rose-500/20 text-[10px] text-rose-400 font-bold border border-rose-500/30">
-                  {activityLogs.length}
-                </span>
-              )}
-            </button>
-
-            <button
-              onClick={() => setActiveLeftTab('opponent')}
-              className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors ${
-                activeLeftTab === 'opponent'
-                  ? 'border-accent text-accent bg-surface/60'
-                  : 'border-transparent text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <Eye className="w-3.5 h-3.5" /> Rival Preview
-            </button>
-          </div>
-
-          {/* Tab Content */}
-          <div className="flex-1 overflow-y-auto p-5 text-sm leading-relaxed space-y-6">
-            {activeLeftTab === 'problem' ? (
-              <>
-                <div>
-                  <h2 className="text-xl font-extrabold text-foreground mb-2">
-                    {problem.title}
-                  </h2>
-                  <div className="flex flex-wrap gap-1.5 mt-2">
-                    {problem.topics?.map((t) => (
-                      <span key={t.id} className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-surface text-muted-foreground border border-border">
-                        {t.name}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Description */}
-                <div className="text-foreground/90 space-y-3 whitespace-pre-line text-xs font-sans">
-                  {problem.description}
-                </div>
-
-                {/* Examples */}
-                {problem.examples && problem.examples.length > 0 && (
-                  <div className="space-y-4">
-                    <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Sample Examples:</h3>
-                    {problem.examples.map((example, idx) => (
-                      <div key={example.id || idx} className="rounded-lg border border-border bg-surface p-3.5 space-y-2 font-mono text-xs">
-                        <div className="font-semibold text-muted-foreground">Example {idx + 1}:</div>
-                        <div>
-                          <span className="text-muted-foreground">Input: </span>
-                          <span className="text-foreground">{example.input}</span>
-                        </div>
-                        <div>
-                          <span className="text-muted-foreground">Output: </span>
-                          <span className="text-emerald-400 font-semibold">{example.output}</span>
-                        </div>
-                        {example.explanation && (
-                          <div className="pt-1 border-t border-border/50 text-muted-foreground">
-                            <span>Explanation: </span>
-                            <span className="text-foreground/80">{example.explanation}</span>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Constraints */}
-                {problem.constraints && (
-                  <div className="space-y-2 pt-3 border-t border-border">
-                    <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Constraints:</h3>
-                    <pre className="text-xs font-mono text-muted-foreground whitespace-pre-line">
-                      {problem.constraints}
-                    </pre>
-                  </div>
-                )}
-              </>
-            ) : activeLeftTab === 'feed' ? (
-              /* Battle Activity Feed Tab */
-              <div className="space-y-3 font-mono text-xs">
-                <div className="text-xs text-muted-foreground font-semibold flex items-center justify-between border-b border-border pb-2">
-                  <span>Live Event Log</span>
-                  <span className="text-[10px] text-accent">Real-Time Sync</span>
-                </div>
-
-                {activityLogs.length === 0 ? (
-                  <div className="text-center py-12 text-muted-foreground text-xs">
-                    No activity recorded yet. Events will log live during duel!
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {activityLogs.map((log) => (
-                      <div
-                        key={log.id}
-                        className={`p-3 rounded-lg border flex items-start gap-3 ${
-                          log.type === 'success'
-                            ? 'bg-emerald-950/20 border-emerald-500/30 text-emerald-300'
-                            : log.type === 'warning'
-                            ? 'bg-rose-950/20 border-rose-500/30 text-rose-300'
-                            : log.type === 'you'
-                            ? 'bg-accent/10 border-accent/30 text-accent'
-                            : 'bg-surface border-border text-foreground/90'
-                        }`}
-                      >
-                        <span className="text-[10px] text-muted-foreground shrink-0 font-mono">
-                          {log.timestamp}
-                        </span>
-                        <div className="leading-relaxed">{log.text}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ) : (
-              /* Opponent Code Preview Tab */
-              <div className="space-y-4">
-                <div className="p-4 rounded-xl border border-border bg-surface flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-primary/20 border border-primary flex items-center justify-center font-bold text-primary">
-                      {rival?.username.charAt(0).toUpperCase()}
-                    </div>
-                    <div>
-                      <div className="text-xs font-bold text-foreground">@{rival?.username}</div>
-                      <div className="text-[11px] text-muted-foreground font-mono">
-                        Active Language: <strong className="text-accent">{opponentLanguage}</strong>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="text-right font-mono text-xs text-muted-foreground">
-                    Code Length: <strong className="text-foreground">{opponentCode.length} chars</strong>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <div className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
-                    <Code2 className="w-3.5 h-3.5 text-accent" /> Live Sync Code Preview:
-                  </div>
-                  {opponentCode ? (
-                    <pre className="p-4 rounded-xl bg-[#0d1117] border border-border text-xs font-mono text-foreground/90 overflow-x-auto max-h-[400px]">
-                      {opponentCode}
-                    </pre>
-                  ) : (
-                    <div className="p-8 text-center text-muted-foreground text-xs bg-surface rounded-xl border border-border">
-                      Rival code will preview here as they type...
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* ─── RIGHT PANE: MONACO EDITOR & RUN/SUBMIT ─── */}
-        <div className="flex-1 flex flex-col bg-[#0d1117] overflow-hidden">
-          {/* Top Bar Controls */}
-          <div className="h-10 border-b border-border bg-card px-3 flex items-center justify-between shrink-0">
-            {/* Language Selector Dropdown (LeetCode style) */}
-            <Select
-              value={selectedLanguage}
-              onValueChange={(val) => handleLanguageChange(val as 'CPP' | 'JAVA' | 'PYTHON')}
-            >
-              <SelectTrigger className="h-7 w-[130px] bg-surface border border-border text-xs font-semibold text-foreground focus:ring-1 focus:ring-accent rounded-lg">
-                <SelectValue placeholder="Select Language" />
-              </SelectTrigger>
-              <SelectContent className="bg-popover border border-border text-foreground">
-                <SelectItem value="PYTHON" className="text-xs font-mono">Python 3</SelectItem>
-                <SelectItem value="CPP" className="text-xs font-mono">C++ (GCC 9.2)</SelectItem>
-                <SelectItem value="JAVA" className="text-xs font-mono">Java (OpenJDK 17)</SelectItem>
-              </SelectContent>
-            </Select>
-
-            {/* Actions: Reset, Run, Submit */}
-            <div className="flex items-center gap-2">
+        <ResizablePanelGroup direction="horizontal" className="flex-1">
+          {/* ─── LEFT PANE: PROBLEM STATEMENT & LIVE FEED ─── */}
+          <ResizablePanel defaultSize="45%" minSize="25%" maxSize="75%" className="border-r border-border bg-card flex flex-col overflow-hidden">
+            {/* Tab Bar */}
+            <div className="flex items-center border-b border-border bg-surface/40 px-2 shrink-0">
               <button
-                onClick={handleResetCode}
-                title="Reset to starter code"
-                className="p-1.5 rounded-lg border border-border bg-surface text-muted-foreground hover:text-foreground hover:bg-surface-2 transition-colors"
+                onClick={() => setActiveLeftTab('problem')}
+                className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors ${
+                  activeLeftTab === 'problem'
+                    ? 'border-accent text-accent bg-surface/60'
+                    : 'border-transparent text-muted-foreground hover:text-foreground'
+                }`}
               >
-                <RotateCcw className="w-3.5 h-3.5" />
+                <FileText className="w-3.5 h-3.5" /> Problem
               </button>
 
-              <Button
-                size="sm"
-                onClick={handleRunCode}
-                disabled={isRunning || isSubmitting}
-                className="bg-surface hover:bg-surface-2 text-foreground border border-border text-xs font-semibold gap-1.5 h-7 px-3"
+              <button
+                onClick={() => setActiveLeftTab('feed')}
+                className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors ${
+                  activeLeftTab === 'feed'
+                    ? 'border-accent text-accent bg-surface/60'
+                    : 'border-transparent text-muted-foreground hover:text-foreground'
+                }`}
               >
-                {isRunning ? <Loader2 className="w-3.5 h-3.5 animate-spin text-accent" /> : <Play className="w-3.5 h-3.5 text-emerald-400 fill-emerald-400" />}
-                <span>Run Code</span>
-              </Button>
-
-              <Button
-                size="sm"
-                onClick={handleSubmitCode}
-                disabled={isRunning || isSubmitting || matchStatus !== 'ACTIVE'}
-                className="bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-extrabold gap-1.5 h-7 px-4 shadow-md"
-              >
-                {isSubmitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Flame className="w-3.5 h-3.5 fill-white" />}
-                <span>SUBMIT SOLUTION</span>
-              </Button>
-            </div>
-          </div>
-
-          {/* Secure Monaco Editor Component */}
-          <div className="flex-1 relative overflow-hidden">
-            <SecureMonacoEditor
-              language={selectedLanguage}
-              value={code}
-              onChange={handleCodeChange}
-              onPasteAttempt={handlePasteAttempt}
-            />
-          </div>
-
-          {/* ─── BOTTOM PANEL: CONSOLE / EXECUTION RESULTS ─── */}
-          <div className={`border-t border-border bg-card flex flex-col transition-all duration-200 ${
-            isBottomOpen ? 'h-[260px]' : 'h-8'
-          }`}>
-            <div className="h-8 border-b border-border bg-surface/50 px-3 flex items-center justify-between shrink-0">
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => { setIsBottomOpen(true); setActiveBottomTab('testcase'); }}
-                  className={`flex items-center gap-1.5 px-3 py-0.5 text-xs font-semibold rounded-md transition-colors ${
-                    activeBottomTab === 'testcase' && isBottomOpen
-                      ? 'bg-surface text-accent'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  <Terminal className="w-3.5 h-3.5" /> Sample Inputs
-                </button>
-                <button
-                  onClick={() => { setIsBottomOpen(true); setActiveBottomTab('result'); }}
-                  className={`flex items-center gap-1.5 px-3 py-0.5 text-xs font-semibold rounded-md transition-colors ${
-                    activeBottomTab === 'result' && isBottomOpen
-                      ? 'bg-surface text-accent'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  <Code2 className="w-3.5 h-3.5" /> Output & Verdict
-                  {executionResult && (
-                    <span className={`w-2 h-2 rounded-full ${
-                      executionResult.verdict === 'AC' ? 'bg-emerald-400' : 'bg-rose-500'
-                    }`} />
-                  )}
-                </button>
-              </div>
+                <Swords className="w-3.5 h-3.5 text-rose-400" /> Battle Feed
+                {activityLogs.length > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full bg-rose-500/20 text-[10px] text-rose-400 font-bold border border-rose-500/30">
+                    {activityLogs.length}
+                  </span>
+                )}
+              </button>
 
               <button
-                onClick={() => setIsBottomOpen(!isBottomOpen)}
-                className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+                onClick={() => setActiveLeftTab('opponent')}
+                className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors ${
+                  activeLeftTab === 'opponent'
+                    ? 'border-accent text-accent bg-surface/60'
+                    : 'border-transparent text-muted-foreground hover:text-foreground'
+                }`}
               >
-                {isBottomOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+                <Eye className="w-3.5 h-3.5" /> Rival Preview
               </button>
             </div>
 
-            {isBottomOpen && (
-              <div className="flex-1 p-4 overflow-y-auto font-mono text-xs space-y-3">
-                {activeBottomTab === 'testcase' ? (
-                  <div className="space-y-3">
-                    {problem.examples && problem.examples.length > 0 ? (
-                      problem.examples.map((ex, idx) => (
-                        <div key={ex.id || idx} className="p-3 rounded-lg bg-surface border border-border space-y-1">
-                          <div className="text-[11px] text-muted-foreground font-semibold">Sample {idx + 1}:</div>
-                          <div><span className="text-muted-foreground">Input: </span><span className="text-foreground">{ex.input}</span></div>
-                          <div><span className="text-muted-foreground">Expected: </span><span className="text-emerald-400 font-semibold">{ex.output}</span></div>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="text-muted-foreground text-xs">No sample testcases provided.</div>
-                    )}
-                  </div>
-                ) : (
+            {/* Tab Content */}
+            <div className="flex-1 overflow-y-auto p-5 text-sm leading-relaxed space-y-6">
+              {activeLeftTab === 'problem' ? (
+                <>
                   <div>
-                    {isRunning || isSubmitting ? (
-                      <div className="flex flex-col items-center justify-center py-6 gap-2 text-muted-foreground">
-                        <Loader2 className="w-6 h-6 animate-spin text-primary" />
-                        <p className="text-xs">Processing solution through judge engine...</p>
-                      </div>
-                    ) : !executionResult ? (
-                      <div className="text-center py-6 text-muted-foreground text-xs">
-                        Click "Run Code" or "SUBMIT SOLUTION" to test your implementation.
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between p-3 rounded-lg bg-surface border border-border">
-                          <div className="flex items-center gap-3">
-                            {getVerdictBadge(executionResult.verdict)}
-                            <span className="text-xs text-muted-foreground">
-                              Testcases Passed: {executionResult.passedTestCases} / {executionResult.totalTestCases}
-                            </span>
+                    <h2 className="text-xl font-extrabold text-foreground mb-2">
+                      {problem.title}
+                    </h2>
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {problem.topics?.map((t) => (
+                        <span key={t.id} className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-surface text-muted-foreground border border-border">
+                          {t.name}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Description */}
+                  <div className="text-foreground/90 space-y-3 whitespace-pre-line text-xs font-sans">
+                    {problem.description}
+                  </div>
+
+                  {/* Examples */}
+                  {problem.examples && problem.examples.length > 0 && (
+                    <div className="space-y-4">
+                      <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Sample Examples:</h3>
+                      {problem.examples.map((example, idx) => (
+                        <div key={example.id || idx} className="rounded-lg border border-border bg-surface p-3.5 space-y-2 font-mono text-xs">
+                          <div className="font-semibold text-muted-foreground">Example {idx + 1}:</div>
+                          <div>
+                            <span className="text-muted-foreground">Input: </span>
+                            <span className="text-foreground">{example.input}</span>
                           </div>
-                          {executionResult.runtimeMs !== undefined && (
-                            <div className="text-xs text-muted-foreground font-mono">
-                              Runtime: <span className="text-foreground font-semibold">{executionResult.runtimeMs} ms</span>
+                          <div>
+                            <span className="text-muted-foreground">Output: </span>
+                            <span className="text-emerald-400 font-semibold">{example.output}</span>
+                          </div>
+                          {example.explanation && (
+                            <div className="pt-1 border-t border-border/50 text-muted-foreground">
+                              <span>Explanation: </span>
+                              <span className="text-foreground/80">{example.explanation}</span>
                             </div>
                           )}
                         </div>
+                      ))}
+                    </div>
+                  )}
 
-                        {executionResult.stderr && (
-                          <div className="space-y-1">
-                            <div className="text-rose-400 font-semibold text-[11px]">Execution Error Output:</div>
-                            <pre className="p-3 rounded-lg bg-rose-950/40 text-rose-300 border border-rose-900/50 overflow-x-auto">
-                              {executionResult.stderr}
-                            </pre>
+                  {/* Constraints */}
+                  {problem.constraints && (
+                    <div className="space-y-2 pt-3 border-t border-border">
+                      <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Constraints:</h3>
+                      <pre className="text-xs font-mono text-muted-foreground whitespace-pre-line">
+                        {problem.constraints}
+                      </pre>
+                    </div>
+                  )}
+                </>
+              ) : activeLeftTab === 'feed' ? (
+                /* Battle Activity Feed Tab */
+                <div className="space-y-3 font-mono text-xs">
+                  <div className="text-xs text-muted-foreground font-semibold flex items-center justify-between border-b border-border pb-2">
+                    <span>Live Event Log</span>
+                    <span className="text-[10px] text-accent">Real-Time Sync</span>
+                  </div>
+
+                  {activityLogs.length === 0 ? (
+                    <div className="text-center py-12 text-muted-foreground text-xs">
+                      No activity recorded yet. Events will log live during duel!
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {activityLogs.map((log) => (
+                        <div
+                          key={log.id}
+                          className={`p-3 rounded-lg border flex items-start gap-3 ${
+                            log.type === 'success'
+                              ? 'bg-emerald-950/20 border-emerald-500/30 text-emerald-300'
+                              : log.type === 'warning'
+                              ? 'bg-rose-950/20 border-rose-500/30 text-rose-300'
+                              : log.type === 'you'
+                              ? 'bg-accent/10 border-accent/30 text-accent'
+                              : 'bg-surface border-border text-foreground/90'
+                          }`}
+                        >
+                          <span className="text-[10px] text-muted-foreground shrink-0 font-mono">
+                            {log.timestamp}
+                          </span>
+                          <div className="leading-relaxed">{log.text}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* Opponent Code Preview Tab */
+                <div className="space-y-4">
+                  <div className="p-4 rounded-xl border border-border bg-surface flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-primary/20 border border-primary flex items-center justify-center font-bold text-primary">
+                        {rival?.username.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold text-foreground">@{rival?.username}</div>
+                        <div className="text-[11px] text-muted-foreground font-mono">
+                          Active Language: <strong className="text-accent">{opponentLanguage}</strong>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-right font-mono text-xs text-muted-foreground">
+                      Code Length: <strong className="text-foreground">{opponentCode.length} chars</strong>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                      <Code2 className="w-3.5 h-3.5 text-accent" /> Live Sync Code Preview:
+                    </div>
+                    {opponentCode ? (
+                      <pre className="p-4 rounded-xl bg-[#0d1117] border border-border text-xs font-mono text-foreground/90 overflow-x-auto max-h-[400px]">
+                        {opponentCode}
+                      </pre>
+                    ) : (
+                      <div className="p-8 text-center text-muted-foreground text-xs bg-surface rounded-xl border border-border">
+                        Rival code will preview here as they type...
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </ResizablePanel>
+
+          <ResizableHandle withHandle />
+
+          {/* ─── RIGHT PANE: MONACO EDITOR & RUN/SUBMIT ─── */}
+          <ResizablePanel defaultSize="55%" minSize="25%" className="bg-[#0d1117] flex flex-col overflow-hidden">
+            {isBottomOpen ? (
+              <ResizablePanelGroup direction="vertical" className="flex-1">
+                {/* Monaco Editor Panel */}
+                <ResizablePanel defaultSize="65%" minSize="25%" className="flex flex-col overflow-hidden">
+                  {/* Top Bar Controls */}
+                  <div className="h-10 border-b border-border bg-card px-3 flex items-center justify-between shrink-0">
+
+                    {/* Actions: Reset, Run, Submit */}
+                    <div className="flex items-center gap-2">
+
+                      <Button
+                        size="sm"
+                        onClick={handleRunCode}
+                        disabled={isRunning || isSubmitting}
+                        className="bg-surface hover:bg-surface-2 text-foreground border border-border text-xs font-semibold gap-1.5 h-7 px-3"
+                      >
+                        {isRunning ? <Loader2 className="w-3.5 h-3.5 animate-spin text-accent" /> : <Play className="w-3.5 h-3.5 text-emerald-400 fill-emerald-400" />}
+                        <span>Run Code</span>
+                      </Button>
+
+                      <Button
+                        size="sm"
+                        onClick={handleSubmitCode}
+                        disabled={isRunning || isSubmitting || matchStatus !== 'ACTIVE'}
+                        className="bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-extrabold gap-1.5 h-7 px-4 shadow-md"
+                      >
+                        {isSubmitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Flame className="w-3.5 h-3.5 fill-white" />}
+                        <span>SUBMIT SOLUTION</span>
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Secure Monaco Editor Component */}
+                  <div className="flex-1 relative overflow-hidden">
+                    <SecureMonacoEditor
+                      language={selectedLanguage}
+                      onLanguageChange={handleLanguageChange}
+                      value={code}
+                      onChange={handleCodeChange}
+                      onResetCode={handleResetCode}
+                      onPasteAttempt={handlePasteAttempt}
+                      storageKey={`coderival_code_battle_${matchId}_${selectedLanguage}`}
+                    />
+                  </div>
+                </ResizablePanel>
+
+                <ResizableHandle withHandle />
+
+                {/* Bottom Panel: Testcases & Output */}
+                <ResizablePanel defaultSize="35%" minSize="4%" className="border-t border-border bg-card flex flex-col overflow-hidden">
+                  <div className="h-8 border-b border-border bg-surface/50 px-3 flex items-center justify-between shrink-0">
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => { setIsBottomOpen(true); setActiveBottomTab('testcase'); }}
+                        className={`flex items-center gap-1.5 px-3 py-0.5 text-xs font-semibold rounded-md transition-colors ${
+                          activeBottomTab === 'testcase' && isBottomOpen
+                            ? 'bg-surface text-accent'
+                            : 'text-muted-foreground hover:text-foreground'
+                        }`}
+                      >
+                        <Terminal className="w-3.5 h-3.5" /> Sample Inputs
+                      </button>
+                      <button
+                        onClick={() => { setIsBottomOpen(true); setActiveBottomTab('result'); }}
+                        className={`flex items-center gap-1.5 px-3 py-0.5 text-xs font-semibold rounded-md transition-colors ${
+                          activeBottomTab === 'result' && isBottomOpen
+                            ? 'bg-surface text-accent'
+                            : 'text-muted-foreground hover:text-foreground'
+                        }`}
+                      >
+                        <Code2 className="w-3.5 h-3.5" /> Output & Verdict
+                        {executionResult && (
+                          <span className={`w-2 h-2 rounded-full ${
+                            executionResult.verdict === 'AC' ? 'bg-emerald-400' : 'bg-rose-500'
+                          }`} />
+                        )}
+                      </button>
+                    </div>
+
+                    <button
+                      onClick={() => setIsBottomOpen(false)}
+                      className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <ChevronDown className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <div className="flex-1 p-4 overflow-y-auto font-mono text-xs space-y-3">
+                    {activeBottomTab === 'testcase' ? (
+                      <div className="space-y-3">
+                        {problem.examples && problem.examples.length > 0 ? (
+                          problem.examples.map((ex, idx) => (
+                            <div key={ex.id || idx} className="p-3 rounded-lg bg-surface border border-border space-y-1">
+                              <div className="text-[11px] text-muted-foreground font-semibold">Sample {idx + 1}:</div>
+                              <div><span className="text-muted-foreground">Input: </span><span className="text-foreground">{ex.input}</span></div>
+                              <div><span className="text-muted-foreground">Expected: </span><span className="text-emerald-400 font-semibold">{ex.output}</span></div>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="text-muted-foreground text-xs">No sample testcases provided.</div>
+                        )}
+                      </div>
+                    ) : (
+                      <div>
+                        {isRunning || isSubmitting ? (
+                          <div className="flex flex-col items-center justify-center py-6 gap-2 text-muted-foreground">
+                            <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                            <p className="text-xs">Processing solution through judge engine...</p>
+                          </div>
+                        ) : !executionResult ? (
+                          <div className="text-center py-6 text-muted-foreground text-xs">
+                            Click "Run Code" or "SUBMIT SOLUTION" to test your implementation.
+                          </div>
+                        ) : (
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between p-3 rounded-lg bg-surface border border-border">
+                              <div className="flex items-center gap-3">
+                                {getVerdictBadge(executionResult.verdict)}
+                                <span className="text-xs text-muted-foreground">
+                                  Testcases Passed: {executionResult.passedTestCases} / {executionResult.totalTestCases}
+                                </span>
+                              </div>
+                              {executionResult.runtimeMs !== undefined && (
+                                <div className="text-xs text-muted-foreground font-mono">
+                                  Runtime: <span className="text-foreground font-semibold">{executionResult.runtimeMs} ms</span>
+                                </div>
+                              )}
+                            </div>
+
+                            {executionResult.stderr && (
+                              <div className="space-y-1">
+                                <div className="text-rose-400 font-semibold text-[11px]">Execution Error Output:</div>
+                                <pre className="p-3 rounded-lg bg-rose-950/40 text-rose-300 border border-rose-900/50 overflow-x-auto">
+                                  {executionResult.stderr}
+                                </pre>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
                     )}
                   </div>
-                )}
+                </ResizablePanel>
+              </ResizablePanelGroup>
+            ) : (
+              <div className="flex-1 flex flex-col overflow-hidden">
+                {/* Top Bar Controls */}
+                <div className="h-10 border-b border-border bg-card px-3 flex items-center justify-between shrink-0">
+                  <Select
+                    value={selectedLanguage}
+                    onValueChange={(val) => handleLanguageChange(val as 'CPP' | 'JAVA' | 'PYTHON')}
+                  >
+                    <SelectTrigger className="h-7 w-[130px] bg-surface border border-border text-xs font-semibold text-foreground focus:ring-1 focus:ring-accent rounded-lg">
+                      <SelectValue placeholder="Select Language" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-popover border border-border text-foreground">
+                      <SelectItem value="PYTHON" className="text-xs font-mono">Python 3</SelectItem>
+                      <SelectItem value="CPP" className="text-xs font-mono">C++ (GCC 9.2)</SelectItem>
+                      <SelectItem value="JAVA" className="text-xs font-mono">Java (OpenJDK 17)</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleResetCode}
+                      title="Reset to starter code"
+                      className="p-1.5 rounded-lg border border-border bg-surface text-muted-foreground hover:text-foreground hover:bg-surface-2 transition-colors"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                    </button>
+
+                    <Button
+                      size="sm"
+                      onClick={handleRunCode}
+                      disabled={isRunning || isSubmitting}
+                      className="bg-surface hover:bg-surface-2 text-foreground border border-border text-xs font-semibold gap-1.5 h-7 px-3"
+                    >
+                      {isRunning ? <Loader2 className="w-3.5 h-3.5 animate-spin text-accent" /> : <Play className="w-3.5 h-3.5 text-emerald-400 fill-emerald-400" />}
+                      <span>Run Code</span>
+                    </Button>
+
+                    <Button
+                      size="sm"
+                      onClick={handleSubmitCode}
+                      disabled={isRunning || isSubmitting || matchStatus !== 'ACTIVE'}
+                      className="bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-extrabold gap-1.5 h-7 px-4 shadow-md"
+                    >
+                      {isSubmitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Flame className="w-3.5 h-3.5 fill-white" />}
+                      <span>SUBMIT SOLUTION</span>
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Secure Monaco Editor Component */}
+                <div className="flex-1 relative overflow-hidden">
+                  <SecureMonacoEditor
+                    language={selectedLanguage}
+                    onLanguageChange={handleLanguageChange}
+                    value={code}
+                    onChange={handleCodeChange}
+                    onResetCode={handleResetCode}
+                    onPasteAttempt={handlePasteAttempt}
+                    storageKey={`coderival_code_battle_${matchId}_${selectedLanguage}`}
+                  />
+                </div>
+
+                <div className="h-8 border-t border-border bg-card flex items-center justify-between px-3 shrink-0">
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => { setIsBottomOpen(true); setActiveBottomTab('testcase'); }}
+                      className="flex items-center gap-1.5 px-3 py-0.5 text-xs font-semibold rounded-md text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <Terminal className="w-3.5 h-3.5" /> Sample Inputs
+                    </button>
+                    <button
+                      onClick={() => { setIsBottomOpen(true); setActiveBottomTab('result'); }}
+                      className="flex items-center gap-1.5 px-3 py-0.5 text-xs font-semibold rounded-md text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <Code2 className="w-3.5 h-3.5" /> Output & Verdict
+                      {executionResult && (
+                        <span className={`w-2 h-2 rounded-full ${
+                          executionResult.verdict === 'AC' ? 'bg-emerald-400' : 'bg-rose-500'
+                        }`} />
+                      )}
+                    </button>
+                  </div>
+
+                  <button
+                    onClick={() => setIsBottomOpen(true)}
+                    className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <ChevronUp className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             )}
-          </div>
-        </div>
+          </ResizablePanel>
+        </ResizablePanelGroup>
       </div>
 
       {/* ─── 3. FORFEIT CONFIRMATION MODAL ─── */}

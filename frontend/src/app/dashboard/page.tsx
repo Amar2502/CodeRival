@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Header } from '@/components/header'
-import { Footer } from '@/components/footer'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import {
@@ -316,8 +315,7 @@ export default function DashboardPage() {
           </Card>
         </div>
       </main>
-
-      <Footer />
+      
     </div>
   )
 }

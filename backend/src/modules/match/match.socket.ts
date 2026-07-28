@@ -51,6 +51,11 @@ export const initializeMatchSocket = (
         submissionType: SubmissionType.SUBMIT,
       });
 
+      // Notify opponent in the match room that a submission was made
+      socket.to(`match:${data.matchId}`).emit("match:opponent_submitted", {
+        userId,
+      });
+
       // Acknowledge queuing to submitting socket
       socket.emit("match:submission_queued", {
         submissionId: queuedSubmission.submissionId,

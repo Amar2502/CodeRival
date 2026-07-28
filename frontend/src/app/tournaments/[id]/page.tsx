@@ -3,9 +3,16 @@
 import { useEffect, useState, use } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 import { Header } from '@/components/header'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import {
   Trophy,
   Users,
@@ -106,15 +113,33 @@ export default function TournamentBracketPage({ params }: { params: Promise<{ id
       setTournament(data)
     }
 
+    const onStarted = (data: TournamentDetail) => {
+      setTournament(data)
+      toast.success('⚔️ Tournament has officially started! Check your bracket match.')
+    }
+
+    const onFinished = (data: TournamentDetail) => {
+      setTournament(data)
+      if (data.winner) {
+        toast.success(`🏆 Tournament Champion: @${data.winner.username}!`)
+      }
+    }
+
+    const onCancelled = (data: TournamentDetail) => {
+      setTournament(data)
+      toast.error('Tournament was cancelled by creator.')
+    }
+
     socket.on('tournament:updated', onUpdate)
-    socket.on('tournament:started', onUpdate)
+    socket.on('tournament:started', onStarted)
     socket.on('tournament:bracket_updated', onUpdate)
-    socket.on('tournament:finished', onUpdate)
-    socket.on('tournament:cancelled', onUpdate)
+    socket.on('tournament:finished', onFinished)
+    socket.on('tournament:cancelled', onCancelled)
 
     const onMatchReady = (data: { tournamentId: string; matchId?: string }) => {
       if (data.tournamentId === tournamentId) {
         fetchTournament()
+        toast.info('🎮 Your tournament match is ready! Enter your duel.')
       }
     }
 
@@ -123,10 +148,10 @@ export default function TournamentBracketPage({ params }: { params: Promise<{ id
     return () => {
       socket.emit('tournament:leave_room', { tournamentId })
       socket.off('tournament:updated', onUpdate)
-      socket.off('tournament:started', onUpdate)
+      socket.off('tournament:started', onStarted)
       socket.off('tournament:bracket_updated', onUpdate)
-      socket.off('tournament:finished', onUpdate)
-      socket.off('tournament:cancelled', onUpdate)
+      socket.off('tournament:finished', onFinished)
+      socket.off('tournament:cancelled', onCancelled)
       socket.off('tournament:match_ready', onMatchReady)
     }
   }, [tournamentId])
@@ -172,11 +197,13 @@ export default function TournamentBracketPage({ params }: { params: Promise<{ id
       await api.post(`/tournament/${tournamentId}/invite`, {
         friendUserIds: selectedFriendIds,
       })
+      toast.success(`Invites sent to ${selectedFriendIds.length} friend(s)!`)
       setIsInviteOpen(false)
       setSelectedFriendIds([])
       fetchTournament()
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to send invites:', err)
+      toast.error(err.response?.data?.message || 'Failed to send invites')
     } finally {
       setIsInviting(false)
     }
@@ -186,10 +213,12 @@ export default function TournamentBracketPage({ params }: { params: Promise<{ id
     setIsCancelling(true)
     try {
       await api.post(`/tournament/${tournamentId}/cancel`)
+      toast.error('Tournament session cancelled.')
       setIsCancelConfirmOpen(false)
       fetchTournament()
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to cancel tournament:', err)
+      toast.error(err.response?.data?.message || 'Failed to cancel tournament')
     } finally {
       setIsCancelling(false)
     }
@@ -235,55 +264,86 @@ export default function TournamentBracketPage({ params }: { params: Promise<{ id
 
       {/* Workspace Sub-Header */}
       <div className="border-b border-border bg-card/80 backdrop-blur-md px-4 py-3 sticky top-14 z-30">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <Link href="/tournaments" className="p-1.5 rounded-lg hover:bg-surface text-muted-foreground hover:text-foreground">
-              <ArrowLeft className="w-4 h-4" />
-            </Link>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-lg font-bold text-foreground">{tournament.title}</h1>
-                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider border ${
-                  tournament.status === 'WAITING_FOR_PLAYERS' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
-                  tournament.status === 'IN_PROGRESS' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 animate-pulse' :
-                  tournament.status === 'CANCELLED' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' :
-                  'bg-purple-500/10 text-purple-400 border-purple-500/20'
-                }`}>
-                  {tournament.status === 'WAITING_FOR_PLAYERS' ? `Waiting (${tournament.participants.length}/8)` :
-                   tournament.status === 'IN_PROGRESS' ? 'In Progress' :
-                   tournament.status === 'CANCELLED' ? 'Cancelled' : 'Completed'}
-                </span>
+        <TooltipProvider>
+          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Link href="/tournaments" className="p-1.5 rounded-lg hover:bg-surface text-muted-foreground hover:text-foreground transition-colors">
+                    <ArrowLeft className="w-4 h-4" />
+                  </Link>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">
+                  Back to Tournaments Lobby
+                </TooltipContent>
+              </Tooltip>
+
+              <div>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-lg font-bold text-foreground">{tournament.title}</h1>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider border cursor-help ${
+                        tournament.status === 'WAITING_FOR_PLAYERS' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
+                        tournament.status === 'IN_PROGRESS' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 animate-pulse' :
+                        tournament.status === 'CANCELLED' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' :
+                        'bg-purple-500/10 text-purple-400 border-purple-500/20'
+                      }`}>
+                        {tournament.status === 'WAITING_FOR_PLAYERS' ? `Waiting (${tournament.participants.length}/8)` :
+                         tournament.status === 'IN_PROGRESS' ? 'In Progress' :
+                         tournament.status === 'CANCELLED' ? 'Cancelled' : 'Completed'}
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="text-xs">
+                      Tournament Status: {tournament.status.replace(/_/g, ' ')}
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <p className="text-xs text-muted-foreground">Organized by @{tournament.creator.username} • 8-Player Single Elimination</p>
               </div>
-              <p className="text-xs text-muted-foreground">Organized by @{tournament.creator.username} • 8-Player Single Elimination</p>
+            </div>
+
+            <div className="flex items-center gap-3">
+              {tournament.status === 'WAITING_FOR_PLAYERS' && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="sm"
+                      onClick={handleOpenInviteModal}
+                      className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs gap-1.5 shadow-md cursor-pointer"
+                    >
+                      <UserPlus className="w-4 h-4" />
+                      Invite Friends ({tournament.participants.length}/8)
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="text-xs">
+                    Invite online friends to fill tournament slots
+                  </TooltipContent>
+                </Tooltip>
+              )}
+
+              {/* Creator Cancel / End Tournament Button */}
+              {isCreator && (tournament.status === 'WAITING_FOR_PLAYERS' || tournament.status === 'IN_PROGRESS') && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setIsCancelConfirmOpen(true)}
+                      className="border-rose-500/40 text-rose-400 hover:bg-rose-500/10 font-bold text-xs gap-1.5 cursor-pointer"
+                    >
+                      <XCircle className="w-4 h-4" />
+                      Cancel Tournament
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="text-xs">
+                    Cancel and end this tournament session
+                  </TooltipContent>
+                </Tooltip>
+              )}
             </div>
           </div>
-
-          <div className="flex items-center gap-3">
-            {tournament.status === 'WAITING_FOR_PLAYERS' && (
-              <Button
-                size="sm"
-                onClick={handleOpenInviteModal}
-                className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs gap-1.5 shadow-md"
-              >
-                <UserPlus className="w-4 h-4" />
-                Invite Friends ({tournament.participants.length}/8)
-              </Button>
-            )}
-
-            {/* Creator Cancel / End Tournament Button */}
-            {isCreator && (tournament.status === 'WAITING_FOR_PLAYERS' || tournament.status === 'IN_PROGRESS') && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setIsCancelConfirmOpen(true)}
-                className="border-rose-500/40 text-rose-400 hover:bg-rose-500/10 font-bold text-xs gap-1.5"
-              >
-                <XCircle className="w-4 h-4" />
-                Cancel Tournament
-              </Button>
-            )}
-          </div>
-        </div>
+        </TooltipProvider>
       </div>
 
       {/* Main Bracket Canvas */}

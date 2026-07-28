@@ -4,6 +4,7 @@ import { ExecutionService, ExecutionResult } from "./execution.service";
 import { addSubmissionToQueue } from "./submission.queue";
 import { ProcessSubmissionInput } from "./submission.types";
 import { NotFoundError } from "../../utils/errors";
+import { submissionEvents } from "./submission.events";
 
 export class SubmissionService {
   /**
@@ -129,10 +130,18 @@ export class SubmissionService {
       }
     }
 
-    return {
+    const payload = {
       submissionId: submission.id,
+      problemId: problem.id,
+      matchId,
+      submissionType,
+      status: SubmissionStatus.FINISHED,
       ...result,
     };
+
+    submissionEvents.emit(`submission:${submission.id}`, payload);
+
+    return payload;
   }
 
   /**

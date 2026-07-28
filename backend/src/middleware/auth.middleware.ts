@@ -9,7 +9,10 @@ export const authenticate = (
   next: NextFunction
 ) => {
   try {
-    const token = req.cookies.token;
+    const token =
+      req.cookies.token ||
+      (req.query.token as string) ||
+      req.headers.authorization?.replace("Bearer ", "");
 
     if (!token) {
       return res.status(401).json({
