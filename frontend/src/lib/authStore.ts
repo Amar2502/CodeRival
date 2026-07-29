@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { api } from "./axios";
 
 export type User = {
   id: string;
@@ -37,3 +38,14 @@ export const useAuthStore = create<AuthStore>((set) => ({
   setLoading: (loading) => set({ loading }),
   logout: () => set({ user: null }),
 }));
+
+export const refreshCurrentUser = async () => {
+  try {
+    const res = await api.get("/user/me");
+    if (res.data?.user) {
+      useAuthStore.getState().setUser(res.data.user);
+    }
+  } catch (err) {
+    console.error("Failed to refresh current user:", err);
+  }
+};

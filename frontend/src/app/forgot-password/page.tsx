@@ -7,7 +7,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { ArrowLeft, Check, X, Zap, Mail, Lock } from 'lucide-react'
+import { FaEye, FaEyeSlash } from 'react-icons/fa'
 import { api } from '@/lib/axios'
+import { Spinner } from '@/components/ui/spinner'
 
 export default function ForgotPasswordPage() {
   const router = useRouter()
@@ -23,6 +25,9 @@ export default function ForgotPasswordPage() {
   const [token, setToken] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const [isSendingOtp, setIsSendingOtp] = useState(false)
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false)
+  const [isResettingPassword, setIsResettingPassword] = useState(false)
 
   const calculatePasswordStrength = (pwd: string) => {
     let strength = 0
@@ -46,36 +51,50 @@ export default function ForgotPasswordPage() {
       return
     }
 
-    const response = await api.post('/auth/request-password-reset', { email })
+    setIsSendingOtp(true)
+    try {
+      const response = await api.post('/auth/request-password-reset', { email })
 
-    if (response.status !== 201) {
+      if (response.status !== 201) {
         setOtpError('Failed to send OTP. Please try again later.')
         return
       }
-    
-    setOtpError('')
-    setSlideOut(true)
-    setTimeout(() => {
-      setStep('otp')
-      setSlideOut(false)
-    }, 300)
-  }
-
-  const handleVerifyOtp = async () => {
-
-    const response = await api.post('/auth/verify-password-reset-otp', { email, otp })
-
-    if (response.status==200) {
-      setToken(response.data.token)
+      
       setOtpError('')
       setSlideOut(true)
       setTimeout(() => {
-        setStep('reset')
+        setStep('otp')
         setSlideOut(false)
       }, 300)
-    } else {
+    } catch (err) {
+      setOtpError('Failed to send OTP. Please try again later.')
+    } finally {
+      setIsSendingOtp(false)
+    }
+  }
+
+  const handleVerifyOtp = async () => {
+    setIsVerifyingOtp(true)
+    try {
+      const response = await api.post('/auth/verify-password-reset-otp', { email, otp })
+
+      if (response.status === 200) {
+        setToken(response.data.token)
+        setOtpError('')
+        setSlideOut(true)
+        setTimeout(() => {
+          setStep('reset')
+          setSlideOut(false)
+        }, 300)
+      } else {
+        setOtpError('Invalid OTP. Please try again.')
+        setOtp('')
+      }
+    } catch (err) {
       setOtpError('Invalid OTP. Please try again.')
       setOtp('')
+    } finally {
+      setIsVerifyingOtp(false)
     }
   }
 
@@ -89,15 +108,22 @@ export default function ForgotPasswordPage() {
       return
     }
 
-    const response = await api.post('/auth/reset-password', { email, token, newPassword })
+    setIsResettingPassword(true)
+    try {
+      const response = await api.post('/auth/reset-password', { email, token, newPassword })
 
-    if (response.status !== 200) {
+      if (response.status !== 200) {
+        setPasswordError('Failed to reset password. Please try again later.')
+        return
+      }
+      
+      setPasswordError('')
+      router.push('/signin')
+    } catch (err) {
       setPasswordError('Failed to reset password. Please try again later.')
-      return
+    } finally {
+      setIsResettingPassword(false)
     }
-    
-    setPasswordError('')
-    router.push('/signin')
   }
 
   const handleOtpChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -144,7 +170,7 @@ export default function ForgotPasswordPage() {
                 {step === 'reset' && 'Create New Password'}
               </CardTitle>
               <CardDescription>
-                {step === 'email' && 'Enter your email address and we&apos;ll send you a code to reset your password'}
+                {step === 'email' && 'Enter your email address and we\'ll send you a code to reset your password'}
                 {step === 'otp' && `We've sent a verification code to ${email}`}
                 {step === 'reset' && 'Enter your new password'}
               </CardDescription>
@@ -179,10 +205,20 @@ export default function ForgotPasswordPage() {
 
                     <Button
                       onClick={handleSendOtp}
+                      disabled={isSendingOtp}
                       className="w-full bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg h-10 font-semibold mt-6"
                     >
-                      Send Reset Code
-                      <Mail className="ml-2 w-4 h-4" />
+                      {isSendingOtp ? (
+                        <span className="flex items-center gap-2">
+                          <Spinner className="size-4" />
+                          Sending Reset Code...
+                        </span>
+                      ) : (
+                        <>
+                          Send Reset Code
+                          <Mail className="ml-2 w-4 h-4" />
+                        </>
+                      )}
                     </Button>
 
                     <p className="text-xs text-muted-foreground text-center mt-6">
@@ -224,10 +260,17 @@ export default function ForgotPasswordPage() {
 
                     <Button
                       onClick={handleVerifyOtp}
-                      disabled={otp.length !== 6}
+                      disabled={otp.length !== 6 || isVerifyingOtp}
                       className="w-full bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg h-10 font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      Verify Code
+                      {isVerifyingOtp ? (
+                        <span className="flex items-center gap-2">
+                          <Spinner className="size-4" />
+                          Verifying...
+                        </span>
+                      ) : (
+                        'Verify Code'
+                      )}
                     </Button>
 
                     <p className="text-xs text-muted-foreground text-center">
@@ -276,9 +319,10 @@ export default function ForgotPasswordPage() {
                         <button
                           type="button"
                           onClick={() => setShowPassword(!showPassword)}
-                          className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground transition-colors text-sm"
+                          className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground transition-colors"
+                          aria-label={showPassword ? "Hide password" : "Show password"}
                         >
-                          {showPassword ? '✕' : '◉'}
+                          {showPassword ? <FaEyeSlash className="w-4 h-4" /> : <FaEye className="w-4 h-4" />}
                         </button>
                       </div>
 
@@ -350,9 +394,10 @@ export default function ForgotPasswordPage() {
                         <button
                           type="button"
                           onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                          className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground transition-colors text-sm"
+                          className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground transition-colors"
+                          aria-label={showConfirmPassword ? "Hide password" : "Show password"}
                         >
-                          {showConfirmPassword ? '✕' : '◉'}
+                          {showConfirmPassword ? <FaEyeSlash className="w-4 h-4" /> : <FaEye className="w-4 h-4" />}
                         </button>
                       </div>
                       {passwordError && <p className="text-xs text-danger mt-2">{passwordError}</p>}
@@ -360,10 +405,17 @@ export default function ForgotPasswordPage() {
 
                     <Button
                       onClick={handleResetPassword}
-                      disabled={!newPassword || !confirmPassword}
+                      disabled={!newPassword || !confirmPassword || isResettingPassword}
                       className="w-full bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg h-10 font-semibold disabled:opacity-50 disabled:cursor-not-allowed mt-6"
                     >
-                      Reset Password
+                      {isResettingPassword ? (
+                        <span className="flex items-center gap-2">
+                          <Spinner className="size-4" />
+                          Resetting Password...
+                        </span>
+                      ) : (
+                        'Reset Password'
+                      )}
                     </Button>
 
                     <Link href="/signin" className="block text-center text-sm text-muted-foreground hover:text-foreground transition-colors mt-4">

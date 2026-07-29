@@ -1,6 +1,22 @@
 import { Request, Response } from "express";
 import { db } from "../../config/db";
+import { Verdict } from "../../generated/prisma/client";
 import { uploadAvatarToImageKit, deleteAvatarFromImageKit } from "../../utils/imagekitUpload";
+
+export const calculateUserProblemsSolved = async (userId: string): Promise<number> => {
+  if (!userId) return 0;
+  const distinctSolved = await db.submission.findMany({
+    where: {
+      userId,
+      verdict: Verdict.AC,
+    },
+    select: {
+      problemId: true,
+    },
+    distinct: ["problemId"],
+  });
+  return distinctSolved.length;
+};
 
 export const checkUsername = async (req: Request, res: Response) => {
   const username = req.query.username;
@@ -23,11 +39,12 @@ export const getMe = async (req: Request, res: Response) => {
     });
   }
 
-  console.log("getMe called for userId:", req.user.userId);
-
   try {
+    const userId = req.user.userId;
+    const actualSolved = await calculateUserProblemsSolved(userId);
+
     const user = await db.user.findUnique({
-      where: { id: req.user.userId },
+      where: { id: userId },
       select: {
         id: true,
         name: true,
@@ -53,6 +70,14 @@ export const getMe = async (req: Request, res: Response) => {
       return res.status(404).json({ message: "User not found" });
     }
 
+    if (user.problemsSolved !== actualSolved) {
+      await db.user.update({
+        where: { id: userId },
+        data: { problemsSolved: actualSolved },
+      });
+      user.problemsSolved = actualSolved;
+    }
+
     return res.status(200).json({ user });
   } catch (error) {
     console.error("getMe error:", error);
@@ -73,6 +98,8 @@ export const getUserProfile = async (req: Request, res: Response) => {
         message: "Unauthorized",
       });
     }
+
+    const actualSolved = await calculateUserProblemsSolved(targetUserId);
 
     const user = await db.user.findUnique({
       where: {
@@ -120,6 +147,14 @@ export const getUserProfile = async (req: Request, res: Response) => {
 
     if (!user) {
       return res.status(404).json({ message: "User not found" });
+    }
+
+    if (user.problemsSolved !== actualSolved) {
+      await db.user.update({
+        where: { id: targetUserId },
+        data: { problemsSolved: actualSolved },
+      });
+      user.problemsSolved = actualSolved;
     }
 
     const recentMatches = await db.match.findMany({

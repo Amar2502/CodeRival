@@ -58,6 +58,7 @@ import {
   AlertTriangle,
   Sparkles,
 } from 'lucide-react'
+import { refreshCurrentUser } from '@/lib/authStore'
 
 interface Example {
   id: string
@@ -397,8 +398,9 @@ export default function ProblemWorkspacePage({ params }: { params: Promise<{ slu
         setExecutionResult(res.data)
       }
       setSelectedTestCaseIndex(0)
-      // Refresh submissions tab list in background without page refresh or editor reset
+      // Refresh submissions tab list & current user solved count in background
       fetchSubmissionHistory()
+      refreshCurrentUser()
     } catch (err: any) {
       console.error('Submit code error:', err)
       setExecutionResult({

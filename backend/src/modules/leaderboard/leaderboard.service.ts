@@ -1,6 +1,7 @@
 import { redis } from "../../config/redis";
 import { db } from "../../config/db";
 import { isUserConnected } from "../../socket/socketManager";
+import { calculateUserProblemsSolved } from "../user/user.controller";
 
 const GLOBAL_LEADERBOARD_KEY = "leaderboard:global";
 
@@ -86,7 +87,18 @@ export const getGlobalLeaderboard = async (currentUserId?: string, limit: number
       },
     });
 
-    const userMap = new Map(users.map((u) => [u.id, u]));
+    const userMap = new Map(
+      await Promise.all(
+        users.map(async (u) => {
+          const actualSolved = await calculateUserProblemsSolved(u.id);
+          if (u.problemsSolved !== actualSolved) {
+            await db.user.update({ where: { id: u.id }, data: { problemsSolved: actualSolved } });
+            u.problemsSolved = actualSolved;
+          }
+          return [u.id, u] as const;
+        })
+      )
+    );
 
     const leaderboard = userIds
       .map((id, index) => {
@@ -161,7 +173,7 @@ export const getFriendsLeaderboard = async (currentUserId: string) => {
     });
 
     // 4. Fetch rich profiles from DB
-    const users = await db.user.findMany({
+    const rawUsers = await db.user.findMany({
       where: { id: { in: targetUserIds } },
       select: {
         id: true,
@@ -177,6 +189,17 @@ export const getFriendsLeaderboard = async (currentUserId: string) => {
         problemsSolved: true,
       },
     });
+
+    const users = await Promise.all(
+      rawUsers.map(async (u) => {
+        const actualSolved = await calculateUserProblemsSolved(u.id);
+        if (u.problemsSolved !== actualSolved) {
+          await db.user.update({ where: { id: u.id }, data: { problemsSolved: actualSolved } });
+          u.problemsSolved = actualSolved;
+        }
+        return u;
+      })
+    );
 
     // 5. Merge Redis rating and sort descending
     const leaderboard = users

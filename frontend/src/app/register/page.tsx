@@ -9,8 +9,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { ArrowRight, Check, X, Zap, Mail, Lock } from 'lucide-react'
 import { FcGoogle } from 'react-icons/fc'
 import { FaGithub } from 'react-icons/fa6'
+import { FaEye, FaEyeSlash } from 'react-icons/fa'
 import { api } from "../../lib/axios";
 import { socket } from '@/lib/socket'
+import { Spinner } from '@/components/ui/spinner'
 
 export default function RegisterPage() {
   const router = useRouter()
@@ -27,8 +29,13 @@ export default function RegisterPage() {
   const [otpError, setOtpError] = useState('')
   const [passwordStrength, setPasswordStrength] = useState(0)
   const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [usernameStatus, setUsernameStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isVerifying, setIsVerifying] = useState(false)
+  const [isCheckingOtp, setIsCheckingOtp] = useState(false)
+  const [oauthLoading, setOauthLoading] = useState<'google' | 'github' | null>(null)
 
   const calculatePasswordStrength = (pwd: string) => {
     let strength = 0
@@ -60,6 +67,7 @@ export default function RegisterPage() {
   const handleCreateAccount = async () => {
     if (!validateForm()) return
 
+    setIsSubmitting(true)
     try {
       const response = await api.post('/auth/register', formData)
       if (response.status !== 201) {
@@ -76,10 +84,13 @@ export default function RegisterPage() {
       }, 300)
     } catch (error) {
       console.error('Registration error:', error)
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
   const handleVerify = async () => {
+    setIsVerifying(true)
     try {
       // sending an OTP is an action, not a resource creation -> 200, not 201
       const response = await api.post('/auth/verify-email', { email: formData.email })
@@ -98,10 +109,13 @@ export default function RegisterPage() {
     } catch (error) {
       console.error('Verify email error:', error)
       setOtpError('Something went wrong sending the code. Please try again.')
+    } finally {
+      setIsVerifying(false)
     }
   }
 
   const handleOtpSubmit = async () => {
+    setIsCheckingOtp(true)
     try {
       const response = await api.post('/auth/check-verify-email-otp', { email: formData.email, otp })
       if (response.status === 200) {
@@ -114,6 +128,8 @@ export default function RegisterPage() {
       console.error('OTP verification error:', error)
       setOtpError('Invalid OTP. Please try again.')
       setOtp('')
+    } finally {
+      setIsCheckingOtp(false)
     }
   }
 
@@ -130,10 +146,12 @@ export default function RegisterPage() {
   const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
 
   const handleGoogleSignIn = () => {
+    setOauthLoading('google');
     window.location.href = `${API_URL}/auth/google`;
   };
 
   const handleGitHubSignIn = () => {
+    setOauthLoading('github');
     window.location.href = `${API_URL}/auth/github`;
   };
 
@@ -266,7 +284,10 @@ export default function RegisterPage() {
                       />
                       {errors.username && <p className="text-xs text-danger mt-1">{errors.username}</p>}
                       {!errors.username && usernameStatus === 'checking' && (
-                        <p className="text-xs text-muted-foreground mt-1">Checking availability...</p>
+                        <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1.5">
+                          <Spinner className="size-3" />
+                          <span>Checking availability...</span>
+                        </p>
                       )}
                       {!errors.username && usernameStatus === 'available' && (
                         <p className="text-xs text-success mt-1 flex items-center gap-1">
@@ -289,9 +310,10 @@ export default function RegisterPage() {
                         <button
                           type="button"
                           onClick={() => setShowPassword(!showPassword)}
-                          className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground transition-colors text-sm"
+                          className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground transition-colors"
+                          aria-label={showPassword ? "Hide password" : "Show password"}
                         >
-                          {showPassword ? '✕' : '◉'}
+                          {showPassword ? <FaEyeSlash className="w-4 h-4" /> : <FaEye className="w-4 h-4" />}
                         </button>
                       </div>
                       {errors.password && <p className="text-xs text-danger mt-1">{errors.password}</p>}
@@ -347,23 +369,43 @@ export default function RegisterPage() {
                     {/* Confirm Password */}
                     <div>
                       <label className="text-sm font-medium text-foreground block mb-1">Confirm Password</label>
-                      <Input
-                        type="password"
-                        placeholder="••••••••"
-                        value={formData.confirmPassword}
-                        onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                        className={`bg-surface border-border text-foreground placeholder:text-muted-foreground ${errors.confirmPassword ? 'border-danger' : ''}`}
-                      />
+                      <div className="relative">
+                        <Input
+                          type={showConfirmPassword ? 'text' : 'password'}
+                          placeholder="••••••••"
+                          value={formData.confirmPassword}
+                          onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+                          className={`bg-surface border-border text-foreground placeholder:text-muted-foreground pr-10 ${errors.confirmPassword ? 'border-danger' : ''}`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                          className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground transition-colors"
+                          aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                        >
+                          {showConfirmPassword ? <FaEyeSlash className="w-4 h-4" /> : <FaEye className="w-4 h-4" />}
+                        </button>
+                      </div>
                       {errors.confirmPassword && <p className="text-xs text-danger mt-1">{errors.confirmPassword}</p>}
                     </div>
 
                     {/* Create Account Button */}
                     <Button
                       onClick={handleCreateAccount}
+                      disabled={isSubmitting || oauthLoading !== null}
                       className="w-full bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg h-10 font-semibold group mt-6"
                     >
-                      Create Account
-                      <ArrowRight className="ml-2 w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                      {isSubmitting ? (
+                        <span className="flex items-center gap-2">
+                          <Spinner className="size-4" />
+                          Creating Account...
+                        </span>
+                      ) : (
+                        <>
+                          Create Account
+                          <ArrowRight className="ml-2 w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                        </>
+                      )}
                     </Button>
 
                     {/* OAuth Divider */}
@@ -382,18 +424,28 @@ export default function RegisterPage() {
                         type="button"
                         variant="outline"
                         onClick={handleGitHubSignIn}
+                        disabled={isSubmitting || oauthLoading !== null}
                         className="border-border hover:bg-surface rounded-lg h-10 gap-2 font-medium"
                       >
-                        <FaGithub className="w-4 h-4" />
+                        {oauthLoading === 'github' ? (
+                          <Spinner className="size-4" />
+                        ) : (
+                          <FaGithub className="w-4 h-4" />
+                        )}
                         GitHub
                       </Button>
                       <Button
                         type="button"
                         variant="outline"
                         onClick={handleGoogleSignIn}
+                        disabled={isSubmitting || oauthLoading !== null}
                         className="border-border hover:bg-surface rounded-lg h-10 gap-2 font-medium"
                       >
-                        <FcGoogle className="w-4 h-4" />
+                        {oauthLoading === 'google' ? (
+                          <Spinner className="size-4" />
+                        ) : (
+                          <FcGoogle className="w-4 h-4" />
+                        )}
                         Google
                       </Button>
                     </div>
@@ -424,10 +476,20 @@ export default function RegisterPage() {
                     <div className="space-y-3">
                       <Button
                         onClick={handleVerify}
+                        disabled={isVerifying}
                         className="w-full bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg h-10 font-semibold"
                       >
-                        Verify with Email
-                        <Mail className="ml-2 w-4 h-4" />
+                        {isVerifying ? (
+                          <span className="flex items-center gap-2">
+                            <Spinner className="size-4" />
+                            Sending Code...
+                          </span>
+                        ) : (
+                          <>
+                            Verify with Email
+                            <Mail className="ml-2 w-4 h-4" />
+                          </>
+                        )}
                       </Button>
 
                       <Button
@@ -474,10 +536,17 @@ export default function RegisterPage() {
 
                     <Button
                       onClick={handleOtpSubmit}
-                      disabled={otp.length !== 6}
+                      disabled={otp.length !== 6 || isCheckingOtp}
                       className="w-full bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg h-10 font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      Verify Code
+                      {isCheckingOtp ? (
+                        <span className="flex items-center gap-2">
+                          <Spinner className="size-4" />
+                          Verifying...
+                        </span>
+                      ) : (
+                        'Verify Code'
+                      )}
                     </Button>
 
                     <p className="text-xs text-muted-foreground text-center">

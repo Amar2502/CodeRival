@@ -8,6 +8,7 @@ import { SubmissionJobData } from "./submission.types";
 import { getIO } from "../../socket";
 import { handleMatchSubmission } from "../match/match.service";
 import { submissionEvents } from "./submission.events";
+import { calculateUserProblemsSolved } from "../user/user.controller";
 
 let submissionWorker: Worker<SubmissionJobData> | null = null;
 
@@ -49,25 +50,15 @@ export const processSubmissionJob = async (job: Job<SubmissionJobData>) => {
       },
     });
 
-    // 4. Update user's solved problems count if official submission & AC
-    if (submissionType === SubmissionType.SUBMIT && result.verdict === Verdict.AC) {
-      const existingAc = await db.submission.findFirst({
-        where: {
-          userId,
-          problemId: updatedSubmission.problemId,
-          verdict: Verdict.AC,
-          id: { not: submissionId },
+    // 4. Update user's solved problems count if AC
+    if (result.verdict === Verdict.AC) {
+      const solvedCount = await calculateUserProblemsSolved(userId);
+      await db.user.update({
+        where: { id: userId },
+        data: {
+          problemsSolved: solvedCount,
         },
       });
-
-      if (!existingAc) {
-        await db.user.update({
-          where: { id: userId },
-          data: {
-            problemsSolved: { increment: 1 },
-          },
-        });
-      }
     }
 
     // 5. Handle Match Submission if part of a 1v1 battle

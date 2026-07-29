@@ -5,6 +5,7 @@ import { addSubmissionToQueue } from "./submission.queue";
 import { ProcessSubmissionInput } from "./submission.types";
 import { NotFoundError } from "../../utils/errors";
 import { submissionEvents } from "./submission.events";
+import { calculateUserProblemsSolved } from "../user/user.controller";
 
 export class SubmissionService {
   /**
@@ -110,24 +111,14 @@ export class SubmissionService {
       },
     });
 
-    if (submissionType === SubmissionType.SUBMIT && result.verdict === Verdict.AC) {
-      const existingAc = await db.submission.findFirst({
-        where: {
-          userId,
-          problemId: problem.id,
-          verdict: Verdict.AC,
-          id: { not: submission.id },
+    if (result.verdict === Verdict.AC) {
+      const solvedCount = await calculateUserProblemsSolved(userId);
+      await db.user.update({
+        where: { id: userId },
+        data: {
+          problemsSolved: solvedCount,
         },
       });
-
-      if (!existingAc) {
-        await db.user.update({
-          where: { id: userId },
-          data: {
-            problemsSolved: { increment: 1 },
-          },
-        });
-      }
     }
 
     const payload = {

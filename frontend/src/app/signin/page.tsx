@@ -5,18 +5,22 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { ArrowLeft, Zap, Loader2, AlertCircle } from 'lucide-react'
+import { ArrowLeft, Zap, AlertCircle } from 'lucide-react'
 import { FcGoogle } from 'react-icons/fc'
 import { FaGithub } from 'react-icons/fa6'
+import { FaEye, FaEyeSlash } from 'react-icons/fa'
 import { api } from "../../lib/axios";
 import { socket } from '@/lib/socket'
 import { useRouter } from 'next/navigation'
+import { Spinner } from '@/components/ui/spinner'
 
 export default function SignInPage() {
   const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [oauthLoading, setOauthLoading] = useState<'google' | 'github' | null>(null)
   const [errorMsg, setErrorMsg] = useState('')
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -46,10 +50,12 @@ export default function SignInPage() {
   const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
 
   const handleGoogleSignIn = () => {
+    setOauthLoading('google');
     window.location.href = `${API_URL}/auth/google`;
   };
 
   const handleGitHubSignIn = () => {
+    setOauthLoading('github');
     window.location.href = `${API_URL}/auth/github`;
   };
 
@@ -120,15 +126,25 @@ export default function SignInPage() {
                   <label htmlFor="password" className="text-sm font-medium text-foreground">
                     Password
                   </label>
-                  <Input
-                    id="password"
-                    type="password"
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    className="bg-surface border-border text-foreground placeholder:text-muted-foreground focus:ring-2 focus:ring-primary/40 transition-all"
-                  />
+                  <div className="relative">
+                    <Input
+                      id="password"
+                      type={showPassword ? 'text' : 'password'}
+                      placeholder="••••••••"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                      className="bg-surface border-border text-foreground placeholder:text-muted-foreground focus:ring-2 focus:ring-primary/40 transition-all pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                      aria-label={showPassword ? "Hide password" : "Show password"}
+                    >
+                      {showPassword ? <FaEyeSlash className="w-4 h-4" /> : <FaEye className="w-4 h-4" />}
+                    </button>
+                  </div>
                 </div>
 
                 {/* Forgot Password Link */}
@@ -141,12 +157,12 @@ export default function SignInPage() {
                 {/* Sign In Button */}
                 <Button
                   type="submit"
-                  disabled={isLoading}
+                  disabled={isLoading || oauthLoading !== null}
                   className="w-full bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-semibold h-10 shadow-md shadow-primary/20 transition-all"
                 >
                   {isLoading ? (
                     <span className="flex items-center gap-2">
-                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <Spinner className="size-4" />
                       Signing in...
                     </span>
                   ) : (
@@ -170,18 +186,28 @@ export default function SignInPage() {
                     type="button"
                     variant="outline"
                     onClick={handleGitHubSignIn}
+                    disabled={isLoading || oauthLoading !== null}
                     className="border-border hover:bg-surface text-foreground gap-2 font-medium"
                   >
-                    <FaGithub className="w-4 h-4" />
+                    {oauthLoading === 'github' ? (
+                      <Spinner className="size-4" />
+                    ) : (
+                      <FaGithub className="w-4 h-4" />
+                    )}
                     GitHub
                   </Button>
                   <Button
                     type="button"
                     variant="outline"
                     onClick={handleGoogleSignIn}
+                    disabled={isLoading || oauthLoading !== null}
                     className="border-border hover:bg-surface text-foreground gap-2 font-medium"
                   >
-                    <FcGoogle className="w-4 h-4" />
+                    {oauthLoading === 'google' ? (
+                      <Spinner className="size-4" />
+                    ) : (
+                      <FcGoogle className="w-4 h-4" />
+                    )}
                     Google
                   </Button>
                 </div>
@@ -189,7 +215,7 @@ export default function SignInPage() {
 
               {/* Sign Up Link */}
               <div className="mt-6 text-center text-sm">
-                <span className="text-muted-foreground">Don&apos;t have an account? </span>
+                <span className="text-muted-foreground">Don't have an account? </span>
                 <Link href="/register" className="text-primary hover:underline font-medium transition-colors">
                   Create one
                 </Link>

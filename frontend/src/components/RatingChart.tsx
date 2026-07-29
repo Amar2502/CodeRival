@@ -3,8 +3,8 @@
 import { useMemo } from "react";
 import {
   ResponsiveContainer,
-  LineChart,
-  Line,
+  AreaChart,
+  Area,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -30,7 +30,7 @@ function CustomTooltip({ active, payload }: any) {
   if (active && payload && payload.length) {
     const data = payload[0].payload;
     return (
-      <div className="p-3 bg-card/95 backdrop-blur-md border border-border rounded-xl shadow-2xl space-y-1 font-mono text-xs">
+      <div className="p-3 bg-card/95 backdrop-blur-md border border-border rounded-xl shadow-2xl space-y-1 font-mono text-xs z-50">
         <div className="font-bold text-foreground flex items-center justify-between gap-4">
           <span>{data.matchLabel}</span>
           <span className="text-[11px] text-muted-foreground">{data.date}</span>
@@ -58,12 +58,42 @@ function CustomTooltip({ active, payload }: any) {
 }
 
 export function RatingChart({ history, currentRating }: RatingChartProps) {
-  const chartData = useMemo(() => {
-    if (!history || history.length === 0) return [];
-    return history.map((item, index) => ({
-      matchIndex: index,
-      matchLabel: index === 0 ? "Initial Baseline" : `Match ${index}`,
-      xLabel: index === 0 ? "Start" : `M${index}`,
+  const { chartData, initialRating, hasMatches } = useMemo(() => {
+    const items = history || [];
+    // Filter out synthetic fallback items where delta is 0 and id is initial
+    const realMatches = items.filter((h) => h.id !== "initial" && h.delta !== 0);
+
+    if (realMatches.length === 0) {
+      // User has not completed any matches yet
+      const base = 1200;
+      return {
+        chartData: [],
+        initialRating: base,
+        hasMatches: false,
+      };
+    }
+
+    // Calculate initial baseline rating prior to the first match
+    const firstItem = realMatches[0];
+    const calculatedBase = firstItem.rating - firstItem.delta;
+    const baseRating = isNaN(calculatedBase) || calculatedBase <= 0 ? 1200 : calculatedBase;
+
+    const startPoint = {
+      matchIndex: 0,
+      matchLabel: "Initial Baseline",
+      xLabel: "Start",
+      rating: baseRating,
+      delta: 0,
+      date: new Date(firstItem.createdAt).toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric",
+      }),
+    };
+
+    const points = realMatches.map((item, index) => ({
+      matchIndex: index + 1,
+      matchLabel: `Match ${index + 1}`,
+      xLabel: `M${index + 1}`,
       rating: item.rating,
       delta: item.delta,
       date: new Date(item.createdAt).toLocaleDateString(undefined, {
@@ -71,6 +101,12 @@ export function RatingChart({ history, currentRating }: RatingChartProps) {
         day: "numeric",
       }),
     }));
+
+    return {
+      chartData: [startPoint, ...points],
+      initialRating: baseRating,
+      hasMatches: true,
+    };
   }, [history]);
 
   const stats = useMemo(() => {
@@ -81,13 +117,13 @@ export function RatingChart({ history, currentRating }: RatingChartProps) {
     const initial = chartData[0].rating;
     const latest = chartData[chartData.length - 1].rating;
     const totalDelta = latest - initial;
-    const percentChange = Number(((totalDelta / initial) * 100).toFixed(1));
+    const percentChange = initial > 0 ? Number(((totalDelta / initial) * 100).toFixed(1)) : 0;
     const peakRating = Math.max(...chartData.map((d) => d.rating));
 
     return { totalDelta, percentChange, peakRating };
   }, [chartData, currentRating]);
 
-  if (!history || history.length <= 1) {
+  if (!hasMatches || chartData.length < 2) {
     return (
       <div className="p-8 text-center rounded-2xl bg-card border border-border space-y-2">
         <div className="w-12 h-12 rounded-full bg-surface border border-border flex items-center justify-center mx-auto text-muted-foreground">
@@ -95,7 +131,7 @@ export function RatingChart({ history, currentRating }: RatingChartProps) {
         </div>
         <h4 className="font-bold text-foreground text-sm">Rating Chart (Match History)</h4>
         <p className="text-xs text-muted-foreground font-mono max-w-sm mx-auto">
-          Baseline rating starts at {currentRating || 1200} ELO. Play 1v1 battles to build your live rating trajectory graph!
+          Baseline rating starts at {initialRating} ELO. Play 1v1 battles to build your live rating trajectory graph!
         </p>
       </div>
     );
@@ -103,25 +139,31 @@ export function RatingChart({ history, currentRating }: RatingChartProps) {
 
   // Calculate Y-axis domain padding
   const ratings = chartData.map((d) => d.rating);
-  const minY = Math.max(0, Math.min(...ratings) - 40);
-  const maxY = Math.max(...ratings) + 40;
+  const minY = Math.max(0, Math.min(...ratings) - 30);
+  const maxY = Math.max(...ratings) + 30;
 
   return (
     <div className="p-6 rounded-2xl bg-card border border-border shadow-xl space-y-6">
-      {/* Header section matching screenshot */}
+      {/* Header section */}
       <div className="text-center space-y-1">
-        <h3 className="text-2xl font-black tracking-tight text-foreground">
-          Line Chart - Linear
+        <h3 className="text-xl font-bold tracking-tight text-foreground">
+          ELO Rating Trajectory
         </h3>
         <p className="text-xs text-muted-foreground font-mono">
-          Match-wise ELO Rating History ({chartData.length} Entries)
+          Match-wise rating progress ({chartData.length - 1} {chartData.length - 1 === 1 ? "Match" : "Matches"} recorded • Baseline: {initialRating} ELO)
         </p>
       </div>
 
       {/* Recharts Responsive Container */}
       <div className="h-64 w-full">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={chartData} margin={{ top: 10, right: 20, left: -20, bottom: 0 }}>
+          <AreaChart data={chartData} margin={{ top: 10, right: 20, left: -20, bottom: 0 }}>
+            <defs>
+              <linearGradient id="ratingGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#f97316" stopOpacity={0.35} />
+                <stop offset="95%" stopColor="#f97316" stopOpacity={0.0} />
+              </linearGradient>
+            </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="#262626" vertical={false} />
             <XAxis
               dataKey="xLabel"
@@ -137,20 +179,22 @@ export function RatingChart({ history, currentRating }: RatingChartProps) {
               tick={{ fill: "#737373", fontSize: 12, fontFamily: "monospace" }}
             />
             <Tooltip content={<CustomTooltip />} />
-            <Line
-              type="linear"
+            <Area
+              type="monotone"
               dataKey="rating"
               stroke="#f97316"
               strokeWidth={3}
+              fillOpacity={1}
+              fill="url(#ratingGradient)"
               dot={{ r: 4, fill: "#f97316", stroke: "#09090b", strokeWidth: 2 }}
               activeDot={{ r: 7, fill: "#ff6b00", stroke: "#ffffff", strokeWidth: 2 }}
             />
-          </LineChart>
+          </AreaChart>
         </ResponsiveContainer>
       </div>
 
-      {/* Footer statistics section matching screenshot */}
-      <div className="text-center pt-2 border-t border-border/40 space-y-1">
+      {/* Footer statistics section */}
+      <div className="text-center pt-3 border-t border-border/40 space-y-1">
         <div className="text-sm font-bold text-foreground flex items-center justify-center gap-1.5 font-mono">
           <span>
             Trending {stats.totalDelta >= 0 ? "up" : "down"} by {Math.abs(stats.percentChange)}% overall

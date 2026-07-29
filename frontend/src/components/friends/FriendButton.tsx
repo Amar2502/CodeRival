@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { UserPlus, UserCheck, Clock, Loader2 } from "lucide-react";
+import { UserPlus, UserCheck, Clock } from "lucide-react";
 import { api } from "@/lib/axios";
+import { Spinner } from "@/components/ui/spinner";
 
 interface FriendButtonProps {
   targetUserId: string;
@@ -84,7 +85,7 @@ export function FriendButton({
   if (loading) {
     return (
       <Button variant="outline" size={size === "xs" ? "sm" : size} disabled className={`gap-1.5 h-8 text-xs ${className}`}>
-        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+        <Spinner className="size-3.5" />
       </Button>
     );
   }
@@ -121,7 +122,7 @@ export function FriendButton({
         className={`bg-emerald-600 hover:bg-emerald-500 text-white font-semibold gap-1.5 h-8 text-xs ${className}`}
       >
         {actionLoading ? (
-          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          <Spinner className="size-3.5" />
         ) : (
           <UserCheck className="w-3.5 h-3.5" />
         )}
@@ -138,7 +139,7 @@ export function FriendButton({
       className={`bg-primary hover:bg-primary/90 text-primary-foreground font-semibold gap-1.5 h-8 text-xs ${className}`}
     >
       {actionLoading ? (
-        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+        <Spinner className="size-3.5" />
       ) : (
         <UserPlus className="w-3.5 h-3.5" />
       )}

@@ -4,8 +4,9 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { socket } from "@/lib/socket";
 import { Button } from "@/components/ui/button";
-import { Swords, Check, X, Shield, Clock, AlertCircle, Loader2 } from "lucide-react";
+import { Swords, Check, X, Shield, Clock, AlertCircle } from "lucide-react";
 import { getRatingInfo } from "@/lib/rating";
+import { Spinner } from "@/components/ui/spinner";
 
 interface IncomingChallenge {
   challengeId: string;
@@ -209,7 +210,7 @@ export function FriendChallengeModal() {
               className="h-11 font-bold bg-primary hover:bg-primary/90 text-primary-foreground gap-1.5 shadow-lg shadow-primary/25"
             >
               {accepting ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <Spinner className="size-4" />
               ) : (
                 <Check className="w-4 h-4" />
               )}
@@ -223,7 +224,7 @@ export function FriendChallengeModal() {
       {outgoing && !incoming && (
         <div className="w-full max-w-sm bg-card border border-primary/40 rounded-2xl p-6 shadow-2xl text-center space-y-5">
           <div className="w-14 h-14 rounded-full bg-primary/20 border border-primary flex items-center justify-center mx-auto text-primary">
-            <Loader2 className="w-7 h-7 animate-spin" />
+            <Spinner className="size-7" />
           </div>
           <div className="space-y-1">
             <h3 className="text-xl font-bold text-foreground">Waiting for Friend...</h3>

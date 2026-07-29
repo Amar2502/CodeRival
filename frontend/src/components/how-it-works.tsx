@@ -92,7 +92,7 @@ export function HowItWorks() {
             The Competitive Edge
           </h3>
           <p className="text-muted-foreground leading-relaxed text-base max-w-4xl">
-            Every match pushes you to think faster and code cleaner. You&apos;re not just solving static problems—you&apos;re competing against real programmers under live pressure. The combination of instant sandbox execution, live test results, and dynamic ELO bands creates an unbeatable environment for rapid skill growth.
+            Every match pushes you to think faster and code cleaner. You're not just solving static problems—you're competing against real programmers under live pressure. The combination of instant sandbox execution, live test results, and dynamic ELO bands creates an unbeatable environment for rapid skill growth.
           </p>
         </div>
       </div>
