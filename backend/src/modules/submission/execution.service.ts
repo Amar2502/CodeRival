@@ -7,6 +7,7 @@ import {
   formatExpectedOutput,
   normalizeOutput,
 } from "../../utils/inputSerializer";
+import { generateDriver, ProblemSignature } from "../../utils/driverGenerator";
 import { NotFoundError, BadRequestError } from "../../utils/errors";
 
 export interface ExecutionOptions {
@@ -47,16 +48,13 @@ export class ExecutionService {
       throw new BadRequestError("Source code cannot be empty");
     }
 
-    // 1. Fetch Problem, Signature, Driver, and TestCases
+    // 1. Fetch Problem, Signature, and TestCases (no drivers from DB)
     const problem = await db.problem.findFirst({
       where: {
         OR: [{ id: problemId }, { slug: problemId }],
       },
       include: {
         signature: true,
-        drivers: {
-          where: { language },
-        },
         testCases: {
           where: isSampleOnly ? { isSample: true } : undefined,
           orderBy: { order: "asc" },
@@ -72,21 +70,23 @@ export class ExecutionService {
       throw new NotFoundError("Problem function signature not defined");
     }
 
-    if (!problem.drivers || problem.drivers.length === 0) {
-      throw new NotFoundError(`Execution driver for language ${language} not found`);
-    }
-
     if (!problem.testCases || problem.testCases.length === 0) {
       throw new NotFoundError("No test cases found for this problem");
     }
 
-    const driverTemplate = problem.drivers[0].code;
+    // 2. Generate driver on-the-fly from the signature
+    const sig: ProblemSignature = {
+      functionName: problem.signature.functionName,
+      returnType: problem.signature.returnType,
+      params: problem.signature.params as unknown as ParamSignature[],
+    };
+    const driverTemplate = generateDriver(language, sig);
     const wrappedCode = driverTemplate.replace("{{USER_CODE}}", sourceCode);
 
     const pistonLang = PistonService.getPistonLanguage(language);
     const filename = PistonService.getPistonFilename(language);
-    const params = problem.signature.params as unknown as ParamSignature[];
-    const returnType = problem.signature.returnType;
+    const params = sig.params;
+    const returnType = sig.returnType;
 
     const testCaseResults: TestCaseExecutionResult[] = [];
     let overallVerdict: Verdict = Verdict.AC;

@@ -311,15 +311,15 @@ ${executionStmt}
     const parseCalls = params.map(p => {
       let parserFn = "";
       switch (p.type) {
-        case "int": parserFn = "parse_int()"; break;
-        case "double": parserFn = "parse_double()"; break;
-        case "string": parserFn = "parse_string()"; break;
-        case "boolean": parserFn = "parse_boolean()"; break;
-        case "int[]": parserFn = "parse_int_array()"; break;
-        case "double[]": parserFn = "parse_double_array()"; break;
-        case "string[]": parserFn = "parse_string_array()"; break;
-        case "boolean[]": parserFn = "parse_boolean_array()"; break;
-        case "int[][]": parserFn = "parse_int_2d_array()"; break;
+        case "int": parserFn = "nextInt()"; break;
+        case "double": parserFn = "nextDouble()"; break;
+        case "string": parserFn = "nextString()"; break;
+        case "boolean": parserFn = "nextBool()"; break;
+        case "int[]": parserFn = "nextIntArray()"; break;
+        case "double[]": parserFn = "nextDoubleArray()"; break;
+        case "string[]": parserFn = "nextStringArray()"; break;
+        case "boolean[]": parserFn = "nextBoolArray()"; break;
+        case "int[][]": parserFn = "nextInt2DArray()"; break;
       }
       return `        ${getJavaType(p.type)} ${p.name} = ${parserFn};`;
     }).join("\n");
@@ -327,177 +327,179 @@ ${executionStmt}
     const methodArgs = params.map(p => p.name).join(", ");
     let executionStmt = "";
     if (returnType === "void") {
-      // FIX: guard against void functions with zero parameters
       if (params.length > 0) {
         const firstParam = params[0];
-        executionStmt = `        sol.${functionName}(${methodArgs});\n        serialize_and_print(${firstParam.name});`;
+        executionStmt = `        sol.${functionName}(${methodArgs});\n        printResult(${firstParam.name});`;
       } else {
         executionStmt = `        sol.${functionName}(${methodArgs});`;
       }
     } else {
-      executionStmt = `        ${getJavaType(returnType)} result = sol.${functionName}(${methodArgs});\n        serialize_and_print(result);`;
+      executionStmt = `        ${getJavaType(returnType)} result = sol.${functionName}(${methodArgs});\n        printResult(result);`;
     }
 
-    // FIX (critical): {{USER_CODE}} is now injected BEFORE the "public class Main"
-    // declaration instead of after it. The starter code the user edits begins
-    // with "import java.util.*;" — Java requires ALL import statements to
-    // appear before ANY type declaration in the file. Placing {{USER_CODE}}
-    // after "public class Main { ... }" (as in the original version) put an
-    // import statement after a class declaration, which is a guaranteed
-    // compile error for every single Java submission. Duplicate imports
-    // (java.util.* appearing twice) are legal in Java, so this is safe.
     return `import java.util.*;
 import java.io.*;
 
-{{USER_CODE}}
-
 public class Main {
-    private static final Scanner sc = new Scanner(System.in);
+    private static StreamTokenizer st;
+    private static BufferedWriter bw;
 
-    private static int parse_int() {
-        return sc.nextInt();
+    private static void initIO() throws IOException {
+        st = new StreamTokenizer(new BufferedReader(new InputStreamReader(System.in)));
+        st.ordinaryChars(0, 255);
+        st.wordChars(33, 255);
+        st.whitespaceChars(0, 32);
+        bw = new BufferedWriter(new OutputStreamWriter(System.out));
     }
 
-    private static double parse_double() {
-        return sc.nextDouble();
+    private static String nextString() throws IOException {
+        st.nextToken();
+        return st.sval;
     }
 
-    private static String parse_string() {
-        return sc.next();
+    private static int nextInt() throws IOException {
+        st.nextToken();
+        return Integer.parseInt(st.sval);
     }
 
-    private static boolean parse_boolean() {
-        String val = sc.next();
-        return val.equalsIgnoreCase("true") || val.equals("1");
+    private static double nextDouble() throws IOException {
+        st.nextToken();
+        return Double.parseDouble(st.sval);
     }
 
-    private static int[] parse_int_array() {
-        if (!sc.hasNextInt()) return new int[0];
-        int n = sc.nextInt();
+    private static boolean nextBool() throws IOException {
+        st.nextToken();
+        return st.sval.equalsIgnoreCase("true") || st.sval.equals("1");
+    }
+
+    private static int[] nextIntArray() throws IOException {
+        int n = nextInt();
         int[] arr = new int[n];
-        for (int i = 0; i < n; i++) {
-            arr[i] = sc.nextInt();
-        }
+        for (int i = 0; i < n; i++) arr[i] = nextInt();
         return arr;
     }
 
-    private static double[] parse_double_array() {
-        if (!sc.hasNextInt()) return new double[0];
-        int n = sc.nextInt();
+    private static double[] nextDoubleArray() throws IOException {
+        int n = nextInt();
         double[] arr = new double[n];
-        for (int i = 0; i < n; i++) {
-            arr[i] = sc.nextDouble();
-        }
+        for (int i = 0; i < n; i++) arr[i] = nextDouble();
         return arr;
     }
 
-    private static String[] parse_string_array() {
-        if (!sc.hasNextInt()) return new String[0];
-        int n = sc.nextInt();
+    private static String[] nextStringArray() throws IOException {
+        int n = nextInt();
         String[] arr = new String[n];
-        for (int i = 0; i < n; i++) {
-            arr[i] = sc.next();
-        }
+        for (int i = 0; i < n; i++) arr[i] = nextString();
         return arr;
     }
 
-    private static boolean[] parse_boolean_array() {
-        if (!sc.hasNextInt()) return new boolean[0];
-        int n = sc.nextInt();
+    private static boolean[] nextBoolArray() throws IOException {
+        int n = nextInt();
         boolean[] arr = new boolean[n];
-        for (int i = 0; i < n; i++) {
-            String val = sc.next();
-            arr[i] = val.equalsIgnoreCase("true") || val.equals("1");
-        }
+        for (int i = 0; i < n; i++) arr[i] = nextBool();
         return arr;
     }
 
-    private static int[][] parse_int_2d_array() {
-        if (!sc.hasNextInt()) return new int[0][0];
-        int r = sc.nextInt();
-        int c = sc.nextInt();
+    private static int[][] nextInt2DArray() throws IOException {
+        int r = nextInt();
+        int c = nextInt();
         int[][] grid = new int[r][c];
-        for (int i = 0; i < r; i++) {
-            for (int j = 0; j < c; j++) {
-                grid[i][j] = sc.nextInt();
-            }
-        }
+        for (int i = 0; i < r; i++)
+            for (int j = 0; j < c; j++)
+                grid[i][j] = nextInt();
         return grid;
     }
 
-    // FIX: consistent fixed-precision double formatting (matches C++/Python)
-    private static String format_double(double val) {
+    private static String fmtDouble(double val) {
         return String.format("%.6f", val);
     }
 
-    private static void serialize_and_print(int val) {
-        System.out.println(val);
+    private static void printResult(int val) throws IOException {
+        bw.write(String.valueOf(val));
+        bw.newLine();
     }
 
-    private static void serialize_and_print(double val) {
-        System.out.println(format_double(val));
+    private static void printResult(double val) throws IOException {
+        bw.write(fmtDouble(val));
+        bw.newLine();
     }
 
-    private static void serialize_and_print(String val) {
-        System.out.println(val);
+    private static void printResult(String val) throws IOException {
+        bw.write(val);
+        bw.newLine();
     }
 
-    private static void serialize_and_print(boolean val) {
-        System.out.println(val);
+    private static void printResult(boolean val) throws IOException {
+        bw.write(val ? "true" : "false");
+        bw.newLine();
     }
 
-    private static void serialize_and_print(int[] arr) {
+    private static void printResult(int[] arr) throws IOException {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < arr.length; i++) {
-            sb.append(arr[i]).append(i + 1 == arr.length ? "" : " ");
+            if (i > 0) sb.append(' ');
+            sb.append(arr[i]);
         }
-        System.out.println(sb.toString());
+        bw.write(sb.toString());
+        bw.newLine();
     }
 
-    private static void serialize_and_print(double[] arr) {
+    private static void printResult(double[] arr) throws IOException {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < arr.length; i++) {
-            sb.append(format_double(arr[i])).append(i + 1 == arr.length ? "" : " ");
+            if (i > 0) sb.append(' ');
+            sb.append(fmtDouble(arr[i]));
         }
-        System.out.println(sb.toString());
+        bw.write(sb.toString());
+        bw.newLine();
     }
 
-    private static void serialize_and_print(String[] arr) {
+    private static void printResult(String[] arr) throws IOException {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < arr.length; i++) {
-            sb.append(arr[i]).append(i + 1 == arr.length ? "" : "\\n");
+            if (i > 0) sb.append("\\n");
+            sb.append(arr[i]);
         }
-        System.out.println(sb.toString());
+        bw.write(sb.toString());
+        bw.newLine();
     }
 
-    private static void serialize_and_print(boolean[] arr) {
+    private static void printResult(boolean[] arr) throws IOException {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < arr.length; i++) {
-            sb.append(arr[i]).append(i + 1 == arr.length ? "" : " ");
+            if (i > 0) sb.append(' ');
+            sb.append(arr[i] ? "true" : "false");
         }
-        System.out.println(sb.toString());
+        bw.write(sb.toString());
+        bw.newLine();
     }
 
-    private static void serialize_and_print(int[][] grid) {
+    private static void printResult(int[][] grid) throws IOException {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < grid.length; i++) {
+            if (i > 0) sb.append("\\n");
             for (int j = 0; j < grid[i].length; j++) {
-                sb.append(grid[i][j]).append(j + 1 == grid[i].length ? "" : " ");
-            }
-            if (i + 1 < grid.length) {
-                sb.append("\\n");
+                if (j > 0) sb.append(' ');
+                sb.append(grid[i][j]);
             }
         }
-        System.out.println(sb.toString());
+        bw.write(sb.toString());
+        bw.newLine();
     }
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws IOException {
+        initIO();
 ${parseCalls}
         Solution sol = new Solution();
 ${executionStmt}
+        bw.flush();
     }
-}`;
+}
+
+{{USER_CODE}}`;
+
   }
+
 
   // ---------------------------------------------------------------------
   // Python
@@ -506,15 +508,15 @@ ${executionStmt}
     const parseCalls = params.map(p => {
       let parserFn = "";
       switch (p.type) {
-        case "int": parserFn = "parse_int()"; break;
-        case "double": parserFn = "parse_float()"; break;
-        case "string": parserFn = "parse_string()"; break;
-        case "boolean": parserFn = "parse_boolean()"; break;
-        case "int[]": parserFn = "parse_int_array()"; break;
-        case "double[]": parserFn = "parse_float_array()"; break;
-        case "string[]": parserFn = "parse_string_array()"; break;
-        case "boolean[]": parserFn = "parse_boolean_array()"; break;
-        case "int[][]": parserFn = "parse_int_2d_array()"; break;
+        case "int": parserFn = "_next_int()"; break;
+        case "double": parserFn = "_next_float()"; break;
+        case "string": parserFn = "_next_token()"; break;
+        case "boolean": parserFn = "_next_bool()"; break;
+        case "int[]": parserFn = "_next_int_array()"; break;
+        case "double[]": parserFn = "_next_float_array()"; break;
+        case "string[]": parserFn = "_next_string_array()"; break;
+        case "boolean[]": parserFn = "_next_bool_array()"; break;
+        case "int[][]": parserFn = "_next_int_2d_array()"; break;
       }
       return `    ${p.name} = ${parserFn}`;
     }).join("\n");
@@ -522,15 +524,14 @@ ${executionStmt}
     const methodArgs = params.map(p => p.name).join(", ");
     let executionStmt = "";
     if (returnType === "void") {
-      // FIX: guard against void functions with zero parameters
       if (params.length > 0) {
         const firstParam = params[0];
-        executionStmt = `        sol.${functionName}(${methodArgs})\n        print(serialize_value(${firstParam.name}, "${firstParam.type}"))`;
+        executionStmt = `        sol.${functionName}(${methodArgs})\n        print(_serialize(${firstParam.name}, "${firstParam.type}"))`;
       } else {
         executionStmt = `        sol.${functionName}(${methodArgs})`;
       }
     } else {
-      executionStmt = `        result = sol.${functionName}(${methodArgs})\n        print(serialize_value(result, "${returnType}"))`;
+      executionStmt = `        result = sol.${functionName}(${methodArgs})\n        print(_serialize(result, "${returnType}"))`;
     }
 
     return `import sys
@@ -541,139 +542,65 @@ import functools
 from collections import defaultdict, deque, Counter, OrderedDict
 from typing import List, Dict, Tuple, Optional
 
-def parse_int():
-    line = sys.stdin.readline()
-    if not line:
-        return 0
-    return int(line.strip())
+# ── Token-based stdin reader (mirrors C++ cin >> behaviour) ──
+_tokens = iter(sys.stdin.read().split())
 
-def parse_float():
-    line = sys.stdin.readline()
-    if not line:
-        return 0.0
-    return float(line.strip())
+def _next_token():
+    return next(_tokens, "")
 
-def parse_string():
-    line = sys.stdin.readline()
-    if not line:
-        return ""
-    return line.strip()
+def _next_int():
+    t = _next_token()
+    return int(t) if t else 0
 
-def parse_boolean():
-    line = sys.stdin.readline()
-    if not line:
-        return False
-    val = line.strip().lower()
-    return val == 'true' or val == '1'
+def _next_float():
+    t = _next_token()
+    return float(t) if t else 0.0
 
-def parse_int_array():
-    line = sys.stdin.readline()
-    if not line:
-        return []
-    line = line.strip()
-    if not line:
-        return []
-    n = int(line)
-    if n == 0:
-        return []
-    elements_line = sys.stdin.readline()
-    if not elements_line:
-        return []
-    return list(map(int, elements_line.strip().split()))
+def _next_bool():
+    t = _next_token().lower()
+    return t == "true" or t == "1"
 
-def parse_float_array():
-    line = sys.stdin.readline()
-    if not line:
-        return []
-    line = line.strip()
-    if not line:
-        return []
-    n = int(line)
-    if n == 0:
-        return []
-    elements_line = sys.stdin.readline()
-    if not elements_line:
-        return []
-    return list(map(float, elements_line.strip().split()))
+def _next_int_array():
+    n = _next_int()
+    return [_next_int() for _ in range(n)]
 
-def parse_string_array():
-    line = sys.stdin.readline()
-    if not line:
-        return []
-    line = line.strip()
-    if not line:
-        return []
-    n = int(line)
-    arr = []
-    for _ in range(n):
-        arr.append(sys.stdin.readline().strip())
-    return arr
+def _next_float_array():
+    n = _next_int()
+    return [_next_float() for _ in range(n)]
 
-def parse_boolean_array():
-    line = sys.stdin.readline()
-    if not line:
-        return []
-    line = line.strip()
-    if not line:
-        return []
-    n = int(line)
-    if n == 0:
-        return []
-    elements_line = sys.stdin.readline()
-    if not elements_line:
-        return []
-    return [el.lower() == 'true' or el == '1' for el in elements_line.strip().split()]
+def _next_string_array():
+    n = _next_int()
+    return [_next_token() for _ in range(n)]
 
-def parse_int_2d_array():
-    line = sys.stdin.readline()
-    if not line:
-        return []
-    line = line.strip()
-    if not line:
-        return []
-    parts = line.split()
-    r = int(parts[0])
-    c = int(parts[1])
-    grid = []
-    for _ in range(r):
-        row_line = sys.stdin.readline()
-        if not row_line:
-            grid.append([])
-        else:
-            grid.append(list(map(int, row_line.strip().split())))
-    return grid
+def _next_bool_array():
+    n = _next_int()
+    return [_next_bool() for _ in range(n)]
 
-# FIX: consistent fixed-precision double formatting (matches C++/Java)
-def format_double(val):
-    return f"{val:.6f}"
+def _next_int_2d_array():
+    r = _next_int()
+    c = _next_int()
+    return [[_next_int() for _ in range(c)] for _ in range(r)]
 
-# FIX: booleans must serialize as lowercase "true"/"false" to match the
-# C++ and Java drivers. Python's str(True) -> "True" previously caused
-# every boolean test case to be graded as "wrong answer" when the judge
-# compares raw stdout against a language-agnostic expected output string.
-def format_boolean(val):
-    return "true" if val else "false"
+# ── Output serialization (matches C++/Java output format) ──
+def _fmt_double(v):
+    return f"{v:.6f}"
 
-def serialize_value(val, val_type):
-    if val is None:
-        return ""
-    if val_type == "void":
+def _fmt_bool(v):
+    return "true" if v else "false"
+
+def _serialize(val, val_type):
+    if val is None or val_type == "void":
         return ""
     if val_type == "boolean":
-        return format_boolean(val)
+        return _fmt_bool(val)
     if val_type == "double":
-        return format_double(val)
+        return _fmt_double(val)
     if val_type == "int[]":
         return " ".join(map(str, val))
-    # FIX: was checking "float[]", but every other part of this system
-    # (getPythonType, getCppType, getJavaType, ProblemSignature) uses the
-    # type name "double[]". The mismatch meant double arrays always fell
-    # through to str(val), printing "[1.0, 2.0]" instead of "1.0 2.0" and
-    # breaking every problem whose return type is a double array.
     if val_type == "double[]":
-        return " ".join(format_double(x) for x in val)
+        return " ".join(_fmt_double(x) for x in val)
     if val_type == "boolean[]":
-        return " ".join(format_boolean(x) for x in val)
+        return " ".join(_fmt_bool(x) for x in val)
     if val_type == "string[]":
         return "\\n".join(val)
     if val_type == "int[][]":
@@ -682,7 +609,7 @@ def serialize_value(val, val_type):
 
 {{USER_CODE}}
 
-if __name__ == '__main__':
+if __name__ == "__main__":
 ${parseCalls}
     try:
         sol = Solution()
