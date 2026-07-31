@@ -3,7 +3,7 @@ import { Language, Verdict } from "../../generated/prisma/client";
 import { PistonService } from "./piston.service";
 import {
   ParamSignature,
-  serializeInputToStdin,
+  serializeBatchInputToStdin,
   formatExpectedOutput,
   normalizeOutput,
 } from "../../utils/inputSerializer";
@@ -39,6 +39,8 @@ export interface ExecutionResult {
   stderr?: string;
   testCaseResults: TestCaseExecutionResult[];
 }
+
+const CASE_DELIMITER = "===END_CASE===";
 
 export class ExecutionService {
   public static async executeCode(options: ExecutionOptions): Promise<ExecutionResult> {
@@ -85,37 +87,31 @@ export class ExecutionService {
 
     const pistonLang = PistonService.getPistonLanguage(language);
     const filename = PistonService.getPistonFilename(language);
-    const params = sig.params;
     const returnType = sig.returnType;
+
+    // 3. Serialize all test cases into a single batch STDIN payload
+    const batchStdin = serializeBatchInputToStdin(problem.testCases, sig.params);
+
+    // 4. Execute single Piston call for ALL test cases
+    const startTime = Date.now();
+    const pistonRes = await PistonService.execute({
+      language: pistonLang,
+      files: [{ name: filename, content: wrappedCode }],
+      stdin: batchStdin,
+      runTimeout: Math.min(problem.timeLimitMs || 3000, 3000),
+    });
+    const totalRuntimeMs = Date.now() - startTime;
 
     const testCaseResults: TestCaseExecutionResult[] = [];
     let overallVerdict: Verdict = Verdict.AC;
     let overallStderr: string | undefined = undefined;
-    let maxRuntimeMs = 0;
     let passedCount = 0;
 
-    // 2. Iterate through test cases
-    for (const testCase of problem.testCases) {
-      const args = Array.isArray(testCase.input) ? testCase.input : [testCase.input];
-      const stdin = serializeInputToStdin(args, params);
-
-      const startTime = Date.now();
-      const pistonRes = await PistonService.execute({
-        language: pistonLang,
-        files: [{ name: filename, content: wrappedCode }],
-        stdin,
-        runTimeout: problem.timeLimitMs || 5000,
-      });
-      const runtimeMs = Date.now() - startTime;
-
-      if (runtimeMs > maxRuntimeMs) {
-        maxRuntimeMs = runtimeMs;
-      }
-
-      // Check Compilation Error (CE)
-      if (pistonRes.compile && pistonRes.compile.code !== 0) {
-        overallVerdict = Verdict.CE;
-        overallStderr = pistonRes.compile.stderr || pistonRes.compile.output;
+    // Check Compilation Error (CE)
+    if (pistonRes.compile && pistonRes.compile.code !== 0) {
+      overallVerdict = Verdict.CE;
+      overallStderr = pistonRes.compile.stderr || pistonRes.compile.output;
+      for (const testCase of problem.testCases) {
         testCaseResults.push({
           testCaseId: testCase.id,
           order: testCase.order,
@@ -125,46 +121,52 @@ export class ExecutionService {
           stderr: overallStderr,
           verdict: Verdict.CE,
         });
-        break; // CE stops execution for remaining test cases
       }
+      return {
+        verdict: Verdict.CE,
+        totalTestCases: problem.testCases.length,
+        passedTestCases: 0,
+        runtimeMs: totalRuntimeMs,
+        stderr: overallStderr,
+        testCaseResults,
+      };
+    }
 
-      // Check Runtime Error (RTE) or Time Limit Exceeded (TLE)
-      if (pistonRes.run.code !== 0 || pistonRes.run.signal) {
-        const isTimeLimit =
-          pistonRes.run.signal === "SIGKILL" ||
-          (pistonRes.run.output && pistonRes.run.output.includes("Time Limit Exceeded"));
+    // Check Runtime Error (RTE) or Time Limit Exceeded (TLE)
+    const isRuntimeOrTimeLimit = pistonRes.run.code !== 0 || !!pistonRes.run.signal;
+    if (isRuntimeOrTimeLimit) {
+      const isTimeLimit =
+        pistonRes.run.signal === "SIGKILL" ||
+        (pistonRes.run.output && pistonRes.run.output.includes("Time Limit Exceeded"));
+      overallVerdict = isTimeLimit ? Verdict.TLE : Verdict.RTE;
+      overallStderr = pistonRes.run.stderr || pistonRes.run.output;
+    }
 
-        const tcVerdict = isTimeLimit ? Verdict.TLE : Verdict.RTE;
-        const errOutput = pistonRes.run.stderr || pistonRes.run.output;
+    // 5. Parse output chunks separated by CASE_DELIMITER
+    const rawStdout = pistonRes.run.stdout || "";
+    const caseOutputs = rawStdout.split(CASE_DELIMITER);
 
-        if (overallVerdict === Verdict.AC) {
-          overallVerdict = tcVerdict;
-          overallStderr = errOutput;
-        }
+    for (let i = 0; i < problem.testCases.length; i++) {
+      const testCase = problem.testCases[i];
+      const chunk = caseOutputs[i];
 
+      if (chunk === undefined || (isRuntimeOrTimeLimit && i >= caseOutputs.length - 1)) {
+        // Driver crashed before reaching or completing this test case
         testCaseResults.push({
           testCaseId: testCase.id,
           order: testCase.order,
           input: testCase.input,
           expected: testCase.expected,
           passed: false,
-          runtimeMs,
-          stderr: errOutput,
-          verdict: tcVerdict,
+          stderr: overallStderr,
+          verdict: overallVerdict !== Verdict.AC ? overallVerdict : Verdict.RTE,
         });
-
-        if (!isSampleOnly) {
-          break;
-        } else {
-          continue;
-        }
+        continue;
       }
 
-      // Evaluate Output (AC vs WA)
-      const actualStdout = normalizeOutput(pistonRes.run.stdout);
+      const actualStdout = normalizeOutput(chunk);
       const expectedFormatted = normalizeOutput(formatExpectedOutput(testCase.expected, returnType));
       const passed = actualStdout === expectedFormatted;
-
       const tcVerdict = passed ? Verdict.AC : Verdict.WA;
 
       if (passed) {
@@ -180,22 +182,19 @@ export class ExecutionService {
         expected: testCase.expected,
         actualOutput: actualStdout,
         passed,
-        runtimeMs,
+        runtimeMs: Math.round(totalRuntimeMs / problem.testCases.length),
         verdict: tcVerdict,
       });
-
-      if (!passed && !isSampleOnly) {
-        break;
-      }
     }
 
     return {
       verdict: overallVerdict,
       totalTestCases: problem.testCases.length,
       passedTestCases: passedCount,
-      runtimeMs: maxRuntimeMs,
+      runtimeMs: totalRuntimeMs,
       stderr: overallStderr,
       testCaseResults,
     };
   }
 }
+

@@ -74,15 +74,16 @@ export class PistonService {
           files: options.files,
           stdin: options.stdin || "",
           args: options.args || [],
-          compile_timeout: options.compileTimeout || 10000,
-          run_timeout: options.runTimeout || 5000,
+          compile_timeout: Math.min(options.compileTimeout || 10000, 10000),
+          run_timeout: Math.min(options.runTimeout || 3000, 3000),
         },
         { timeout: 20000 }
       );
       return response.data;
     } catch (error: any) {
-      console.error("Piston execution failed:", error.message);
-      throw new AppError("Code execution engine unavailable", 503, error.message);
+      const details = error.response?.data?.message || error.message;
+      console.error("Piston execution failed:", details);
+      throw new AppError("Code execution engine unavailable", 503, details);
     }
   }
 }

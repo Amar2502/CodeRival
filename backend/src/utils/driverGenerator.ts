@@ -297,9 +297,14 @@ void serialize_and_print(const vector<vector<int>>& grid) {
 int main() {
     ios_base::sync_with_stdio(false);
     cin.tie(NULL);
-${parseCalls}
+    int num_test_cases = 0;
+    if (!(cin >> num_test_cases)) return 0;
     Solution sol;
+    for (int tc = 0; tc < num_test_cases; ++tc) {
+${parseCalls}
 ${executionStmt}
+        cout << "===END_CASE===" << endl;
+    }
     return 0;
 }`;
   }
@@ -489,9 +494,14 @@ public class Main {
 
     public static void main(String[] args) throws IOException {
         initIO();
-${parseCalls}
+        int numTestCases = nextInt();
         Solution sol = new Solution();
+        for (int tc = 0; tc < numTestCases; tc++) {
+${parseCalls}
 ${executionStmt}
+            bw.write("===END_CASE===");
+            bw.newLine();
+        }
         bw.flush();
     }
 }
@@ -518,7 +528,7 @@ ${executionStmt}
         case "boolean[]": parserFn = "_next_bool_array()"; break;
         case "int[][]": parserFn = "_next_int_2d_array()"; break;
       }
-      return `    ${p.name} = ${parserFn}`;
+      return `        ${p.name} = ${parserFn}`;
     }).join("\n");
 
     const methodArgs = params.map(p => p.name).join(", ");
@@ -526,12 +536,12 @@ ${executionStmt}
     if (returnType === "void") {
       if (params.length > 0) {
         const firstParam = params[0];
-        executionStmt = `        sol.${functionName}(${methodArgs})\n        print(_serialize(${firstParam.name}, "${firstParam.type}"))`;
+        executionStmt = `            sol.${functionName}(${methodArgs})\n            print(_serialize(${firstParam.name}, "${firstParam.type}"))`;
       } else {
-        executionStmt = `        sol.${functionName}(${methodArgs})`;
+        executionStmt = `            sol.${functionName}(${methodArgs})`;
       }
     } else {
-      executionStmt = `        result = sol.${functionName}(${methodArgs})\n        print(_serialize(result, "${returnType}"))`;
+      executionStmt = `            result = sol.${functionName}(${methodArgs})\n            print(_serialize(result, "${returnType}"))`;
     }
 
     return `import sys
@@ -610,13 +620,18 @@ def _serialize(val, val_type):
 {{USER_CODE}}
 
 if __name__ == "__main__":
+    t_str = _next_token()
+    num_test_cases = int(t_str) if t_str else 0
+    sol = Solution()
+    for _ in range(num_test_cases):
 ${parseCalls}
-    try:
-        sol = Solution()
+        try:
 ${executionStmt}
-    except Exception as e:
-        print(e, file=sys.stderr)
-        sys.exit(1)`;
+            print("===END_CASE===")
+        except Exception as e:
+            print(e, file=sys.stderr)
+            print("===END_CASE===")
+            sys.exit(1)`;
   }
 
   throw new Error(`Unsupported language: ${language}`);

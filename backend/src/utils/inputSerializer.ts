@@ -161,3 +161,31 @@ export function serializeInputToStdin(args: any[], params: ParamSignature[]): st
 
   return allTokens.join("\n") + "\n";
 }
+
+/**
+ * Converts multiple test cases into a single STDIN string starting with the number of test cases (T),
+ * allowing batch execution of all test cases in a single process compile & run call.
+ */
+export function serializeBatchInputToStdin(
+  testCases: Array<{ input: any }>,
+  params: ParamSignature[]
+): string {
+  if (!Array.isArray(testCases)) {
+    return "0\n";
+  }
+
+  const allTokens: string[] = [String(testCases.length)];
+
+  for (const tc of testCases) {
+    const args = Array.isArray(tc.input) ? tc.input : [tc.input];
+    for (let i = 0; i < params.length; i++) {
+      const param = params[i];
+      const argVal = args[i];
+      const paramTokens = serializeParamToTokens(argVal, param.type);
+      allTokens.push(...paramTokens);
+    }
+  }
+
+  return allTokens.join("\n") + "\n";
+}
+
