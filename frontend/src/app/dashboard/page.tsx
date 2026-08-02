@@ -56,6 +56,7 @@ interface RecentMatchData {
   player2Id: string
   winnerId: string | null
   win: boolean
+  reason?: string | null
   problem: {
     title: string
     slug: string
@@ -240,27 +241,56 @@ export default function DashboardPage() {
                   No match history yet. Jump into 1v1 Arena to challenge players!
                 </div>
               ) : (
-                matches.map((match) => (
-                  <div key={match.id} className="p-3 rounded-lg border border-border bg-surface flex items-center justify-between hover:border-border-muted transition-colors">
-                    <div>
-                      <span className="text-xs font-semibold text-foreground">{match.problem?.title || 'Coding Duel'}</span>
-                      <p className="text-[11px] text-muted-foreground font-mono mt-0.5">
-                        {new Date(match.createdAt).toLocaleDateString()}
-                      </p>
+                matches.map((match) => {
+                  const getReasonBadge = () => {
+                    if (match.reason === 'OPPONENT_CHEATED') {
+                      return match.win ? 'Rival Disqualified (Cheating)' : 'Disqualified (Cheating)'
+                    }
+                    if (match.reason === 'OPPONENT_SURRENDERED') {
+                      return match.win ? 'Rival Surrendered' : 'Surrendered'
+                    }
+                    if (match.reason === 'OPPONENT_DISCONNECTED') {
+                      return match.win ? 'Rival Disconnected' : 'Disconnected'
+                    }
+                    if (match.reason === 'SOLUTION_ACCEPTED') {
+                      return match.win ? 'Accepted Solution' : 'Rival Solved First'
+                    }
+                    if (match.reason === 'TIMEOUT') {
+                      return 'Timeout Score'
+                    }
+                    return null
+                  }
+                  const reasonLabel = getReasonBadge()
+
+                  return (
+                    <div key={match.id} className="p-3 rounded-lg border border-border bg-surface flex items-center justify-between hover:border-border-muted transition-colors">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-semibold text-foreground">{match.problem?.title || 'Coding Duel'}</span>
+                          {reasonLabel && (
+                            <span className="text-[10px] font-medium px-1.5 py-0.2 rounded bg-card border border-border text-muted-foreground">
+                              {reasonLabel}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-muted-foreground font-mono mt-0.5">
+                          {new Date(match.createdAt).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <div>
+                        {match.win ? (
+                          <span className="px-2.5 py-1 rounded-md text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                            VICTORY
+                          </span>
+                        ) : (
+                          <span className="px-2.5 py-1 rounded-md text-xs font-bold bg-rose-500/10 text-rose-500 border border-rose-500/20">
+                            DEFEAT
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <div>
-                      {match.win ? (
-                        <span className="px-2.5 py-1 rounded-md text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                          VICTORY
-                        </span>
-                      ) : (
-                        <span className="px-2.5 py-1 rounded-md text-xs font-bold bg-rose-500/10 text-rose-500 border border-rose-500/20">
-                          DEFEAT
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                ))
+                  )
+                })
               )}
             </CardContent>
           </Card>

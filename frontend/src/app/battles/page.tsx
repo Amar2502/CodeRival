@@ -34,6 +34,7 @@ interface MatchHistoryRecord {
   id: string
   status: 'WAITING' | 'ACTIVE' | 'FINISHED' | 'CANCELLED'
   result: 'PLAYER1' | 'PLAYER2' | 'DRAW' | 'ABANDONED' | null
+  reason?: 'SOLUTION_ACCEPTED' | 'OPPONENT_CHEATED' | 'OPPONENT_SURRENDERED' | 'OPPONENT_DISCONNECTED' | 'TIMEOUT' | 'DRAW' | null
   winnerId: string | null
   startedAt: string
   endedAt: string
@@ -57,6 +58,73 @@ interface MatchFoundPayload {
   }
   player1: { id: string; username: string; avatar_url?: string | null; avatar_id?: string | null; avatar?: string; rating: number }
   player2: { id: string; username: string; avatar_url?: string | null; avatar_id?: string | null; avatar?: string; rating: number }
+}
+
+const getMatchReasonInfo = (match: MatchHistoryRecord, currentUserId?: string) => {
+  const isWinner = match.winnerId === currentUserId
+  const isDraw = match.result === 'DRAW'
+  const reason = match.reason
+
+  if (reason === 'OPPONENT_CHEATED') {
+    return {
+      title: isWinner ? 'Rival Disqualified (Cheating)' : 'Disqualified (Anti-Cheat)',
+      badgeClass: isWinner ? 'bg-amber-500/15 text-amber-400 border-amber-500/30' : 'bg-rose-500/15 text-rose-400 border-rose-500/30',
+      description: isWinner ? 'Rival was disqualified for anti-cheat violation / tab switching.' : 'Disqualified due to tab switching / anti-cheat violation.',
+      icon: ShieldAlert,
+    }
+  }
+
+  if (reason === 'OPPONENT_SURRENDERED') {
+    return {
+      title: isWinner ? 'Rival Surrendered' : 'Forfeited Match',
+      badgeClass: isWinner ? 'bg-amber-500/15 text-amber-400 border-amber-500/30' : 'bg-rose-500/15 text-rose-400 border-rose-500/30',
+      description: isWinner ? 'Rival voluntarily surrendered and exited the match arena.' : 'You voluntarily surrendered and forfeited the match.',
+      icon: AlertCircle,
+    }
+  }
+
+  if (reason === 'OPPONENT_DISCONNECTED') {
+    return {
+      title: isWinner ? 'Rival Disconnected' : 'Disconnected',
+      badgeClass: isWinner ? 'bg-sky-500/15 text-sky-400 border-sky-500/30' : 'bg-rose-500/15 text-rose-400 border-rose-500/30',
+      description: isWinner ? 'Rival disconnected and grace period expired.' : 'Disconnected from match session.',
+      icon: Clock,
+    }
+  }
+
+  if (reason === 'SOLUTION_ACCEPTED') {
+    return {
+      title: isWinner ? 'Accepted Solution' : 'Rival Solved First',
+      badgeClass: isWinner ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' : 'bg-rose-500/15 text-rose-400 border-rose-500/30',
+      description: isWinner ? 'Submitted a 100% Accepted solution before rival!' : 'Opponent submitted an Accepted solution first.',
+      icon: CheckCircle2,
+    }
+  }
+
+  if (reason === 'TIMEOUT') {
+    return {
+      title: isWinner ? 'Timeout Score Win' : 'Timeout Score Loss',
+      badgeClass: isWinner ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' : 'bg-rose-500/15 text-rose-400 border-rose-500/30',
+      description: isWinner ? 'Had higher test cases passed when 15-min timer expired.' : 'Lower test cases passed when match timer expired.',
+      icon: Clock,
+    }
+  }
+
+  if (isDraw) {
+    return {
+      title: 'Match Draw',
+      badgeClass: 'bg-muted/20 text-muted-foreground border-border',
+      description: 'Timer expired with equal test cases passed.',
+      icon: Sparkles,
+    }
+  }
+
+  return {
+    title: isWinner ? 'Duel Victory' : 'Duel Defeat',
+    badgeClass: isWinner ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' : 'bg-rose-500/15 text-rose-400 border-rose-500/30',
+    description: isWinner ? 'Claimed victory in 1v1 duel.' : 'Opponent claimed victory.',
+    icon: Swords,
+  }
 }
 
 export default function BattlesPage() {
@@ -524,68 +592,79 @@ export default function BattlesPage() {
                 } else if (isDraw) {
                   outcomeText = 'DRAW'
                   outcomeClass = 'bg-gray-500/10 text-gray-400 border-gray-500/30'
+                } else if (match.reason === 'OPPONENT_CHEATED' && !isWinner) {
+                  outcomeText = 'DISQUALIFIED'
+                  outcomeClass = 'bg-rose-500/20 text-rose-400 border-rose-500/40'
                 } else if (isAbandoned && !isWinner) {
-                  outcomeText = 'FORFEITED'
+                  outcomeText = 'SURRENDERED'
                   outcomeClass = 'bg-amber-500/10 text-amber-400 border-amber-500/30'
                 }
+
+                const reasonInfo = getMatchReasonInfo(match, user?.id)
+                const ReasonIcon = reasonInfo.icon
 
                 return (
                   <div
                     key={match.id}
                     onClick={() => setSelectedHistoryMatch(match)}
-                    className="p-4 rounded-xl border border-border bg-card hover:bg-surface-2 transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                    className="p-4 rounded-2xl border border-border bg-card/80 backdrop-blur-xs hover:border-primary/50 hover:shadow-lg hover:shadow-primary/5 transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-4 group"
                   >
                     {/* Match Result & Opponent */}
                     <div className="flex items-center gap-4">
                       {/* Outcome Badge */}
-                      <div className={`px-3 py-1.5 rounded-lg border font-extrabold text-xs tracking-wide ${outcomeClass}`}>
+                      <div className={`px-3 py-1.5 rounded-xl border font-extrabold text-xs tracking-wide shrink-0 ${outcomeClass}`}>
                         {outcomeText}
                       </div>
 
                       {/* Opponent Profile */}
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-surface border border-border flex items-center justify-center text-sm font-bold text-foreground">
+                        <div className="w-10 h-10 rounded-full bg-surface border border-border flex items-center justify-center text-sm font-bold text-foreground overflow-hidden shrink-0">
                           {(rival.avatar_url || rival.avatar) ? (
-                            <img src={rival.avatar_url || rival.avatar} alt="Avatar" className="w-full h-full rounded-full object-cover" />
+                            <img src={rival.avatar_url || rival.avatar} alt="Avatar" className="w-full h-full object-cover" />
                           ) : (
                             rival.username.charAt(0).toUpperCase()
                           )}
                         </div>
                         <div>
-                          <div className="text-xs text-muted-foreground font-mono">VS Rival</div>
-                          <div className="text-sm font-bold text-foreground">@{rival.username}</div>
+                          <div className="text-[11px] text-muted-foreground font-mono">VS Rival</div>
+                          <div className="text-sm font-bold text-foreground group-hover:text-primary transition-colors">@{rival.username}</div>
                         </div>
                       </div>
                     </div>
 
-                    {/* Problem Title & Difficulty */}
-                    <div className="flex items-center gap-3">
-                      <div>
-                        <div className="text-sm font-semibold text-foreground truncate max-w-xs">
-                          {match.problem.title}
+                    {/* Problem Title & Reason Badge */}
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 flex-1 max-w-md">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-bold text-foreground line-clamp-1">
+                            {match.problem.title}
+                          </span>
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold shrink-0 ${
+                              match.problem.difficulty === 'EASY'
+                                ? 'bg-easy-subtle text-easy'
+                                : match.problem.difficulty === 'MEDIUM'
+                                ? 'bg-medium-subtle text-medium'
+                                : 'bg-hard-subtle text-hard'
+                            }`}
+                          >
+                            {match.problem.difficulty}
+                          </span>
                         </div>
-                        <div className="text-xs text-muted-foreground font-mono">
-                          Rival Rating: {rival.rating}
+                        <div className="flex items-center gap-1.5 text-xs">
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-[11px] font-semibold ${reasonInfo.badgeClass}`}>
+                            <ReasonIcon className="w-3 h-3" />
+                            {reasonInfo.title}
+                          </span>
                         </div>
                       </div>
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                          match.problem.difficulty === 'EASY'
-                            ? 'bg-easy-subtle text-easy'
-                            : match.problem.difficulty === 'MEDIUM'
-                            ? 'bg-medium-subtle text-medium'
-                            : 'bg-hard-subtle text-hard'
-                        }`}
-                      >
-                        {match.problem.difficulty}
-                      </span>
                     </div>
 
                     {/* Date & Action */}
-                    <div className="flex items-center justify-between sm:justify-end gap-4 text-xs text-muted-foreground font-mono">
+                    <div className="flex items-center justify-between sm:justify-end gap-3 text-xs text-muted-foreground font-mono shrink-0">
                       <span>{new Date(match.createdAt).toLocaleDateString()}</span>
-                      <Button size="sm" variant="ghost" className="text-xs text-accent gap-1">
-                        View Details <ArrowRight className="w-3.5 h-3.5" />
+                      <Button size="sm" variant="ghost" className="text-xs text-accent gap-1 group-hover:translate-x-1 transition-transform">
+                        Details <ArrowRight className="w-3.5 h-3.5" />
                       </Button>
                     </div>
                   </div>
@@ -597,56 +676,98 @@ export default function BattlesPage() {
 
         {/* ─── HISTORICAL MATCH DETAIL MODAL ─── */}
         {selectedHistoryMatch && (
-          <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-md flex items-center justify-center p-4">
-            <div className="max-w-lg w-full bg-card border border-border rounded-2xl p-6 space-y-5">
-              <div className="flex items-center justify-between border-b border-border pb-3">
-                <h3 className="font-extrabold text-base text-foreground flex items-center gap-2">
-                  <Swords className="w-4 h-4 text-primary" /> Match Breakdown
-                </h3>
+          <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex items-center justify-center p-4">
+            <div className="max-w-lg w-full bg-card border border-border rounded-3xl p-6 space-y-6 shadow-2xl animate-fade-in-up">
+              <div className="flex items-center justify-between border-b border-border pb-4">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-xl bg-primary/10 text-primary">
+                    <Swords className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-base text-foreground">Match Breakdown</h3>
+                    <p className="text-xs text-muted-foreground">1v1 Ranked Duel Statistics</p>
+                  </div>
+                </div>
                 <button
                   onClick={() => setSelectedHistoryMatch(null)}
-                  className="text-muted-foreground hover:text-foreground text-sm font-bold"
+                  className="w-8 h-8 rounded-full bg-surface border border-border hover:bg-surface-2 text-muted-foreground hover:text-foreground flex items-center justify-center text-sm font-bold transition-colors cursor-pointer"
                 >
                   ✕
                 </button>
               </div>
 
-              <div className="space-y-3 text-xs">
-                <div className="p-3 rounded-lg bg-surface border border-border space-y-1">
-                  <div className="text-muted-foreground font-mono">Problem Statement:</div>
-                  <div className="text-sm font-bold text-foreground">
-                    {selectedHistoryMatch.problem.title}
-                  </div>
-                  <div className="text-muted-foreground">
-                    Difficulty: <span className="text-accent font-semibold">{selectedHistoryMatch.problem.difficulty}</span>
-                  </div>
-                </div>
+              {(() => {
+                const info = getMatchReasonInfo(selectedHistoryMatch, user?.id)
+                const ReasonIcon = info.icon
+                const isWinner = selectedHistoryMatch.winnerId === user?.id
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="p-3 rounded-lg bg-surface border border-border space-y-1">
-                    <div className="text-muted-foreground font-mono">Player 1:</div>
-                    <div className="font-bold text-foreground">@{selectedHistoryMatch.player1.username}</div>
-                    <div className="text-muted-foreground">Rating: {selectedHistoryMatch.player1.rating}</div>
-                  </div>
+                return (
+                  <div className="space-y-4 text-xs">
+                    {/* Outcome & Reason Spotlight Card */}
+                    <div className={`p-4 rounded-2xl border ${info.badgeClass} space-y-1.5`}>
+                      <div className="flex items-center justify-between font-extrabold text-sm">
+                        <span className="flex items-center gap-2">
+                          <ReasonIcon className="w-4 h-4" />
+                          {info.title}
+                        </span>
+                        <span className="font-mono text-xs uppercase px-2 py-0.5 rounded bg-black/20">
+                          {isWinner ? 'VICTORY' : selectedHistoryMatch.result === 'DRAW' ? 'DRAW' : 'DEFEAT'}
+                        </span>
+                      </div>
+                      <p className="text-xs leading-relaxed opacity-90">
+                        {info.description}
+                      </p>
+                    </div>
 
-                  <div className="p-3 rounded-lg bg-surface border border-border space-y-1">
-                    <div className="text-muted-foreground font-mono">Player 2:</div>
-                    <div className="font-bold text-foreground">@{selectedHistoryMatch.player2.username}</div>
-                    <div className="text-muted-foreground">Rating: {selectedHistoryMatch.player2.rating}</div>
-                  </div>
-                </div>
+                    {/* Problem Statement */}
+                    <div className="p-4 rounded-xl bg-surface border border-border space-y-1">
+                      <div className="text-muted-foreground font-mono text-[11px]">Problem Challenge:</div>
+                      <div className="text-sm font-bold text-foreground">
+                        {selectedHistoryMatch.problem.title}
+                      </div>
+                      <div className="text-muted-foreground text-[11px] flex items-center gap-2 pt-0.5">
+                        <span>Difficulty:</span>
+                        <span
+                          className={`px-2 py-0.2 rounded-full font-bold ${
+                            selectedHistoryMatch.problem.difficulty === 'EASY'
+                              ? 'bg-easy-subtle text-easy'
+                              : selectedHistoryMatch.problem.difficulty === 'MEDIUM'
+                              ? 'bg-medium-subtle text-medium'
+                              : 'bg-hard-subtle text-hard'
+                          }`}
+                        >
+                          {selectedHistoryMatch.problem.difficulty}
+                        </span>
+                      </div>
+                    </div>
 
-                <div className="p-3 rounded-lg bg-surface border border-border flex items-center justify-between">
-                  <span className="text-muted-foreground font-mono">Match Winner:</span>
-                  <span className="font-bold text-emerald-400">
-                    {selectedHistoryMatch.winner ? `@${selectedHistoryMatch.winner.username}` : 'Draw'}
-                  </span>
-                </div>
-              </div>
+                    {/* Players Comparison */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="p-3.5 rounded-xl bg-surface border border-border space-y-1">
+                        <div className="text-muted-foreground font-mono text-[11px]">Player 1:</div>
+                        <div className="font-bold text-foreground text-sm">@{selectedHistoryMatch.player1.username}</div>
+                        <div className="text-muted-foreground text-[11px] font-mono">{selectedHistoryMatch.player1.rating} ELO</div>
+                      </div>
+
+                      <div className="p-3.5 rounded-xl bg-surface border border-border space-y-1">
+                        <div className="text-muted-foreground font-mono text-[11px]">Player 2:</div>
+                        <div className="font-bold text-foreground text-sm">@{selectedHistoryMatch.player2.username}</div>
+                        <div className="text-muted-foreground text-[11px] font-mono">{selectedHistoryMatch.player2.rating} ELO</div>
+                      </div>
+                    </div>
+
+                    {/* Match Date & ID */}
+                    <div className="p-3 rounded-xl bg-surface/50 border border-border/60 flex items-center justify-between text-muted-foreground font-mono text-[11px]">
+                      <span>Played on {new Date(selectedHistoryMatch.createdAt).toLocaleString()}</span>
+                      <span className="truncate max-w-[120px]">ID: {selectedHistoryMatch.id.slice(0, 8)}...</span>
+                    </div>
+                  </div>
+                )
+              })()}
 
               <Button
                 onClick={() => setSelectedHistoryMatch(null)}
-                className="w-full bg-surface hover:bg-surface-2 text-foreground border border-border"
+                className="w-full bg-surface hover:bg-surface-2 text-foreground border border-border font-bold h-10 cursor-pointer"
               >
                 Close Summary
               </Button>

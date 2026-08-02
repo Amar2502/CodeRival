@@ -8,6 +8,7 @@ import { Zap, Code2, Swords, LayoutDashboard, User, LogOut, Trophy, Users, Menu,
 import { useAuthStore } from '@/lib/authStore'
 import { getRatingInfo } from '@/lib/rating'
 import { UserAvatar } from '@/components/UserAvatar'
+import { isDevelopment } from '@/lib/config'
 
 export function Header() {
   const pathname = usePathname()
@@ -87,6 +88,11 @@ export function Header() {
               >
                 <Trophy className="w-4 h-4 text-purple-400" />
                 <span>Tournaments</span>
+                {!isDevelopment && (
+                  <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30 tracking-wide">
+                    Upcoming
+                  </span>
+                )}
               </Button>
             </Link>
             <Link href="/leaderboard">
@@ -205,9 +211,16 @@ export function Header() {
                 </Button>
               </Link>
               <Link href="/tournaments" onClick={() => setMobileMenuOpen(false)}>
-                <Button variant={pathname.startsWith('/tournaments') ? 'secondary' : 'ghost'} className="w-full justify-start gap-3">
-                  <Trophy className="w-4 h-4 text-purple-400" />
-                  <span>Tournaments</span>
+                <Button variant={pathname.startsWith('/tournaments') ? 'secondary' : 'ghost'} className="w-full justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <Trophy className="w-4 h-4 text-purple-400" />
+                    <span>Tournaments</span>
+                  </div>
+                  {!isDevelopment && (
+                    <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30 tracking-wide">
+                      Upcoming
+                    </span>
+                  )}
                 </Button>
               </Link>
               <Link href="/leaderboard" onClick={() => setMobileMenuOpen(false)}>

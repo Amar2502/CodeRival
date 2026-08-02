@@ -1,6 +1,6 @@
 import { Server, Socket } from "socket.io";
 import { db } from "../../config/db";
-import { Difficulty, MatchResult, MatchStatus, Verdict } from "../../generated/prisma/client";
+import { Difficulty, MatchFinishReason, MatchResult, MatchStatus, Verdict } from "../../generated/prisma/client";
 import {
   getSocket,
   setUserActiveMatch,
@@ -167,7 +167,8 @@ export const endMatch = async (
   io: Server,
   matchId: string,
   winnerId: string | null,
-  result: MatchResult
+  result: MatchResult,
+  reason?: MatchFinishReason | null
 ) => {
   // Clear match timer
   const matchTimeoutTimer = activeMatchTimers.get(matchId);
@@ -222,6 +223,7 @@ export const endMatch = async (
         status: MatchStatus.FINISHED,
         winnerId: winnerId || null,
         result: matchResult,
+        reason: reason || null,
         endedAt: new Date(),
       },
     }),
@@ -270,10 +272,14 @@ export const endMatch = async (
   clearUserActiveMatch(p1.id);
   clearUserActiveMatch(p2.id);
 
+  const tournamentMatch = await db.tournamentMatch.findFirst({ where: { matchId } });
+
   const endPayload = {
     matchId,
     winnerId,
     result: matchResult,
+    reason: reason || null,
+    tournamentId: tournamentMatch?.tournamentId || null,
     player1: {
       id: p1.id,
       username: p1.username,
@@ -330,7 +336,7 @@ export const handleMatchSubmission = async (
     const match = await db.match.findUnique({ where: { id: matchId } });
     if (match && match.status === MatchStatus.ACTIVE) {
       const matchResult = match.player1Id === userId ? MatchResult.PLAYER1 : MatchResult.PLAYER2;
-      await endMatch(io, matchId, userId, matchResult);
+      await endMatch(io, matchId, userId, matchResult, MatchFinishReason.SOLUTION_ACCEPTED);
     }
   }
 };
@@ -369,7 +375,8 @@ export const handleMatchTimeout = async (io: Server, matchId: string) => {
     result = MatchResult.DRAW;
   }
 
-  await endMatch(io, matchId, winnerId, result);
+  const timeoutReason = winnerId ? MatchFinishReason.TIMEOUT : MatchFinishReason.DRAW;
+  await endMatch(io, matchId, winnerId, result, timeoutReason);
 };
 
 export const handlePlayerMatchDisconnect = async (io: Server, userId: string) => {
@@ -392,7 +399,7 @@ export const handlePlayerMatchDisconnect = async (io: Server, userId: string) =>
   const timer = setTimeout(async () => {
     clearDisconnectTimer(userId);
     if (!isUserConnected(userId)) {
-      await endMatch(io, matchId, opponentId, MatchResult.ABANDONED);
+      await endMatch(io, matchId, opponentId, MatchResult.ABANDONED, MatchFinishReason.OPPONENT_DISCONNECTED);
     }
   }, 30000);
 
@@ -417,6 +424,7 @@ export const handlePlayerMatchReconnect = async (socket: Socket, io: Server, mat
       },
       player1: { select: { id: true, username: true, name: true, avatar_url: true, avatar_id: true, rating: true } },
       player2: { select: { id: true, username: true, name: true, avatar_url: true, avatar_id: true, rating: true } },
+      tournamentMatches: true,
     },
   });
 
@@ -425,13 +433,23 @@ export const handlePlayerMatchReconnect = async (socket: Socket, io: Server, mat
     return;
   }
 
+  const isParticipant = match.player1Id === userId || match.player2Id === userId;
+  const isTournamentMatch = match.tournamentMatches && match.tournamentMatches.length > 0;
+
+  if (!isParticipant && !isTournamentMatch) {
+    socket.emit("match:error", { message: "Access denied: You are not a participant in this 1v1 battle." });
+    return;
+  }
+
   const roomId = `match:${match.id}`;
   socket.join(roomId);
-  setUserActiveMatch(userId, match.id);
 
-  socket.to(roomId).emit("match:opponent_status", {
-    status: "CONNECTED",
-  });
+  if (isParticipant) {
+    setUserActiveMatch(userId, match.id);
+    socket.to(roomId).emit("match:opponent_status", {
+      status: "CONNECTED",
+    });
+  }
 
   socket.emit("match:sync_state", {
     matchId: match.id,
@@ -440,6 +458,7 @@ export const handlePlayerMatchReconnect = async (socket: Socket, io: Server, mat
     problem: match.problem,
     player1: match.player1,
     player2: match.player2,
+    tournamentMatches: match.tournamentMatches,
   });
 };
 
@@ -450,6 +469,7 @@ export const getMatch = async (matchId: string) => {
       player1: { select: { id: true, username: true, name: true, avatar_url: true, avatar_id: true, rating: true } },
       player2: { select: { id: true, username: true, name: true, avatar_url: true, avatar_id: true, rating: true } },
       problem: true,
+      tournamentMatches: true,
       submissions: {
         orderBy: { submittedAt: "desc" },
       },

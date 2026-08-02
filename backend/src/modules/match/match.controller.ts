@@ -7,10 +7,22 @@ export class MatchController {
   static async getMatchById(req: Request, res: Response, next: NextFunction) {
     try {
       const matchId = req.params.id as string;
+      const userId = (req as any).user?.id || (req as any).user?.userId;
       const match = await getMatch(matchId);
 
       if (!match) {
         throw new NotFoundError("Match not found");
+      }
+
+      const isParticipant = match.player1Id === userId || match.player2Id === userId;
+      const isTournamentMatch = (match as any).tournamentMatches && (match as any).tournamentMatches.length > 0;
+
+      if (!isParticipant && !isTournamentMatch) {
+        res.status(403).json({
+          success: false,
+          message: "Access denied. You are not a participant in this 1v1 battle.",
+        });
+        return;
       }
 
       res.status(200).json({

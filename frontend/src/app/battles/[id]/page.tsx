@@ -5,6 +5,7 @@ import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
+import { isDevelopment } from '@/lib/config'
 import { Button } from '@/components/ui/button'
 import {
   Select,
@@ -136,6 +137,8 @@ interface MatchEndedPayload {
   matchId: string
   winnerId: string | null
   result: 'PLAYER1' | 'PLAYER2' | 'DRAW' | 'ABANDONED'
+  reason?: 'SOLUTION_ACCEPTED' | 'OPPONENT_CHEATED' | 'OPPONENT_SURRENDERED' | 'OPPONENT_DISCONNECTED' | 'TIMEOUT' | 'DRAW' | null
+  tournamentId?: string | null
   player1: { id: string; username: string; oldRating: number; newRating: number; delta: number }
   player2: { id: string; username: string; oldRating: number; newRating: number; delta: number }
 }
@@ -152,6 +155,8 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
   const [player2, setPlayer2] = useState<Player | null>(null)
   const [startedAt, setStartedAt] = useState<number | null>(null)
   const [durationMs, setDurationMs] = useState<number>(15 * 60 * 1000)
+  const [isTournamentMatch, setIsTournamentMatch] = useState(false)
+  const [tournamentId, setTournamentId] = useState<string | null>(null)
 
   // Disconnect & Reconnect State
   const [opponentDisconnected, setOpponentDisconnected] = useState(false)
@@ -312,6 +317,9 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
     const onMatchEnded = async (payload: MatchEndedPayload) => {
       setMatchStatus('FINISHED')
       setMatchEndedData(payload)
+      if (payload.tournamentId) {
+        setTournamentId(payload.tournamentId)
+      }
 
       const isWinner = payload.winnerId === user?.id
       if (isWinner) {
@@ -339,6 +347,9 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
       console.error('Match socket error:', data)
       addActivityLog(`Error: ${data.message}`, 'warning')
       toast.error(`Error: ${data.message}`)
+      if (data.message && data.message.includes('Access denied')) {
+        router.replace('/battles')
+      }
     }
 
     socket.on('match:start', onStart)
@@ -366,7 +377,7 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
       socket.off('match:ended', onMatchEnded)
       socket.off('match:error', onError)
     }
-  }, [matchId, user?.id])
+  }, [matchId, user?.id, router])
 
   // Hydrate state from socket or REST payload
   const hydrateMatch = (data: any) => {
@@ -377,6 +388,12 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
     if (data.player2) setPlayer2(data.player2)
     if (data.startedAt) setStartedAt(data.startedAt)
     if (data.durationMs) setDurationMs(data.durationMs)
+    if (data.tournamentMatches && data.tournamentMatches.length > 0) {
+      setIsTournamentMatch(true)
+      if (data.tournamentMatches[0]?.tournamentId) {
+        setTournamentId(data.tournamentMatches[0].tournamentId)
+      }
+    }
 
     // Set initial starter code if not set (checking localStorage first)
     if (data.problem?.starterCodes && !code) {
@@ -409,16 +426,37 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
         setPlayer1(m.player1)
         setPlayer2(m.player2)
         if (m.startedAt) setStartedAt(new Date(m.startedAt).getTime())
+        if (m.tournamentMatches && m.tournamentMatches.length > 0) {
+          setIsTournamentMatch(true)
+          if (m.tournamentMatches[0]?.tournamentId) {
+            setTournamentId(m.tournamentMatches[0].tournamentId)
+          }
+        }
         if (m.status === 'FINISHED') {
           setMatchStatus('FINISHED')
         } else {
           setMatchStatus('ACTIVE')
         }
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to fetch REST match:', err)
+      if (err.response?.status === 403) {
+        toast.error(err.response.data?.message || 'Access denied to this 1v1 battle.')
+        router.replace('/battles')
+      }
     }
   }
+
+  // Check authorization for non-participants (redirect if regular 1v1)
+  useEffect(() => {
+    if (user?.id && player1?.id && player2?.id) {
+      const isPart = user.id === player1.id || user.id === player2.id
+      if (!isPart && !isTournamentMatch) {
+        toast.error('Access denied: You are not a participant in this 1v1 battle.')
+        router.replace('/battles')
+      }
+    }
+  }, [user?.id, player1?.id, player2?.id, isTournamentMatch, router])
 
   // 2. Countdown Timer Effect
   useEffect(() => {
@@ -446,6 +484,7 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
 
   // 4. Anti-Cheat Event Listeners (Tab Switch, Focus Loss, Window Resize)
   useEffect(() => {
+    if (isDevelopment || isSpectator) return
     if (matchStatus !== 'ACTIVE') return
 
     const triggerAntiCheatWarning = (
@@ -496,8 +535,8 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
             details: 'DISQUALIFIED',
           })
 
-          // Forfeit match immediately
-          socket.emit('match:leave', { matchId })
+          // Disqualify for cheating immediately
+          socket.emit('match:cheat_disqualify', { matchId, type, details: 'DISQUALIFIED' })
 
           return 2
         }
@@ -542,6 +581,7 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
 
   // Handle Code Editor Paste Interception
   const handlePasteAttempt = (pastedLength: number) => {
+    if (isDevelopment || isSpectator) return
     if (matchStatus !== 'ACTIVE') return
     const now = Date.now()
     if (now - lastAntiCheatTimeRef.current < 2000) return
@@ -718,7 +758,7 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
 
   // Submit Code Action (Emits to Match Engine)
   const handleSubmitCode = () => {
-    if (!problem || isRunning || isSubmitting || matchStatus !== 'ACTIVE') return
+    if (!problem || isRunning || isSubmitting || matchStatus !== 'ACTIVE' || isSpectator) return
     setIsSubmitting(true)
     setIsBottomOpen(true)
     setActiveBottomTab('result')
@@ -737,7 +777,7 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
 
   // Forfeit / Leave Match Action
   const handleForfeitMatch = () => {
-    socket.emit('match:leave', { matchId })
+    socket.emit('match:surrender', { matchId })
     setShowSurrenderModal(false)
   }
 
@@ -761,8 +801,11 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
     }
   }
 
-  const rival = player1?.id === user?.id ? player2 : player1
-  const me = player1?.id === user?.id ? player1 : player2
+  const isParticipant = !!(user?.id && (player1?.id === user.id || player2?.id === user.id))
+  const isSpectator = !isParticipant && isTournamentMatch
+
+  const me = player1?.id === user?.id ? player1 : player2?.id === user?.id ? player2 : player1
+  const rival = player1?.id === user?.id ? player2 : player2?.id === user?.id ? player1 : player2
 
   if (!problem || !player1 || !player2) {
     return (
@@ -783,7 +826,7 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
             <Tooltip>
               <TooltipTrigger asChild>
                 <Link
-                  href="/battles"
+                  href={tournamentId ? `/tournaments/${tournamentId}` : '/battles'}
                   className="p-1.5 rounded-lg hover:bg-surface text-muted-foreground hover:text-foreground transition-colors"
                 >
                   <ArrowLeft className="w-4 h-4" />
@@ -892,12 +935,16 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
                       ? '💀 Disqualified'
                       : antiCheatWarnings === 1
                       ? '⚠️ Warning 1/1 (Final)'
+                      : isDevelopment
+                      ? 'Anti-Cheat Disabled (DEV)'
                       : 'Anti-Cheat Active'}
                   </span>
                 </div>
               </TooltipTrigger>
               <TooltipContent side="bottom" className="text-xs max-w-xs">
-                Anti-Cheat Active: Tab focus, paste control, and window dimensions are monitored
+                {isDevelopment
+                  ? 'Anti-Cheat Disabled: NEXT_PUBLIC_APP_ENV is set to DEVELOPMENT'
+                  : 'Anti-Cheat Active: Tab focus, paste control, and window dimensions are monitored'}
               </TooltipContent>
             </Tooltip>
 
@@ -1147,7 +1194,7 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
                       <Button
                         size="sm"
                         onClick={handleRunCode}
-                        disabled={isRunning || isSubmitting}
+                        disabled={isRunning || isSubmitting || isSpectator}
                         className="bg-surface hover:bg-surface-2 text-foreground border border-border text-xs font-semibold gap-1.5 h-7 px-3"
                       >
                         {isRunning ? <Loader2 className="w-3.5 h-3.5 animate-spin text-accent" /> : <Play className="w-3.5 h-3.5 text-emerald-400 fill-emerald-400" />}
@@ -1157,7 +1204,7 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
                       <Button
                         size="sm"
                         onClick={handleSubmitCode}
-                        disabled={isRunning || isSubmitting || matchStatus !== 'ACTIVE'}
+                        disabled={isRunning || isSubmitting || matchStatus !== 'ACTIVE' || isSpectator}
                         className="bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-extrabold gap-1.5 h-7 px-4 shadow-md"
                       >
                         {isSubmitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Flame className="w-3.5 h-3.5 fill-white" />}
@@ -1175,6 +1222,7 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
                       onChange={handleCodeChange}
                       onResetCode={handleResetCode}
                       onPasteAttempt={handlePasteAttempt}
+                      readOnly={isSpectator}
                       storageKey={`coderival_code_battle_${matchId}_${selectedLanguage}`}
                     />
                   </div>
@@ -1308,7 +1356,7 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
                     <Button
                       size="sm"
                       onClick={handleRunCode}
-                      disabled={isRunning || isSubmitting}
+                      disabled={isRunning || isSubmitting || isSpectator}
                       className="bg-surface hover:bg-surface-2 text-foreground border border-border text-xs font-semibold gap-1.5 h-7 px-3"
                     >
                       {isRunning ? <Loader2 className="w-3.5 h-3.5 animate-spin text-accent" /> : <Play className="w-3.5 h-3.5 text-emerald-400 fill-emerald-400" />}
@@ -1318,7 +1366,7 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
                     <Button
                       size="sm"
                       onClick={handleSubmitCode}
-                      disabled={isRunning || isSubmitting || matchStatus !== 'ACTIVE'}
+                      disabled={isRunning || isSubmitting || matchStatus !== 'ACTIVE' || isSpectator}
                       className="bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-extrabold gap-1.5 h-7 px-4 shadow-md"
                     >
                       {isSubmitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Flame className="w-3.5 h-3.5 fill-white" />}
@@ -1336,6 +1384,7 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
                     onChange={handleCodeChange}
                     onResetCode={handleResetCode}
                     onPasteAttempt={handlePasteAttempt}
+                    readOnly={isSpectator}
                     storageKey={`coderival_code_battle_${matchId}_${selectedLanguage}`}
                   />
                 </div>
@@ -1448,19 +1497,35 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
                   ? 'VICTORY!'
                   : matchEndedData.result === 'DRAW'
                   ? 'MATCH DRAW'
-                  : antiCheatWarnings >= 2
+                  : matchEndedData.reason === 'OPPONENT_CHEATED' && matchEndedData.winnerId !== user?.id
                   ? 'DISQUALIFIED'
+                  : matchEndedData.reason === 'OPPONENT_SURRENDERED' && matchEndedData.winnerId !== user?.id
+                  ? 'SURRENDERED'
                   : 'DEFEAT'}
               </h2>
 
-              <p className="text-xs text-muted-foreground font-mono">
-                {matchEndedData.winnerId === user?.id
-                  ? 'You submitted an Accepted solution first and won the duel!'
-                  : matchEndedData.result === 'DRAW'
-                  ? 'Both contenders finished with equal score.'
-                  : antiCheatWarnings >= 2
-                  ? 'Disqualified from match due to repeated tab switching / anti-cheat violation.'
-                  : 'Opponent claimed the duel victory.'}
+              <p className="text-xs md:text-sm font-semibold max-w-md mx-auto px-4 py-2.5 rounded-xl bg-surface border border-border/80 text-foreground">
+                {(() => {
+                  const isWinner = matchEndedData.winnerId === user?.id
+                  const isDraw = matchEndedData.result === 'DRAW'
+                  const reason = matchEndedData.reason
+
+                  if (isWinner) {
+                    if (reason === 'OPPONENT_CHEATED') return '🏆 Won: Opponent was disqualified for cheating / anti-cheat violation.'
+                    if (reason === 'OPPONENT_SURRENDERED') return '🏆 Won: Opponent surrendered the duel.'
+                    if (reason === 'OPPONENT_DISCONNECTED') return '🏆 Won: Opponent disconnected from the match.'
+                    if (reason === 'TIMEOUT') return '🏆 Won: Higher test case score at match timeout.'
+                    return '🏆 Won: Submitted an Accepted solution first!'
+                  } else if (isDraw) {
+                    return '🤝 Draw: Match ended with equal score at timeout.'
+                  } else {
+                    if (reason === 'OPPONENT_CHEATED' || antiCheatWarnings >= 2) return '💀 Lost: You were disqualified for anti-cheat violation.'
+                    if (reason === 'OPPONENT_SURRENDERED') return '💀 Lost: You surrendered the duel.'
+                    if (reason === 'OPPONENT_DISCONNECTED') return '💀 Lost: You disconnected from the match.'
+                    if (reason === 'TIMEOUT') return '💀 Lost: Opponent had higher score at match timeout.'
+                    return '💀 Lost: Opponent submitted an Accepted solution first.'
+                  }
+                })()}
               </p>
             </div>
 
@@ -1512,13 +1577,23 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
 
             {/* Action Buttons */}
             <div className="flex flex-col sm:flex-row items-center gap-4 pt-2">
-              <Button
-                size="lg"
-                onClick={() => router.push('/battles')}
-                className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-extrabold h-12 gap-2"
-              >
-                <Zap className="w-4 h-4 fill-white" /> Find Next 1v1 Duel
-              </Button>
+              {tournamentId || matchEndedData?.tournamentId ? (
+                <Button
+                  size="lg"
+                  onClick={() => router.push(`/tournaments/${tournamentId || matchEndedData?.tournamentId}`)}
+                  className="w-full bg-amber-600 hover:bg-amber-500 text-white font-extrabold h-12 gap-2 shadow-lg shadow-amber-600/20"
+                >
+                  <Trophy className="w-4 h-4 text-amber-300" /> Return to Tournament Bracket
+                </Button>
+              ) : (
+                <Button
+                  size="lg"
+                  onClick={() => router.push('/battles')}
+                  className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-extrabold h-12 gap-2"
+                >
+                  <Zap className="w-4 h-4 fill-white" /> Find Next 1v1 Duel
+                </Button>
+              )}
               <Button
                 size="lg"
                 variant="outline"

@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react'
 import Editor, { BeforeMount, OnMount } from '@monaco-editor/react'
+import { isDevelopment } from '@/lib/config'
 import {
   Loader2,
   ShieldCheck,
@@ -159,6 +160,11 @@ export function SecureMonacoEditor({
       })
     })
 
+    // If DEVELOPMENT mode, completely disable anti-cheat functionality & event listeners
+    if (isDevelopment) {
+      return
+    }
+
     // 1. Override Monaco Clipboard Paste Command
     try {
       editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyV, () => {
@@ -237,13 +243,15 @@ export function SecureMonacoEditor({
 
           <div className="flex items-center gap-1 px-2 py-0.5 rounded bg-[#282828] text-[11px] font-medium text-emerald-400">
             <ShieldCheck className="w-3 h-3 text-emerald-400" />
-            <span>Anti-Cheat</span>
+            <span>{isDevelopment ? 'Anti-Cheat Disabled (DEV)' : 'Anti-Cheat'}</span>
           </div>
 
-          <div className="hidden sm:flex items-center gap-1 text-[10px] text-amber-400/90 font-mono">
-            <Lock className="w-3 h-3" />
-            <span>Paste Blocked</span>
-          </div>
+          {!isDevelopment && (
+            <div className="hidden sm:flex items-center gap-1 text-[10px] text-amber-400/90 font-mono">
+              <Lock className="w-3 h-3" />
+              <span>Paste Blocked</span>
+            </div>
+          )}
         </div>
 
         {/* Right: Actions toolbar */}
@@ -324,7 +332,7 @@ export function SecureMonacoEditor({
             smoothScrolling: true,
             folding: true,
             wordWrap: 'on',
-            contextmenu: false,
+            contextmenu: isDevelopment ? true : false,
           }}
           loading={
             <div className="flex items-center justify-center h-full gap-2 text-sm text-muted-foreground bg-[#0d1117]">

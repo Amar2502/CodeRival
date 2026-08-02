@@ -3,8 +3,15 @@ import { db } from "../../config/db";
 import { TournamentStatus, TournamentMatchRound, MatchStatus } from "../../generated/prisma/client";
 import { createMatch } from "../match/match.service";
 
-export const createTournamentService = async (creatorId: string, title?: string) => {
-  // Check if creator has at least 7 friends
+export const createTournamentService = async (
+  creatorId: string,
+  title?: string,
+  maxPlayersInput: number = 8
+) => {
+  const maxPlayers = maxPlayersInput === 4 ? 4 : 8;
+  const requiredFriends = maxPlayers - 1; // 3 for 4-player, 7 for 8-player
+
+  // Check if creator has enough friends
   const friendCount = await db.friendship.count({
     where: {
       OR: [
@@ -14,16 +21,17 @@ export const createTournamentService = async (creatorId: string, title?: string)
     },
   });
 
-  if (friendCount < 7) {
+  if (friendCount < requiredFriends) {
     throw new Error(
-      `You need at least 7 friends to create an 8-player tournament. You currently have ${friendCount} friend(s). Please add more friends first!`
+      `You need at least ${requiredFriends} friends to create a ${maxPlayers}-player tournament. You currently have ${friendCount} friend(s). Please add more friends first!`
     );
   }
 
   // 1. Create Tournament record
   const tournament = await db.tournament.create({
     data: {
-      title: title || "8-Player Championship",
+      title: title || `${maxPlayers}-Player Championship`,
+      maxPlayers,
       creatorId,
       status: TournamentStatus.WAITING_FOR_PLAYERS,
     },
@@ -38,7 +46,7 @@ export const createTournamentService = async (creatorId: string, title?: string)
     },
   });
 
-  // 3. Pre-create the 7 bracket nodes for Single Elimination (4 QF, 2 SF, 1 Final)
+  // 3. Pre-create the bracket nodes for Single Elimination
   // Create Finals node first so SF can point to it
   const finalMatch = await db.tournamentMatch.create({
     data: {
@@ -48,68 +56,94 @@ export const createTournamentService = async (creatorId: string, title?: string)
     },
   });
 
-  // Create Semifinals nodes pointing to finalMatch
-  const sf0 = await db.tournamentMatch.create({
-    data: {
-      tournamentId: tournament.id,
-      round: TournamentMatchRound.SEMIFINALS,
-      matchIndex: 0,
-      nextMatchId: finalMatch.id,
-      nextMatchSlot: 1,
-    },
-  });
+  if (maxPlayers === 4) {
+    // 4-Player Bracket: 2 Semifinals -> 1 Final
+    // SF0: Seed 1 (creator) vs Seed 4 -> winner to Finals slot 1
+    await db.tournamentMatch.create({
+      data: {
+        tournamentId: tournament.id,
+        round: TournamentMatchRound.SEMIFINALS,
+        matchIndex: 0,
+        player1Id: creatorId, // Seed 1
+        nextMatchId: finalMatch.id,
+        nextMatchSlot: 1,
+      },
+    });
 
-  const sf1 = await db.tournamentMatch.create({
-    data: {
-      tournamentId: tournament.id,
-      round: TournamentMatchRound.SEMIFINALS,
-      matchIndex: 1,
-      nextMatchId: finalMatch.id,
-      nextMatchSlot: 2,
-    },
-  });
+    // SF1: Seed 2 vs Seed 3 -> winner to Finals slot 2
+    await db.tournamentMatch.create({
+      data: {
+        tournamentId: tournament.id,
+        round: TournamentMatchRound.SEMIFINALS,
+        matchIndex: 1,
+        nextMatchId: finalMatch.id,
+        nextMatchSlot: 2,
+      },
+    });
+  } else {
+    // 8-Player Bracket: 4 Quarterfinals -> 2 Semifinals -> 1 Final
+    const sf0 = await db.tournamentMatch.create({
+      data: {
+        tournamentId: tournament.id,
+        round: TournamentMatchRound.SEMIFINALS,
+        matchIndex: 0,
+        nextMatchId: finalMatch.id,
+        nextMatchSlot: 1,
+      },
+    });
 
-  // Create Quarterfinals nodes: QF0 & QF1 -> SF0, QF2 & QF3 -> SF1
-  const qf0 = await db.tournamentMatch.create({
-    data: {
-      tournamentId: tournament.id,
-      round: TournamentMatchRound.QUARTERFINALS,
-      matchIndex: 0,
-      player1Id: creatorId, // Seed 1
-      nextMatchId: sf0.id,
-      nextMatchSlot: 1,
-    },
-  });
+    const sf1 = await db.tournamentMatch.create({
+      data: {
+        tournamentId: tournament.id,
+        round: TournamentMatchRound.SEMIFINALS,
+        matchIndex: 1,
+        nextMatchId: finalMatch.id,
+        nextMatchSlot: 2,
+      },
+    });
 
-  await db.tournamentMatch.create({
-    data: {
-      tournamentId: tournament.id,
-      round: TournamentMatchRound.QUARTERFINALS,
-      matchIndex: 1,
-      nextMatchId: sf0.id,
-      nextMatchSlot: 2,
-    },
-  });
+    // Quarterfinals nodes: QF0 & QF1 -> SF0, QF2 & QF3 -> SF1
+    await db.tournamentMatch.create({
+      data: {
+        tournamentId: tournament.id,
+        round: TournamentMatchRound.QUARTERFINALS,
+        matchIndex: 0,
+        player1Id: creatorId, // Seed 1
+        nextMatchId: sf0.id,
+        nextMatchSlot: 1,
+      },
+    });
 
-  await db.tournamentMatch.create({
-    data: {
-      tournamentId: tournament.id,
-      round: TournamentMatchRound.QUARTERFINALS,
-      matchIndex: 2,
-      nextMatchId: sf1.id,
-      nextMatchSlot: 1,
-    },
-  });
+    await db.tournamentMatch.create({
+      data: {
+        tournamentId: tournament.id,
+        round: TournamentMatchRound.QUARTERFINALS,
+        matchIndex: 1,
+        nextMatchId: sf0.id,
+        nextMatchSlot: 2,
+      },
+    });
 
-  await db.tournamentMatch.create({
-    data: {
-      tournamentId: tournament.id,
-      round: TournamentMatchRound.QUARTERFINALS,
-      matchIndex: 3,
-      nextMatchId: sf1.id,
-      nextMatchSlot: 2,
-    },
-  });
+    await db.tournamentMatch.create({
+      data: {
+        tournamentId: tournament.id,
+        round: TournamentMatchRound.QUARTERFINALS,
+        matchIndex: 2,
+        nextMatchId: sf1.id,
+        nextMatchSlot: 1,
+      },
+    });
+
+    await db.tournamentMatch.create({
+      data: {
+        tournamentId: tournament.id,
+        round: TournamentMatchRound.QUARTERFINALS,
+        matchIndex: 3,
+        nextMatchId: sf1.id,
+        nextMatchSlot: 2,
+      },
+    });
+  }
 
   return getTournamentDetails(tournament.id);
 };
@@ -174,6 +208,12 @@ export const inviteFriendsToTournament = async (
     throw new Error("Tournament registration is closed.");
   }
 
+  const maxPlayers = tournament.maxPlayers || 8;
+  const currentParticipantCount = tournament.participants.length;
+  if (currentParticipantCount >= maxPlayers) {
+    throw new Error(`Tournament is full (${maxPlayers}/${maxPlayers} players).`);
+  }
+
   const sender = await db.user.findUnique({
     where: { id: senderId },
     select: { id: true, username: true, name: true, avatar_url: true },
@@ -233,8 +273,9 @@ export const acceptTournamentInvite = async (
   }
 
   const currentCount = tournament.participants.length;
-  if (currentCount >= 8) {
-    throw new Error("Tournament is full (8/8 players).");
+  const maxPlayers = tournament.maxPlayers || 8;
+  if (currentCount >= maxPlayers) {
+    throw new Error(`Tournament is full (${maxPlayers}/${maxPlayers} players).`);
   }
 
   const existing = tournament.participants.find((p) => p.userId === userId);
@@ -253,32 +294,55 @@ export const acceptTournamentInvite = async (
     },
   });
 
-  // Assign user to Quarterfinal match slot based on seed
-  // Standard 8-Player Seed Mapping:
-  // QF0: Seed 1 vs Seed 8
-  // QF1: Seed 4 vs Seed 5
-  // QF2: Seed 2 vs Seed 7
-  // QF3: Seed 3 vs Seed 6
-  let qfIndex = 0;
-  let slot = 1;
+  // Assign user to match slot based on seed
+  if (maxPlayers === 4) {
+    // 4-Player Seed Mapping:
+    // SF0: Seed 1 (slot 1) vs Seed 4 (slot 2)
+    // SF1: Seed 2 (slot 1) vs Seed 3 (slot 2)
+    let sfIndex = 0;
+    let slot = 1;
 
-  if (seed === 2) { qfIndex = 2; slot = 1; }
-  else if (seed === 3) { qfIndex = 3; slot = 1; }
-  else if (seed === 4) { qfIndex = 1; slot = 1; }
-  else if (seed === 5) { qfIndex = 1; slot = 2; }
-  else if (seed === 6) { qfIndex = 3; slot = 2; }
-  else if (seed === 7) { qfIndex = 2; slot = 2; }
-  else if (seed === 8) { qfIndex = 0; slot = 2; }
+    if (seed === 2) { sfIndex = 1; slot = 1; }
+    else if (seed === 3) { sfIndex = 1; slot = 2; }
+    else if (seed === 4) { sfIndex = 0; slot = 2; }
 
-  const qfMatch = tournament.matches.find(
-    (m) => m.round === TournamentMatchRound.QUARTERFINALS && m.matchIndex === qfIndex
-  );
+    const sfMatch = tournament.matches.find(
+      (m) => m.round === TournamentMatchRound.SEMIFINALS && m.matchIndex === sfIndex
+    );
 
-  if (qfMatch) {
-    await db.tournamentMatch.update({
-      where: { id: qfMatch.id },
-      data: slot === 1 ? { player1Id: userId } : { player2Id: userId },
-    });
+    if (sfMatch) {
+      await db.tournamentMatch.update({
+        where: { id: sfMatch.id },
+        data: slot === 1 ? { player1Id: userId } : { player2Id: userId },
+      });
+    }
+  } else {
+    // Standard 8-Player Seed Mapping:
+    // QF0: Seed 1 vs Seed 8
+    // QF1: Seed 4 vs Seed 5
+    // QF2: Seed 2 vs Seed 7
+    // QF3: Seed 3 vs Seed 6
+    let qfIndex = 0;
+    let slot = 1;
+
+    if (seed === 2) { qfIndex = 2; slot = 1; }
+    else if (seed === 3) { qfIndex = 3; slot = 1; }
+    else if (seed === 4) { qfIndex = 1; slot = 1; }
+    else if (seed === 5) { qfIndex = 1; slot = 2; }
+    else if (seed === 6) { qfIndex = 3; slot = 2; }
+    else if (seed === 7) { qfIndex = 2; slot = 2; }
+    else if (seed === 8) { qfIndex = 0; slot = 2; }
+
+    const qfMatch = tournament.matches.find(
+      (m) => m.round === TournamentMatchRound.QUARTERFINALS && m.matchIndex === qfIndex
+    );
+
+    if (qfMatch) {
+      await db.tournamentMatch.update({
+        where: { id: qfMatch.id },
+        data: slot === 1 ? { player1Id: userId } : { player2Id: userId },
+      });
+    }
   }
 
   // Update invite status if exists
@@ -287,9 +351,9 @@ export const acceptTournamentInvite = async (
     data: { status: "ACCEPTED" },
   });
 
-  // Check if tournament is now full (8/8)
+  // Check if tournament is now full
   const updatedParticipantsCount = currentCount + 1;
-  if (updatedParticipantsCount === 8) {
+  if (updatedParticipantsCount === maxPlayers) {
     await startTournamentEngine(io, tournamentId);
   } else {
     // Notify all connected sockets in tournament room
@@ -300,27 +364,35 @@ export const acceptTournamentInvite = async (
 };
 
 export const startTournamentEngine = async (io: Server, tournamentId: string) => {
+  const tournament = await db.tournament.findUnique({
+    where: { id: tournamentId },
+    select: { maxPlayers: true },
+  });
+
+  const maxPlayers = tournament?.maxPlayers || 8;
+  const startingRound = maxPlayers === 4 ? TournamentMatchRound.SEMIFINALS : TournamentMatchRound.QUARTERFINALS;
+
   // Update tournament status to IN_PROGRESS
   await db.tournament.update({
     where: { id: tournamentId },
     data: { status: TournamentStatus.IN_PROGRESS },
   });
 
-  const qfMatches = await db.tournamentMatch.findMany({
-    where: { tournamentId, round: TournamentMatchRound.QUARTERFINALS },
+  const startingMatches = await db.tournamentMatch.findMany({
+    where: { tournamentId, round: startingRound },
     include: { player1: true, player2: true },
   });
 
-  // Create 1v1 Match records for all 4 Quarterfinal matches
-  for (const qf of qfMatches) {
-    if (qf.player1Id && qf.player2Id) {
+  // Create 1v1 Match records for all starting matches
+  for (const matchNode of startingMatches) {
+    if (matchNode.player1Id && matchNode.player2Id) {
       const match = await createMatch(
-        { userId: qf.player1Id, socketId: "", joinedAt: Date.now(), rating: qf.player1?.rating || 1200 },
-        { userId: qf.player2Id, socketId: "", joinedAt: Date.now(), rating: qf.player2?.rating || 1200 }
+        { userId: matchNode.player1Id, socketId: "", joinedAt: Date.now(), rating: matchNode.player1?.rating || 1200 },
+        { userId: matchNode.player2Id, socketId: "", joinedAt: Date.now(), rating: matchNode.player2?.rating || 1200 }
       );
 
       await db.tournamentMatch.update({
-        where: { id: qf.id },
+        where: { id: matchNode.id },
         data: { matchId: match.id },
       });
     }
@@ -331,11 +403,13 @@ export const startTournamentEngine = async (io: Server, tournamentId: string) =>
   // Broadcast tournament start to all connected clients
   io.to(`tournament:${tournamentId}`).emit("tournament:started", updatedTournament);
 
-  // Notify each player in Quarterfinals that their match is ready
+  const roundLabel = maxPlayers === 4 ? "Semifinal" : "Quarterfinal";
+
+  // Notify each player in starting matches that their match is ready
   for (const p of updatedTournament?.participants || []) {
     io.to(`user:${p.userId}`).emit("tournament:match_ready", {
       tournamentId,
-      message: "Quarterfinal Match is Live! Enter Arena!",
+      message: `${roundLabel} Match is Live! Enter Arena!`,
     });
   }
 };

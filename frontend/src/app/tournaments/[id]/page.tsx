@@ -34,6 +34,7 @@ import { api } from '@/lib/axios'
 import { socket } from '@/lib/socket'
 import { useAuthStore } from '@/lib/authStore'
 import { UserAvatar } from '@/components/UserAvatar'
+import { isDevelopment } from '@/lib/config'
 
 interface Player {
   id: string
@@ -59,6 +60,7 @@ interface TournamentMatch {
 interface TournamentDetail {
   id: string
   title: string
+  maxPlayers: number
   status: 'WAITING_FOR_PLAYERS' | 'IN_PROGRESS' | 'FINISHED' | 'CANCELLED'
   creatorId: string
   creator: Player
@@ -170,10 +172,11 @@ export default function TournamentBracketPage({ params }: { params: Promise<{ id
 
   const fetchFriends = async () => {
     try {
-      const res = await api.get('/friends/list')
-      const friends = res.data?.friends || []
+      const res = await api.get('/friends')
+      const rawFriends = res.data?.friends || []
+      const friends = rawFriends.map((f: any) => f.user || f)
       const participantIds = new Set(tournament?.participants.map((p) => p.userId))
-      setFriendsList(friends.filter((f: FriendItem) => !participantIds.has(f.id)))
+      setFriendsList(friends.filter((f: FriendItem) => f && !participantIds.has(f.id)))
     } catch (err) {
       console.error('Failed to fetch friends list:', err)
     }
@@ -228,6 +231,34 @@ export default function TournamentBracketPage({ params }: { params: Promise<{ id
     return tournament?.matches.find((m) => m.round === round && m.matchIndex === index)
   }
 
+  if (!isDevelopment) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col">
+        <Header />
+        <main className="flex-1 max-w-3xl mx-auto px-4 py-16 w-full flex flex-col items-center justify-center text-center space-y-6">
+          <div className="p-4 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400">
+            <Clock className="w-10 h-10 animate-pulse" />
+          </div>
+          <div className="space-y-2">
+            <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-400 text-xs font-bold uppercase tracking-wider">
+              <Sparkles className="w-3.5 h-3.5" />
+              Upcoming Feature
+            </div>
+            <h1 className="text-3xl font-extrabold text-foreground">Tournament Arena Upcoming</h1>
+            <p className="text-sm text-muted-foreground max-w-md mx-auto">
+              Tournament brackets are under development in PRODUCTION mode. Set <code className="text-primary font-mono bg-surface px-1.5 py-0.5 rounded">NEXT_PUBLIC_APP_ENV=DEVELOPMENT</code> in your <code className="text-primary font-mono bg-surface px-1.5 py-0.5 rounded">.env</code> to test tournament matches.
+            </p>
+          </div>
+          <Link href="/tournaments">
+            <Button className="bg-primary text-primary-foreground font-bold">
+              Back to Tournaments
+            </Button>
+          </Link>
+        </main>
+      </div>
+    )
+  }
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex flex-col">
@@ -254,6 +285,7 @@ export default function TournamentBracketPage({ params }: { params: Promise<{ id
   }
 
   const isCreator = user?.id === tournament.creatorId
+  const maxPlayers = tournament.maxPlayers || 8
   const qfMatches = [0, 1, 2, 3].map((i) => getMatchByRoundAndIndex('QUARTERFINALS', i))
   const sfMatches = [0, 1].map((i) => getMatchByRoundAndIndex('SEMIFINALS', i))
   const finalMatch = getMatchByRoundAndIndex('FINALS', 0)
@@ -289,7 +321,7 @@ export default function TournamentBracketPage({ params }: { params: Promise<{ id
                         tournament.status === 'CANCELLED' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' :
                         'bg-purple-500/10 text-purple-400 border-purple-500/20'
                       }`}>
-                        {tournament.status === 'WAITING_FOR_PLAYERS' ? `Waiting (${tournament.participants.length}/8)` :
+                        {tournament.status === 'WAITING_FOR_PLAYERS' ? `Waiting (${tournament.participants.length}/${maxPlayers})` :
                          tournament.status === 'IN_PROGRESS' ? 'In Progress' :
                          tournament.status === 'CANCELLED' ? 'Cancelled' : 'Completed'}
                       </span>
@@ -299,7 +331,7 @@ export default function TournamentBracketPage({ params }: { params: Promise<{ id
                     </TooltipContent>
                   </Tooltip>
                 </div>
-                <p className="text-xs text-muted-foreground">Organized by @{tournament.creator.username} • 8-Player Single Elimination</p>
+                <p className="text-xs text-muted-foreground">Organized by @{tournament.creator.username} • {maxPlayers}-Player Single Elimination</p>
               </div>
             </div>
 
@@ -313,7 +345,7 @@ export default function TournamentBracketPage({ params }: { params: Promise<{ id
                       className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs gap-1.5 shadow-md cursor-pointer"
                     >
                       <UserPlus className="w-4 h-4" />
-                      Invite Friends ({tournament.participants.length}/8)
+                      Invite Friends ({tournament.participants.length}/{maxPlayers})
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent side="bottom" className="text-xs">
@@ -371,35 +403,37 @@ export default function TournamentBracketPage({ params }: { params: Promise<{ id
               🏆 TOURNAMENT CHAMPION: @{tournament.winner.username}! 🏆
             </h2>
             <p className="text-xs text-amber-300/80 font-mono">
-              Victorious in 3 consecutive Single Elimination rounds!
+              Victorious in {maxPlayers === 4 ? '2' : '3'} consecutive Single Elimination rounds!
             </p>
           </div>
         )}
 
-        {/* 8-Player Bracket Columns */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-12 items-center min-w-[850px] py-4">
+        {/* Bracket Columns */}
+        <div className={`grid grid-cols-1 ${maxPlayers === 4 ? 'md:grid-cols-2 max-w-4xl mx-auto' : 'md:grid-cols-3 min-w-[850px]'} gap-8 md:gap-12 items-center py-4`}>
 
-          {/* ─── COLUMN 1: QUARTERFINALS ─── */}
-          <div className="space-y-6">
-            <div className="text-center font-bold text-xs uppercase tracking-wider text-muted-foreground flex items-center justify-center gap-1.5 pb-2 border-b border-border">
-              <Swords className="w-4 h-4 text-primary" /> Quarterfinals (Round 1)
+          {/* ─── COLUMN 1: QUARTERFINALS (Only 8-Player) ─── */}
+          {maxPlayers === 8 && (
+            <div className="space-y-6">
+              <div className="text-center font-bold text-xs uppercase tracking-wider text-muted-foreground flex items-center justify-center gap-1.5 pb-2 border-b border-border">
+                <Swords className="w-4 h-4 text-primary" /> Quarterfinals (Round 1)
+              </div>
+
+              {qfMatches.map((match, idx) => (
+                <TournamentMatchCard
+                  key={match?.id || idx}
+                  match={match}
+                  label={`QF Match ${idx + 1}`}
+                  currentUserId={user?.id}
+                  onEnterMatch={(mId) => router.push(`/battles/${mId}`)}
+                />
+              ))}
             </div>
+          )}
 
-            {qfMatches.map((match, idx) => (
-              <TournamentMatchCard
-                key={match?.id || idx}
-                match={match}
-                label={`QF Match ${idx + 1}`}
-                currentUserId={user?.id}
-                onEnterMatch={(mId) => router.push(`/battles/${mId}`)}
-              />
-            ))}
-          </div>
-
-          {/* ─── COLUMN 2: SEMIFINALS ─── */}
+          {/* ─── COLUMN: SEMIFINALS ─── */}
           <div className="space-y-16">
             <div className="text-center font-bold text-xs uppercase tracking-wider text-muted-foreground flex items-center justify-center gap-1.5 pb-2 border-b border-border">
-              <Zap className="w-4 h-4 text-accent" /> Semifinals (Round 2)
+              <Zap className="w-4 h-4 text-accent" /> Semifinals {maxPlayers === 4 ? '(Round 1)' : '(Round 2)'}
             </div>
 
             {sfMatches.map((match, idx) => (
@@ -413,7 +447,7 @@ export default function TournamentBracketPage({ params }: { params: Promise<{ id
             ))}
           </div>
 
-          {/* ─── COLUMN 3: FINALS & TROPHY ─── */}
+          {/* ─── COLUMN: FINALS & TROPHY ─── */}
           <div className="space-y-8 flex flex-col items-center">
             <div className="text-center space-y-2">
               <div className="relative inline-block">
@@ -425,7 +459,7 @@ export default function TournamentBracketPage({ params }: { params: Promise<{ id
                 </div>
               </div>
               <div className="text-xs font-bold uppercase tracking-wider text-amber-400">
-                Finals (Championship)
+                Finals {maxPlayers === 4 ? '(Round 2)' : '(Round 3)'}
               </div>
             </div>
 
@@ -453,7 +487,7 @@ export default function TournamentBracketPage({ params }: { params: Promise<{ id
                 Invite Friends ({tournament.participants.length}/8 Slots Filled)
               </CardTitle>
               <CardDescription>
-                Select friends to invite to this 8-player bracket.
+                Select friends to invite to this {maxPlayers}-player bracket.
               </CardDescription>
             </CardHeader>
 

@@ -172,6 +172,8 @@ export const getUserProfile = async (req: Request, res: Response) => {
         player1Id: true,
         player2Id: true,
         winnerId: true,
+        result: true,
+        reason: true,
         problem: {
           select: {
             title: true,

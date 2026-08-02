@@ -26,10 +26,12 @@ import { api } from '@/lib/axios'
 import { socket } from '@/lib/socket'
 import { useAuthStore } from '@/lib/authStore'
 import { UserAvatar } from '@/components/UserAvatar'
+import { isDevelopment } from '@/lib/config'
 
 interface TournamentItem {
   id: string
   title: string
+  maxPlayers?: number
   status: 'WAITING_FOR_PLAYERS' | 'IN_PROGRESS' | 'FINISHED' | 'CANCELLED'
   createdAt: string
   creator: { id: string; username: string; avatar_url?: string }
@@ -62,6 +64,7 @@ export default function TournamentsLobbyPage() {
   // Create Tournament Modal state
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [tournamentTitle, setTournamentTitle] = useState('')
+  const [maxPlayers, setMaxPlayers] = useState<4 | 8>(8)
   const [isCreating, setIsCreating] = useState(false)
   const [createError, setCreateError] = useState('')
   const [acceptingId, setAcceptingId] = useState<string | null>(null)
@@ -89,7 +92,7 @@ export default function TournamentsLobbyPage() {
       const [tournamentsRes, invitesRes, friendsRes] = await Promise.all([
         api.get('/tournament/list').catch(() => ({ data: { tournaments: [] } })),
         api.get('/tournament/invites').catch(() => ({ data: { invites: [] } })),
-        api.get('/friends/list').catch(() => ({ data: { friends: [] } })),
+        api.get('/friends').catch(() => ({ data: { friends: [] } })),
       ])
       setTournaments(tournamentsRes.data?.tournaments || [])
       setInvites(invitesRes.data?.invites || [])
@@ -105,8 +108,9 @@ export default function TournamentsLobbyPage() {
     e.preventDefault()
     setCreateError('')
 
-    if (friendsCount < 7) {
-      setCreateError(`You currently have ${friendsCount} friend(s). You must have at least 7 friends to create an 8-player tournament!`)
+    const requiredFriends = maxPlayers - 1
+    if (friendsCount < requiredFriends) {
+      setCreateError(`You currently have ${friendsCount} friend(s). You must have at least ${requiredFriends} friends to create a ${maxPlayers}-player tournament!`)
       return
     }
 
@@ -114,6 +118,7 @@ export default function TournamentsLobbyPage() {
     try {
       const res = await api.post('/tournament/create', {
         title: tournamentTitle.trim() || undefined,
+        maxPlayers,
       })
       if (res.data?.tournament?.id) {
         setIsCreateOpen(false)
@@ -142,6 +147,90 @@ export default function TournamentsLobbyPage() {
     }
   }
 
+  if (!isDevelopment) {
+    return (
+      <div className="min-h-screen bg-background text-foreground flex flex-col">
+        <Header />
+
+        <main className="flex-1 max-w-5xl mx-auto px-4 py-16 w-full flex flex-col items-center justify-center text-center space-y-8">
+          <div className="relative">
+            <div className="absolute inset-0 bg-primary/20 rounded-full blur-2xl animate-pulse" />
+            <div className="relative w-24 h-24 rounded-3xl bg-linear-to-br from-primary/20 via-surface to-accent/20 border border-primary/30 flex items-center justify-center shadow-2xl">
+              <Trophy className="w-12 h-12 text-amber-400 animate-bounce" />
+            </div>
+          </div>
+
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-400 text-xs font-bold uppercase tracking-wider">
+            <Sparkles className="w-4 h-4 animate-pulse" />
+            Upcoming Feature • Season 1
+          </div>
+
+          <div className="space-y-3 max-w-2xl">
+            <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight text-foreground">
+              Tournament Arena
+            </h1>
+            <p className="text-base md:text-lg text-muted-foreground leading-relaxed">
+              Bracket-style single-elimination championships with real-time duel spectating, custom friend invitations, and competitive tournament ratings are currently under active development.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 w-full pt-4">
+            <Card className="border-border bg-card/60 backdrop-blur-xs text-left p-5 space-y-2">
+              <div className="p-2 rounded-lg bg-primary/10 w-fit text-primary">
+                <Trophy className="w-5 h-5" />
+              </div>
+              <h3 className="font-bold text-foreground text-sm">Bracket Championships</h3>
+              <p className="text-xs text-muted-foreground leading-normal">
+                4 and 8-player single elimination tournaments with live seed progression.
+              </p>
+            </Card>
+
+            <Card className="border-border bg-card/60 backdrop-blur-xs text-left p-5 space-y-2">
+              <div className="p-2 rounded-lg bg-emerald-500/10 w-fit text-emerald-400">
+                <Swords className="w-5 h-5" />
+              </div>
+              <h3 className="font-bold text-foreground text-sm">Real-Time Duels</h3>
+              <p className="text-xs text-muted-foreground leading-normal">
+                Head-to-head coding battles with instant match assignment & bracket tree updates.
+              </p>
+            </Card>
+
+            <Card className="border-border bg-card/60 backdrop-blur-xs text-left p-5 space-y-2">
+              <div className="p-2 rounded-lg bg-accent/10 w-fit text-accent">
+                <Users className="w-5 h-5" />
+              </div>
+              <h3 className="font-bold text-foreground text-sm">Friend Invitations</h3>
+              <p className="text-xs text-muted-foreground leading-normal">
+                Create custom private tournaments and invite your friends to compete.
+              </p>
+            </Card>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-center gap-4 pt-4">
+            <Link href="/battles">
+              <Button size="lg" className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold shadow-lg shadow-primary/25 rounded-xl gap-2 px-6 h-12 cursor-pointer">
+                <Swords className="w-5 h-5" />
+                Play 1v1 Battles Now
+              </Button>
+            </Link>
+            <Link href="/problems">
+              <Button size="lg" variant="outline" className="border-border hover:bg-surface text-foreground font-semibold rounded-xl gap-2 px-6 h-12">
+                <ArrowRight className="w-4 h-4" />
+                Practice Coding Problems
+              </Button>
+            </Link>
+          </div>
+
+          <div className="pt-8 border-t border-border/60 w-full max-w-md">
+            <p className="text-[11px] text-muted-foreground font-mono">
+              💡 Developer Note: Set <code className="text-primary bg-surface px-1.5 py-0.5 rounded">NEXT_PUBLIC_APP_ENV=DEVELOPMENT</code> in your <code className="text-primary bg-surface px-1.5 py-0.5 rounded">.env</code> file to enable full tournament mode.
+            </p>
+          </div>
+        </main>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col">
       <Header />
@@ -154,13 +243,13 @@ export default function TournamentsLobbyPage() {
             <div className="space-y-2 max-w-2xl">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-primary/20 bg-primary/10 text-primary text-xs font-semibold uppercase tracking-wider">
                 <Trophy className="w-3.5 h-3.5 text-amber-400" />
-                8-Player Single Elimination
+                4 or 8-Player Single Elimination
               </div>
               <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-foreground">
                 Friend Championship Arena
               </h1>
               <p className="text-sm md:text-base text-muted-foreground leading-relaxed">
-                Create a 8-player bracket tournament, invite 7 of your friends, and battle head-to-head.
+                Create a 4-player or 8-player bracket tournament, invite your friends, and battle head-to-head.
                 Every match counts toward your competitive ELO rating!
               </p>
             </div>
@@ -171,10 +260,10 @@ export default function TournamentsLobbyPage() {
                 setCreateError('')
                 setIsCreateOpen(true)
               }}
-              className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold shadow-lg shadow-primary/25 rounded-xl gap-2 px-6 h-12 shrink-0"
+              className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold shadow-lg shadow-primary/25 rounded-xl gap-2 px-6 h-12 shrink-0 cursor-pointer"
             >
               <Plus className="w-5 h-5" />
-              Create 8-Player Tournament
+              Create Tournament
             </Button>
           </div>
         </div>
@@ -336,24 +425,74 @@ export default function TournamentsLobbyPage() {
             <CardHeader>
               <CardTitle className="text-xl font-bold text-foreground flex items-center gap-2">
                 <Trophy className="w-5 h-5 text-amber-400" />
-                Create 8-Player Tournament
+                Create Tournament
               </CardTitle>
               <CardDescription>
-                Set a title and invite 7 friends to start the single elimination bracket.
+                Choose format, set a title, and invite your friends to start the bracket.
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              {/* 7-Friends Requirement Warning Box */}
-              {friendsCount < 7 ? (
-                <div className="space-y-4">
+            <CardContent className="space-y-4">
+              {/* Tournament Size Selector */}
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-foreground block">
+                  Tournament Format
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMaxPlayers(4)
+                      setCreateError('')
+                    }}
+                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                      maxPlayers === 4
+                        ? 'border-primary bg-primary/10 text-foreground ring-1 ring-primary'
+                        : 'border-border bg-surface text-muted-foreground hover:border-border/80 hover:text-foreground'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between font-bold text-sm text-foreground">
+                      <span>4 Players</span>
+                      <Users className="w-4 h-4 text-primary" />
+                    </div>
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      2 Rounds • Needs 3 Friends
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMaxPlayers(8)
+                      setCreateError('')
+                    }}
+                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                      maxPlayers === 8
+                        ? 'border-primary bg-primary/10 text-foreground ring-1 ring-primary'
+                        : 'border-border bg-surface text-muted-foreground hover:border-border/80 hover:text-foreground'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between font-bold text-sm text-foreground">
+                      <span>8 Players</span>
+                      <Trophy className="w-4 h-4 text-amber-400" />
+                    </div>
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      3 Rounds • Needs 7 Friends
+                    </p>
+                  </button>
+                </div>
+              </div>
+
+              {/* Friends Requirement Warning Box */}
+              {friendsCount < maxPlayers - 1 ? (
+                <div className="space-y-4 pt-2">
                   <div className="p-4 rounded-xl border border-rose-500/40 bg-rose-500/10 space-y-3">
                     <div className="flex items-center gap-2 text-rose-400 font-bold text-sm">
                       <AlertTriangle className="w-5 h-5 shrink-0 text-rose-400" />
-                      <span>7 Friends Required to Create Tournament</span>
+                      <span>{maxPlayers - 1} Friends Required to Create {maxPlayers}-Player Tournament</span>
                     </div>
                     <p className="text-xs text-rose-200/90 leading-relaxed">
-                      You currently have <strong className="text-white font-mono">{friendsCount} / 7</strong> accepted friends.
-                      Creating an 8-player tournament requires inviting 7 of your friends to fill the bracket.
+                      You currently have <strong className="text-white font-mono">{friendsCount} / {maxPlayers - 1}</strong> accepted friends.
+                      Creating a {maxPlayers}-player tournament requires inviting {maxPlayers - 1} of your friends to fill the bracket.
                     </p>
                   </div>
 
@@ -369,7 +508,7 @@ export default function TournamentsLobbyPage() {
                   </div>
                 </div>
               ) : (
-                <form onSubmit={handleCreateTournament} className="space-y-4">
+                <form onSubmit={handleCreateTournament} className="space-y-4 pt-1">
                   {createError && (
                     <div className="p-3 rounded-lg border border-rose-500/40 bg-rose-500/10 text-rose-300 text-xs font-semibold flex items-center gap-2">
                       <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
@@ -382,7 +521,7 @@ export default function TournamentsLobbyPage() {
                       Tournament Name
                     </label>
                     <Input
-                      placeholder="e.g. Weekend Code Warriors"
+                      placeholder={`e.g. ${maxPlayers}-Player Speed Duel`}
                       value={tournamentTitle}
                       onChange={(e) => setTournamentTitle(e.target.value)}
                       required
@@ -396,8 +535,10 @@ export default function TournamentsLobbyPage() {
                       <span className="text-emerald-400 font-mono">{friendsCount} Available Friends ✓</span>
                     </div>
                     <ul className="list-disc ml-4 space-y-0.5 pt-1">
-                      <li>Single Elimination (Quarterfinals ➔ Semifinals ➔ Finals)</li>
-                      <li>8 Players total (Creator + 7 Invited Friends)</li>
+                      <li>
+                        Single Elimination ({maxPlayers === 4 ? 'Semifinals ➔ Finals' : 'Quarterfinals ➔ Semifinals ➔ Finals'})
+                      </li>
+                      <li>{maxPlayers} Players total (Creator + {maxPlayers - 1} Invited Friends)</li>
                       <li>All duels update ELO ratings automatically</li>
                     </ul>
                   </div>
@@ -408,10 +549,10 @@ export default function TournamentsLobbyPage() {
                     </Button>
                     <Button
                       type="submit"
-                      disabled={isCreating || friendsCount < 7}
-                      className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold"
+                      disabled={isCreating || friendsCount < maxPlayers - 1}
+                      className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold cursor-pointer"
                     >
-                      {isCreating ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Create Tournament'}
+                      {isCreating ? <Loader2 className="w-4 h-4 animate-spin" /> : `Create ${maxPlayers}-Player Tournament`}
                     </Button>
                   </div>
                 </form>

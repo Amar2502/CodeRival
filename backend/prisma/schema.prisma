@@ -56,6 +56,15 @@ enum MatchResult {
   ABANDONED
 }
 
+enum MatchFinishReason {
+  SOLUTION_ACCEPTED
+  OPPONENT_CHEATED
+  OPPONENT_SURRENDERED
+  OPPONENT_DISCONNECTED
+  TIMEOUT
+  DRAW
+}
+
 // ─── USER & PROGRESSION ────────────────────────────────────
 
 model User {
@@ -224,10 +233,11 @@ model Match {
   problemId String
   problem   Problem     @relation(fields: [problemId], references: [id])
 
-  status    MatchStatus @default(WAITING)
+  status    MatchStatus        @default(WAITING)
   winnerId  String?
-  winner    User?       @relation("Winner", fields: [winnerId], references: [id])
+  winner    User?              @relation("Winner", fields: [winnerId], references: [id])
   result    MatchResult?
+  reason    MatchFinishReason?
 
   startedAt DateTime?
   endedAt   DateTime?
@@ -315,7 +325,8 @@ enum TournamentMatchRound {
 
 model Tournament {
   id          String           @id @default(cuid())
-  title       String           @default("8-Player Championship")
+  title       String           @default("Championship")
+  maxPlayers  Int              @default(8)
   creatorId   String
   creator     User             @relation("CreatedTournaments", fields: [creatorId], references: [id])
   status      TournamentStatus @default(WAITING_FOR_PLAYERS)

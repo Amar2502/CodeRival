@@ -14,9 +14,10 @@ import {
 export const createTournamentController = asyncHandler(
   async (req: Request, res: Response) => {
     const userId = (req as any).user!.id;
-    const { title } = req.body;
+    const { title, maxPlayers } = req.body;
 
-    const tournament = await createTournamentService(userId, title);
+    const parsedMaxPlayers = maxPlayers ? Number(maxPlayers) : 8;
+    const tournament = await createTournamentService(userId, title, parsedMaxPlayers);
     res.status(201).json({ success: true, tournament });
   }
 );
