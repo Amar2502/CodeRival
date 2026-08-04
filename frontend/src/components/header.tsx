@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
@@ -9,12 +9,15 @@ import { useAuthStore } from '@/lib/authStore'
 import { getRatingInfo } from '@/lib/rating'
 import { UserAvatar } from '@/components/UserAvatar'
 import { isDevelopment } from '@/lib/config'
+import { api } from '@/lib/axios'
+import { socket } from '@/lib/socket'
 
 export function Header() {
   const pathname = usePathname()
   const router = useRouter()
   const { user, logout } = useAuthStore()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [pendingFriendsCount, setPendingFriendsCount] = useState<number>(0)
 
   const handleLogout = () => {
     logout()
@@ -24,15 +27,56 @@ export function Header() {
 
   const ratingInfo = getRatingInfo(user?.rating || 1200)
 
+  const fetchPendingCount = useCallback(async () => {
+    if (!user) {
+      setPendingFriendsCount(0)
+      return
+    }
+    try {
+      const res = await api.get('/friends')
+      const incoming = res.data?.incomingRequests || []
+      setPendingFriendsCount(incoming.length)
+    } catch (err) {
+      // Ignore fetch error silently
+    }
+  }, [user])
+
+  useEffect(() => {
+    if (!user) return
+
+    fetchPendingCount()
+
+    const handleUpdate = () => {
+      fetchPendingCount()
+    }
+
+    socket.on('friend:request_received', handleUpdate)
+    socket.on('friend:request_accepted', handleUpdate)
+    socket.on('friend:removed', handleUpdate)
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('friend_request_updated', handleUpdate)
+    }
+
+    return () => {
+      socket.off('friend:request_received', handleUpdate)
+      socket.off('friend:request_accepted', handleUpdate)
+      socket.off('friend:removed', handleUpdate)
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('friend_request_updated', handleUpdate)
+      }
+    }
+  }, [user, fetchPendingCount, pathname])
+
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur-md transition-all">
       <nav className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
         {/* Logo */}
-        <Link href={user ? "/dashboard" : "/"} className="flex items-center gap-2 font-bold text-xl text-foreground hover:opacity-90 transition-opacity">
-          <div className="p-1.5 rounded-lg bg-linear-to-br from-primary to-accent shadow-sm shadow-primary/20">
-            <Zap className="w-5 h-5 text-primary-foreground" />
+        <Link href={user ? "/dashboard" : "/"} className="flex items-center gap-2.5 font-black text-xl text-foreground hover:opacity-95 transition-opacity group">
+          <div className="p-1.5 rounded-xl bg-gradient-to-br from-primary via-primary to-accent shadow-md shadow-primary/25 group-hover:scale-105 transition-transform">
+            <Zap className="w-5 h-5 text-white" />
           </div>
-          <span className="bg-linear-to-r from-primary via-primary to-accent bg-clip-text text-transparent tracking-tight">
+          <span className="bg-gradient-to-r from-primary via-rose-400 to-accent bg-clip-text text-transparent tracking-tight font-black">
             CodeRival
           </span>
         </Link>
@@ -74,10 +118,15 @@ export function Header() {
               <Button
                 variant={pathname.startsWith('/friends') ? 'secondary' : 'ghost'}
                 size="sm"
-                className="gap-2 text-sm font-medium"
+                className="gap-2 text-sm font-medium relative"
               >
                 <Users className="w-4 h-4 text-accent" />
                 <span>Friends</span>
+                {pendingFriendsCount > 0 && (
+                  <span className="ml-0.5 inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full text-[10px] font-black bg-rose-500 text-white animate-pulse shadow-sm shadow-rose-500/50">
+                    {pendingFriendsCount > 99 ? '99+' : pendingFriendsCount}
+                  </span>
+                )}
               </Button>
             </Link>
             <Link href="/tournaments">
@@ -124,17 +173,12 @@ export function Header() {
         <div className="flex items-center gap-3">
           {user ? (
             <div className="flex items-center gap-2 sm:gap-3">
-              <Link href="/profile" className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border bg-surface hover:bg-surface-2 transition-colors">
-                <Trophy className="w-4 h-4 text-amber-400" />
-                <span className={`text-xs font-semibold ${ratingInfo.colorClass}`}>
-                  {user.rating || 1200}
-                </span>
-                <span className="text-xs text-muted-foreground font-mono">
-                  @{user.username}
-                </span>
-              </Link>
-              <Link href="/profile">
+              <Link href="/profile" className="flex items-center gap-2 px-2.5 py-1 rounded-xl bg-surface/80 border border-border hover:border-primary/40 transition-all group">
                 <UserAvatar src={user.avatar_url || user.avatar} username={user.username} name={user.name} size="sm" />
+                <div className="hidden sm:flex flex-col text-left">
+                  <span className="text-xs font-bold text-foreground group-hover:text-primary transition-colors">@{user.username}</span>
+                  <span className={`text-[10px] font-extrabold ${ratingInfo.colorClass}`}>{user.rating || 1200} ELO</span>
+                </div>
               </Link>
               <Button
                 variant="ghost"
@@ -205,9 +249,16 @@ export function Header() {
                 </Button>
               </Link>
               <Link href="/friends" onClick={() => setMobileMenuOpen(false)}>
-                <Button variant={pathname.startsWith('/friends') ? 'secondary' : 'ghost'} className="w-full justify-start gap-3">
-                  <Users className="w-4 h-4 text-accent" />
-                  <span>Friends</span>
+                <Button variant={pathname.startsWith('/friends') ? 'secondary' : 'ghost'} className="w-full justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <Users className="w-4 h-4 text-accent" />
+                    <span>Friends</span>
+                  </div>
+                  {pendingFriendsCount > 0 && (
+                    <span className="inline-flex items-center justify-center h-4 min-w-[16px] px-1.5 rounded-full text-[10px] font-black bg-rose-500 text-white animate-pulse shadow-sm shadow-rose-500/50">
+                      {pendingFriendsCount > 99 ? '99+' : pendingFriendsCount}
+                    </span>
+                  )}
                 </Button>
               </Link>
               <Link href="/tournaments" onClick={() => setMobileMenuOpen(false)}>

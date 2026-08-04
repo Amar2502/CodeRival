@@ -26,6 +26,15 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import {
   ArrowLeft,
   Play,
   Send,
@@ -196,7 +205,13 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
     message: string
     type: 'TAB_SWITCH' | 'PASTE_ATTEMPT' | 'WINDOW_RESIZE'
   } | null>(null)
+  const [showTabSwitchDialog, setShowTabSwitchDialog] = useState(false)
+  const [showResizeDialog, setShowResizeDialog] = useState(false)
+  const [resizeCountdown, setResizeCountdown] = useState(10)
   const lastAntiCheatTimeRef = useRef<number>(0)
+
+  const isParticipant = !!(user?.id && (player1?.id === user.id || player2?.id === user.id))
+  const isSpectator = !isParticipant && isTournamentMatch
 
   const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -545,6 +560,7 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
+        setShowTabSwitchDialog(true)
         triggerAntiCheatWarning(
           'TAB_SWITCH',
           'Tab switch / background app detected!'
@@ -553,6 +569,7 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
     }
 
     const handleWindowBlur = () => {
+      setShowTabSwitchDialog(true)
       triggerAntiCheatWarning(
         'TAB_SWITCH',
         'Window lost focus / application switched!'
@@ -560,12 +577,11 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
     }
 
     const handleWindowResize = () => {
-      if (window.innerWidth < 800 || window.innerHeight < 500) {
-        triggerAntiCheatWarning(
-          'WINDOW_RESIZE',
-          'Window dimensions reduced below competitive threshold!'
-        )
-      }
+      setShowResizeDialog(true)
+      triggerAntiCheatWarning(
+        'WINDOW_RESIZE',
+        'Window dimension change / resize detected!'
+      )
     }
 
     document.addEventListener('visibilitychange', handleVisibilityChange)
@@ -577,7 +593,46 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
       window.removeEventListener('blur', handleWindowBlur)
       window.removeEventListener('resize', handleWindowResize)
     }
-  }, [matchStatus, matchId])
+  }, [matchStatus, matchId, isSpectator])
+
+  // 10-Second Resize Disqualification Countdown Effect
+  useEffect(() => {
+    let timer: NodeJS.Timeout | null = null
+
+    if (showResizeDialog) {
+      timer = setInterval(() => {
+        setResizeCountdown((prev) => {
+          if (prev <= 1) {
+            if (timer) clearInterval(timer)
+            setShowResizeDialog(false)
+            // Trigger automatic disqualification after 10s countdown
+            socket.emit('match:cheat_disqualify', {
+              matchId,
+              type: 'WINDOW_RESIZE',
+              details: '10s Resize Timer Expired',
+            })
+            addActivityLog(
+              '💀 DISQUALIFIED: Window resized for > 10 seconds. Match forfeited.',
+              'warning'
+            )
+            setAntiCheatBanner({
+              show: true,
+              message: '💀 DISQUALIFIED! Match forfeited due to window resize violation.',
+              type: 'WINDOW_RESIZE',
+            })
+            return 0
+          }
+          return prev - 1
+        })
+      }, 1000)
+    } else {
+      setResizeCountdown(10)
+    }
+
+    return () => {
+      if (timer) clearInterval(timer)
+    }
+  }, [showResizeDialog, matchId])
 
   // Handle Code Editor Paste Interception
   const handlePasteAttempt = (pastedLength: number) => {
@@ -801,8 +856,7 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
     }
   }
 
-  const isParticipant = !!(user?.id && (player1?.id === user.id || player2?.id === user.id))
-  const isSpectator = !isParticipant && isTournamentMatch
+
 
   const me = player1?.id === user?.id ? player1 : player2?.id === user?.id ? player2 : player1
   const rival = player1?.id === user?.id ? player2 : player2?.id === user?.id ? player1 : player2
@@ -1606,6 +1660,88 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
           </div>
         </div>
       )}
+
+      {/* ─── TAB SWITCH DISQUALIFICATION ALERT DIALOG ─── */}
+      <AlertDialog open={showTabSwitchDialog} onOpenChange={setShowTabSwitchDialog}>
+        <AlertDialogContent className="bg-[#141416] border border-rose-500/40 text-white max-w-md shadow-2xl">
+          <AlertDialogHeader className="sm:text-left">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="p-3 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/40 shrink-0">
+                <ShieldAlert className="w-6 h-6" />
+              </div>
+              <div>
+                <AlertDialogTitle className="text-lg font-bold text-rose-400">
+                  ⚠️ Anti-Cheat Warning: Tab Switch Detected
+                </AlertDialogTitle>
+                <span className="text-[11px] font-mono text-rose-300/80">PROHIBITED ACTION IN PRODUCTION</span>
+              </div>
+            </div>
+            <AlertDialogDescription className="text-slate-300 text-sm leading-relaxed space-y-2 pt-2">
+              <p>
+                You attempted to switch tabs or change windows during an active battle.
+              </p>
+              <p className="text-rose-300 font-semibold bg-rose-950/50 p-2.5 rounded border border-rose-500/30 text-xs">
+                ⚠️ If you change tabs or switch applications, you will be disqualified from this match!
+              </p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="mt-4 sm:justify-end">
+            <AlertDialogAction
+              onClick={() => setShowTabSwitchDialog(false)}
+              className="bg-rose-600 hover:bg-rose-700 text-white font-semibold shadow-lg shadow-rose-900/40 cursor-pointer"
+            >
+              I Understand & Resume Battle
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* ─── WINDOW RESIZE DISQUALIFICATION TIMER ALERT DIALOG ─── */}
+      <AlertDialog open={showResizeDialog} onOpenChange={setShowResizeDialog}>
+        <AlertDialogContent className="bg-[#141416] border border-amber-500/40 text-white max-w-md shadow-2xl">
+          <AlertDialogHeader className="sm:text-left">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="p-3 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/40 shrink-0">
+                <AlertTriangle className="w-6 h-6 animate-bounce" />
+              </div>
+              <div>
+                <AlertDialogTitle className="text-lg font-bold text-amber-400">
+                  ⚠️ Anti-Cheat Warning: Window Resize Detected
+                </AlertDialogTitle>
+                <span className="text-[11px] font-mono text-amber-300/80">AUTOMATED DISQUALIFICATION TIMER</span>
+              </div>
+            </div>
+            <AlertDialogDescription className="text-slate-300 text-sm leading-relaxed space-y-3 pt-2">
+              <p>
+                Resizing or un-maximizing the battle window is prohibited during competitive duels in PRODUCTION.
+              </p>
+              <div className="bg-rose-950/70 border border-rose-500/50 rounded-xl p-4 flex items-center justify-between gap-3 text-rose-200">
+                <div className="flex items-center gap-2.5">
+                  <TimerIcon className="w-5 h-5 text-rose-400 animate-spin" />
+                  <div className="text-xs font-semibold">
+                    <div>Disqualification Timer:</div>
+                    <div className="text-[10px] text-rose-300/70 font-normal">In {resizeCountdown} seconds, you will be automatically disqualified.</div>
+                  </div>
+                </div>
+                <div className="text-2xl font-black font-mono text-rose-400 bg-rose-900/60 px-3.5 py-1.5 rounded-lg border border-rose-500/60 min-w-[4rem] text-center shadow-inner">
+                  {resizeCountdown}s
+                </div>
+              </div>
+              <p className="text-rose-300 font-bold text-xs text-center">
+                In {resizeCountdown} seconds, you will be automatically disqualified.
+              </p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="mt-4 sm:justify-end">
+            <AlertDialogAction
+              onClick={() => setShowResizeDialog(false)}
+              className="bg-amber-600 hover:bg-amber-700 text-white font-semibold shadow-lg shadow-amber-900/40 cursor-pointer"
+            >
+              Acknowledge & Restore Window
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

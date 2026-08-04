@@ -28,6 +28,7 @@ import {
   Minus,
   Camera,
   Trash2,
+  X,
 } from 'lucide-react'
 import { useAuthStore } from '@/lib/authStore'
 import { getRatingInfo } from '@/lib/rating'
@@ -207,48 +208,84 @@ export default function ProfilePage() {
     }
   }
 
+  // Email Verification OTP Modal States
+  const [isOtpModalOpen, setIsOtpModalOpen] = useState(false)
+  const [otp, setOtp] = useState('')
+  const [isSendingOtp, setIsSendingOtp] = useState(false)
+  const [isCheckingOtp, setIsCheckingOtp] = useState(false)
+  const [otpError, setOtpError] = useState('')
+
   const handleVerifyEmail = async () => {
+    if (!user?.email) return
     setIsVerifyingEmail(true)
     setMessage(null)
+    setOtpError('')
     try {
-      const res = await api.post('/user/verify_email')
-      if (res.data?.user) {
-        setUser(res.data.user)
-      }
-      setMessage({
-        type: 'success',
-        text: res.data?.message || 'Email verified! Blue badge unlocked.',
-      })
+      await api.post('/auth/verify-email', { email: user.email })
+      setIsOtpModalOpen(true)
     } catch (err: any) {
       setMessage({
         type: 'error',
-        text: err.response?.data?.message || 'Failed to verify email.',
+        text: err.response?.data?.message || 'Failed to send OTP code. Please try again.',
       })
     } finally {
       setIsVerifyingEmail(false)
     }
   }
 
-  const handleLinkOAuth = async (provider: 'google' | 'github') => {
-    setLinkingProvider(provider)
-    setMessage(null)
+  const handleVerifyOtpSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault()
+    if (!otp || otp.length < 6 || !user?.email) {
+      setOtpError('Please enter a valid 6-digit verification code.')
+      return
+    }
+
+    setIsCheckingOtp(true)
+    setOtpError('')
     try {
-      const res = await api.post('/user/link_oauth', { provider })
+      const res = await api.post('/auth/check-verify-email-otp', {
+        email: user.email,
+        otp,
+      })
+
       if (res.data?.user) {
         setUser(res.data.user)
+      } else {
+        setUser({ ...user, emailVerified: true })
       }
+
+      setIsOtpModalOpen(false)
+      setOtp('')
       setMessage({
         type: 'success',
-        text: res.data?.message || `${provider === 'google' ? 'Google' : 'GitHub'} linked successfully!`,
+        text: 'Email verified successfully! Blue badge unlocked.',
       })
     } catch (err: any) {
-      setMessage({
-        type: 'error',
-        text: err.response?.data?.message || `Failed to link ${provider}.`,
-      })
+      setOtpError(err.response?.data?.message || 'Invalid or expired OTP. Please try again.')
     } finally {
-      setLinkingProvider(null)
+      setIsCheckingOtp(false)
     }
+  }
+
+  const handleResendOtp = async () => {
+    if (!user?.email) return
+    setIsSendingOtp(true)
+    setOtpError('')
+    try {
+      await api.post('/auth/verify-email', { email: user.email })
+      setMessage({ type: 'success', text: 'New verification OTP sent to your email.' })
+    } catch (err: any) {
+      setOtpError(err.response?.data?.message || 'Failed to resend code.')
+    } finally {
+      setIsSendingOtp(false)
+    }
+  }
+
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api'
+
+  const handleLinkOAuth = (provider: 'google' | 'github') => {
+    setLinkingProvider(provider)
+    window.location.href = `${API_URL}/auth/${provider}`
   }
 
   const userRating = user?.rating || 1200
@@ -699,6 +736,96 @@ export default function ProfilePage() {
           </CardContent>
         </Card>
       </main>
+
+      {/* ─── EMAIL VERIFICATION OTP MODAL ─── */}
+      {isOtpModalOpen && (
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="rounded-2xl bg-surface border border-border p-6 sm:p-8 max-w-md w-full shadow-2xl relative animate-in fade-in zoom-in-95">
+            <button
+              onClick={() => {
+                setIsOtpModalOpen(false)
+                setOtp('')
+                setOtpError('')
+              }}
+              className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex flex-col items-center text-center space-y-4">
+              <div className="w-12 h-12 rounded-2xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-blue-400">
+                <Mail className="w-6 h-6" />
+              </div>
+
+              <div>
+                <h3 className="text-xl font-bold tracking-tight">Verify Your Email</h3>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Enter the 6-digit code sent to <span className="font-mono text-foreground font-semibold">{user?.email}</span>
+                </p>
+              </div>
+
+              <form onSubmit={handleVerifyOtpSubmit} className="w-full space-y-4 pt-2">
+                <Input
+                  type="text"
+                  maxLength={6}
+                  value={otp}
+                  onChange={(e) => {
+                    const value = e.target.value.replace(/\D/g, '').slice(0, 6)
+                    setOtp(value)
+                    if (otpError) setOtpError('')
+                  }}
+                  placeholder="000000"
+                  className="bg-background border-border text-center font-mono text-2xl tracking-[0.5em] h-12 text-foreground font-bold"
+                  autoFocus
+                />
+
+                {otpError && (
+                  <p className="text-xs text-rose-400 flex items-center justify-center gap-1 font-medium">
+                    <AlertCircle className="w-3.5 h-3.5" /> {otpError}
+                  </p>
+                )}
+
+                <div className="space-y-2 pt-2">
+                  <Button
+                    type="submit"
+                    disabled={isCheckingOtp || otp.length < 6}
+                    className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold gap-2 shadow-md h-11"
+                  >
+                    {isCheckingOtp ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <BadgeCheck className="w-4 h-4 fill-white text-blue-600" />
+                    )}
+                    <span>Verify Code</span>
+                  </Button>
+
+                  <div className="flex items-center justify-between text-xs pt-1">
+                    <button
+                      type="button"
+                      onClick={handleResendOtp}
+                      disabled={isSendingOtp}
+                      className="text-blue-400 hover:underline font-medium disabled:opacity-50"
+                    >
+                      {isSendingOtp ? 'Sending...' : "Didn't receive code? Resend"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsOtpModalOpen(false)
+                        setOtp('')
+                        setOtpError('')
+                      }}
+                      className="text-muted-foreground hover:text-foreground"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
 
       <Footer />
     </div>

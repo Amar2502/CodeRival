@@ -27,7 +27,11 @@ router.post("/check-verify-email-otp", checkVerifyEmailOTPLimiter, validate(Veri
 // Google OAuth
 router.get(
   "/google",
-  passport.authenticate("google", { scope: ["profile", "email"], session: false })
+  (req, res, next) => {
+    const redirect = (req.query.redirect as string) || "/profile";
+    const state = JSON.stringify({ redirect });
+    passport.authenticate("google", { scope: ["profile", "email"], session: false, state })(req, res, next);
+  }
 );
 
 router.get(
@@ -39,7 +43,11 @@ router.get(
 // GitHub OAuth
 router.get(
   "/github",
-  passport.authenticate("github", { scope: ["user:email"], session: false })
+  (req, res, next) => {
+    const redirect = (req.query.redirect as string) || "/profile";
+    const state = JSON.stringify({ redirect });
+    passport.authenticate("github", { scope: ["user:email"], session: false, state })(req, res, next);
+  }
 );
 
 router.get(

@@ -253,35 +253,54 @@ export const getVerifyEmailOTP = async (req: Request, res: Response) => {
 };
 
 export const checkVerifyEmailOTP = async (req: Request, res: Response) => {
-
   const { email, otp } = req.body;
 
-  if(!otp) {
-    res.status(400).json({ message: "OTP is required" });
+  if (!email || !otp) {
+    res.status(400).json({ message: "Email and OTP are required" });
     return;
   }
 
   try {
-
     const token = await otpService.verifyOTP(email, otp, "verify-email");
 
     if (token === true) {
-      await db.user.update({
+      const updatedUser = await db.user.update({
         where: { email },
         data: { emailVerified: true },
+        select: {
+          id: true,
+          name: true,
+          username: true,
+          email: true,
+          avatar_url: true,
+          avatar_id: true,
+          country: true,
+          rating: true,
+          wins: true,
+          losses: true,
+          draws: true,
+          matchesPlayed: true,
+          problemsSolved: true,
+          googleId: true,
+          githubId: true,
+          emailVerified: true,
+        },
+      });
+
+      return res.status(200).json({
+        message: "Email verified successfully",
+        user: updatedUser,
+        token,
+      });
+    } else {
+      return res.status(400).json({
+        message: typeof token === "string" ? token : "Invalid OTP",
       });
     }
-
-    res.status(200).json({
-      message: "Email verified successfully",
-      token,
-    });
-
   } catch (err) {
     console.log(err);
     return res.status(500).json({ message: "Internal server error" });
   }
-  
 };
 
 // --------------------------- OAuth Success Callback -------------------------------
@@ -301,7 +320,19 @@ export const handleOAuthSuccess = async (req: Request, res: Response) => {
       maxAge: 30 * 24 * 60 * 60 * 1000,
     });
 
-    return res.redirect(`${config.FRONTEND_URL}/dashboard`);
+    let redirectPath = "/profile";
+    if (req.query.state) {
+      try {
+        const stateObj = JSON.parse(req.query.state as string);
+        if (stateObj.redirect) {
+          redirectPath = stateObj.redirect;
+        }
+      } catch (e) {
+        // ignore JSON parse error
+      }
+    }
+
+    return res.redirect(`${config.FRONTEND_URL}${redirectPath}`);
   } catch (err) {
     console.error("OAuth success handler error:", err);
     return res.redirect(`${config.FRONTEND_URL}/signin?error=OAuthServerError`);

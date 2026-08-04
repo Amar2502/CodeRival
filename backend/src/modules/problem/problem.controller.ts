@@ -24,10 +24,10 @@ export const getProblemByDifficulty = asyncHandler(async (req: Request, res: Res
 });
 
 export const getAllProblems = asyncHandler(async (req: Request, res: Response) => {
-  const page = Number(req.params.page);
-  const limit = Number(req.params.limit);
-  const problems = await ProblemService.getAllProblems(page, limit, req.user?.userId);
-  return res.status(200).json({ problems });
+  const page = Number(req.params.page) || 1;
+  const limit = Number(req.params.limit) || 20;
+  const { problems, totalCount } = await ProblemService.getAllProblems(page, limit, req.user?.userId);
+  return res.status(200).json({ problems, totalCount, page, limit });
 });
 
 export const runCode = asyncHandler(async (req: Request, res: Response) => {

@@ -9,6 +9,16 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Search, CheckCircle2, Code2, Sparkles, Filter, ArrowRight, Flame } from 'lucide-react'
 import { api } from '@/lib/axios'
 
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from '@/components/ui/pagination'
+
 interface ProblemItem {
   problemNumber: number
   title: string
@@ -25,19 +35,34 @@ export default function ProblemsPage() {
   const [selectedDifficulty, setSelectedDifficulty] = useState<'ALL' | 'EASY' | 'MEDIUM' | 'HARD'>('ALL')
   const [selectedTopic, setSelectedTopic] = useState<string>('ALL')
 
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1)
+  const [itemsPerPage, setItemsPerPage] = useState(50)
+  const [totalProblems, setTotalProblems] = useState(200)
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchQuery, selectedDifficulty, selectedTopic])
+
   useEffect(() => {
     fetchProblems()
-  }, [selectedDifficulty])
+  }, [currentPage, itemsPerPage, selectedDifficulty])
 
   const fetchProblems = async () => {
     setIsLoading(true)
     try {
       if (selectedDifficulty === 'ALL') {
-        const res = await api.get('/problem/get/get-all/1/50')
-        setProblems(res.data.problems || [])
+        const res = await api.get(`/problem/get/get-all/${currentPage}/${itemsPerPage}`)
+        const fetched = res.data.problems || []
+        setProblems(fetched)
+        if (res.data.totalCount) {
+          setTotalProblems(res.data.totalCount)
+        }
       } else {
         const res = await api.get(`/problem/get/by-difficulty/${selectedDifficulty.toLowerCase()}`)
-        setProblems(res.data.problems || [])
+        const fetched = res.data.problems || []
+        setProblems(fetched)
+        setTotalProblems(fetched.length)
       }
     } catch (err) {
       console.error('Failed to fetch problems:', err)
@@ -60,6 +85,28 @@ export default function ProblemsPage() {
   const allTopics = Array.from(
     new Set(problems.flatMap((p) => p.topics || []))
   )
+
+  // Calculate total pages
+  const totalPages = Math.max(1, Math.ceil(totalProblems / itemsPerPage))
+
+  // Helper to generate pagination page numbers
+  const getPageNumbers = (current: number, total: number) => {
+    const pages: (number | 'ellipsis')[] = []
+    if (total <= 7) {
+      for (let i = 1; i <= total; i++) pages.push(i)
+    } else {
+      pages.push(1)
+      if (current > 3) pages.push('ellipsis')
+      const start = Math.max(2, current - 1)
+      const end = Math.min(total - 1, current + 1)
+      for (let i = start; i <= end; i++) {
+        if (!pages.includes(i)) pages.push(i)
+      }
+      if (current < total - 2) pages.push('ellipsis')
+      if (!pages.includes(total)) pages.push(total)
+    }
+    return pages
+  }
 
   const getDifficultyBadge = (difficulty: 'EASY' | 'MEDIUM' | 'HARD') => {
     switch (difficulty) {
@@ -268,6 +315,58 @@ export default function ProblemsPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Shadcn Pagination Bar */}
+        {!isLoading && totalPages > 1 && selectedDifficulty === 'ALL' && !searchQuery && selectedTopic === 'ALL' && (
+          <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-4 p-4 rounded-2xl">
+
+            <Pagination className="mx-0 w-auto">
+              <PaginationContent>
+                <PaginationItem>
+                  <PaginationPrevious
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      if (currentPage > 1) setCurrentPage((prev) => prev - 1)
+                    }}
+                    className={currentPage === 1 ? 'pointer-events-none opacity-40' : 'cursor-pointer'}
+                  />
+                </PaginationItem>
+
+                {getPageNumbers(currentPage, totalPages).map((pageNum, idx) => (
+                  <PaginationItem key={idx}>
+                    {pageNum === 'ellipsis' ? (
+                      <PaginationEllipsis />
+                    ) : (
+                      <PaginationLink
+                        href="#"
+                        isActive={currentPage === pageNum}
+                        onClick={(e) => {
+                          e.preventDefault()
+                          setCurrentPage(Number(pageNum))
+                        }}
+                        className="cursor-pointer font-bold text-xs"
+                      >
+                        {pageNum}
+                      </PaginationLink>
+                    )}
+                  </PaginationItem>
+                ))}
+
+                <PaginationItem>
+                  <PaginationNext
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      if (currentPage < totalPages) setCurrentPage((prev) => prev + 1)
+                    }}
+                    className={currentPage === totalPages ? 'pointer-events-none opacity-40' : 'cursor-pointer'}
+                  />
+                </PaginationItem>
+              </PaginationContent>
+            </Pagination>
+          </div>
+        )}
       </main>
 
     </div>

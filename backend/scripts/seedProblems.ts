@@ -2,7 +2,7 @@ import { db } from "../src/config/db";
 import fs from "fs";
 import { Difficulty, Language } from "../src/generated/prisma/client";
 import path from "path";
-import { generateStarterCode, generateDriver } from "../src/utils/driverGenerator";
+import { generateStarterCode } from "../src/utils/driverGenerator";
 
 async function main() {
   const filePath = path.join(__dirname, "problems.json");
@@ -12,7 +12,7 @@ async function main() {
     console.log(`Seeding: ${problem.title}`);
 
     // Process topics if present
-    const topicConnections = [];
+    const topicConnections: { id: string }[] = [];
     if (problem.topics && Array.isArray(problem.topics)) {
       for (const topicName of problem.topics) {
         const topic = await db.topic.upsert({
@@ -24,6 +24,10 @@ async function main() {
       }
     }
 
+    const constraints = Array.isArray(problem.constraints)
+      ? problem.constraints.join("\n")
+      : problem.constraints || "";
+
     const createdProblem = await db.problem.upsert({
       where: {
         slug: problem.slug,
@@ -33,7 +37,7 @@ async function main() {
         title: problem.title,
         difficulty: problem.difficulty as Difficulty,
         description: problem.description,
-        constraints: problem.constraints,
+        constraints: constraints,
         timeLimitMs: problem.timeLimitMs || 2000,
         memoryLimitMb: problem.memoryLimitMb || 256,
         topics: {
@@ -46,7 +50,7 @@ async function main() {
         slug: problem.slug,
         difficulty: problem.difficulty as Difficulty,
         description: problem.description,
-        constraints: problem.constraints,
+        constraints: constraints,
         timeLimitMs: problem.timeLimitMs || 2000,
         memoryLimitMb: problem.memoryLimitMb || 256,
         topics: {
@@ -58,7 +62,6 @@ async function main() {
     // Clean old related records to prevent unique constraint violations or duplicates
     await db.problemExample.deleteMany({ where: { problemId: createdProblem.id } });
     await db.problemStarterCode.deleteMany({ where: { problemId: createdProblem.id } });
-    await db.problemDriver.deleteMany({ where: { problemId: createdProblem.id } });
     await db.problemTestCase.deleteMany({ where: { problemId: createdProblem.id } });
 
     // -----------------------
@@ -66,12 +69,12 @@ async function main() {
     // -----------------------
     if (problem.examples && Array.isArray(problem.examples)) {
       await db.problemExample.createMany({
-        data: problem.examples.map((example: any) => ({
+        data: problem.examples.map((example: any, index: number) => ({
           problemId: createdProblem.id,
-          input: example.input,
-          output: example.output,
-          explanation: example.explanation,
-          order: example.order,
+          input: String(example.input),
+          output: String(example.output),
+          explanation: example.explanation || null,
+          order: example.order ?? index + 1,
         })),
       });
     }
@@ -79,44 +82,39 @@ async function main() {
     // -----------------------
     // Signature
     // -----------------------
-    await db.problemSignature.upsert({
-      where: { problemId: createdProblem.id },
-      update: {
-        functionName: problem.signature.functionName,
-        returnType: problem.signature.returnType,
-        params: problem.signature.params,
-      },
-      create: {
-        problemId: createdProblem.id,
-        functionName: problem.signature.functionName,
-        returnType: problem.signature.returnType,
-        params: problem.signature.params,
-      },
-    });
-
-    // -----------------------
-    // Starter Codes & Drivers
-    // -----------------------
-    const languages = [Language.CPP, Language.JAVA, Language.PYTHON];
-    for (const lang of languages) {
-      const starterCode = generateStarterCode(lang, problem.signature);
-      const driverCode = generateDriver(lang, problem.signature);
-
-      await db.problemStarterCode.create({
-        data: {
+    if (problem.signature) {
+      await db.problemSignature.upsert({
+        where: { problemId: createdProblem.id },
+        update: {
+          functionName: problem.signature.functionName,
+          returnType: problem.signature.returnType,
+          params: problem.signature.params,
+        },
+        create: {
           problemId: createdProblem.id,
-          language: lang,
-          code: starterCode,
+          functionName: problem.signature.functionName,
+          returnType: problem.signature.returnType,
+          params: problem.signature.params,
         },
       });
+    }
 
-      await db.problemDriver.create({
-        data: {
-          problemId: createdProblem.id,
-          language: lang,
-          code: driverCode,
-        },
-      });
+    // -----------------------
+    // Starter Codes
+    // -----------------------
+    if (problem.signature) {
+      const languages = [Language.CPP, Language.JAVA, Language.PYTHON];
+      for (const lang of languages) {
+        const starterCode = generateStarterCode(lang, problem.signature);
+
+        await db.problemStarterCode.create({
+          data: {
+            problemId: createdProblem.id,
+            language: lang,
+            code: starterCode,
+          },
+        });
+      }
     }
 
     // -----------------------
@@ -128,7 +126,7 @@ async function main() {
           problemId: createdProblem.id,
           input: test.input,
           expected: test.expected,
-          order: index + 1,
+          order: test.order ?? index + 1,
           isSample: test.isSample !== undefined ? test.isSample : index < 2,
         })),
       });

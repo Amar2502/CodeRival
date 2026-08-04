@@ -231,6 +231,8 @@ export default function TournamentBracketPage({ params }: { params: Promise<{ id
     return tournament?.matches.find((m) => m.round === round && m.matchIndex === index)
   }
 
+
+
   if (!isDevelopment) {
     return (
       <div className="min-h-screen bg-background flex flex-col">

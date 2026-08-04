@@ -128,28 +128,34 @@ export class ProblemService {
   static async getAllProblems(page: number, limit: number, userId?: string) {
     const skip = (page - 1) * limit;
 
-    const problems = await db.problem.findMany({
-      select: {
-        problemNumber: true,
-        title: true,
-        slug: true,
-        difficulty: true,
-        topics: {
-          select: { name: true },
+    const [problems, totalCount] = await Promise.all([
+      db.problem.findMany({
+        select: {
+          problemNumber: true,
+          title: true,
+          slug: true,
+          difficulty: true,
+          topics: {
+            select: { name: true },
+          },
+          submissions: userId
+            ? {
+                where: { userId },
+                select: { id: true },
+                take: 1,
+              }
+            : false,
         },
-        submissions: userId
-          ? {
-              where: { userId },
-              select: { id: true },
-              take: 1,
-            }
-          : false,
-      },
-      skip,
-      take: limit,
-    });
+        orderBy: {
+          problemNumber: "asc",
+        },
+        skip,
+        take: limit,
+      }),
+      db.problem.count(),
+    ]);
 
-    return problems.map((problem) => ({
+    const formattedProblems = problems.map((problem) => ({
       problemNumber: problem.problemNumber,
       title: problem.title,
       slug: problem.slug,
@@ -157,5 +163,7 @@ export class ProblemService {
       topics: problem.topics.map((t) => t.name),
       solved: Array.isArray(problem.submissions) && problem.submissions.length > 0,
     }));
+
+    return { problems: formattedProblems, totalCount };
   }
 }

@@ -1,6 +1,7 @@
 import passport from "passport";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import { Strategy as GitHubStrategy } from "passport-github2";
+import jwt from "jsonwebtoken";
 import { config } from "./config";
 import { db } from "./db";
 
@@ -32,20 +33,50 @@ if (config.GOOGLE_CLIENT_ID && config.GOOGLE_CLIENT_SECRET) {
         clientID: config.GOOGLE_CLIENT_ID,
         clientSecret: config.GOOGLE_CLIENT_SECRET,
         callbackURL: `${config.BACKEND_URL}/api/auth/google/callback`,
+        passReqToCallback: true,
       },
-      async (accessToken, refreshToken, profile, done) => {
+      async (req: any, accessToken: string, refreshToken: string, profile: any, done: any) => {
         try {
           const email = profile.emails?.[0]?.value;
-          if (!email) {
-            return done(new Error("No email returned from Google profile"));
+          const normalizedEmail = email ? email.toLowerCase().trim() : null;
+
+          // Check if request is from an already logged-in user
+          let loggedInUserId: string | null = null;
+          const token =
+            req.cookies?.token ||
+            (req.query?.token as string) ||
+            req.headers?.authorization?.replace("Bearer ", "");
+
+          if (token) {
+            try {
+              const decoded = jwt.verify(token, config.jwtSecret) as any;
+              if (decoded?.userId) {
+                loggedInUserId = decoded.userId;
+              }
+            } catch (e) {
+              // Token invalid or expired; ignore
+            }
           }
 
-          const normalizedEmail = email.toLowerCase().trim();
+          if (loggedInUserId) {
+            let user = await db.user.update({
+              where: { id: loggedInUserId },
+              data: {
+                googleId: profile.id,
+                emailVerified: true,
+                avatar_url: profile.photos?.[0]?.value || undefined,
+              },
+            });
+            return done(null, { ...user, userId: user.id });
+          }
 
           // Check if user exists by googleId OR email
           let user = await db.user.findFirst({
             where: {
-              OR: [{ googleId: profile.id }, { email: normalizedEmail }],
+              OR: [
+                { googleId: profile.id },
+                ...(normalizedEmail ? [{ email: normalizedEmail }] : []),
+              ],
             },
           });
 
@@ -65,13 +96,13 @@ if (config.GOOGLE_CLIENT_ID && config.GOOGLE_CLIENT_SECRET) {
           }
 
           // Create new user if not found
-          const baseUsername = normalizedEmail.split("@")[0];
+          const baseUsername = (normalizedEmail || profile.displayName || "user").split("@")[0];
           const username = await generateUniqueUsername(baseUsername);
 
           user = await db.user.create({
             data: {
               name: profile.displayName || baseUsername,
-              email: normalizedEmail,
+              email: normalizedEmail || `${profile.id}@google.oauth`,
               username,
               googleId: profile.id,
               avatar_url: profile.photos?.[0]?.value || null,
@@ -97,17 +128,51 @@ if (config.GITHUB_CLIENT_ID && config.GITHUB_CLIENT_SECRET) {
         clientSecret: config.GITHUB_CLIENT_SECRET,
         callbackURL: `${config.BACKEND_URL}/api/auth/github/callback`,
         scope: ["user:email"],
+        passReqToCallback: true,
       },
-      async (accessToken: string, refreshToken: string, profile: any, done: any) => {
+      async (req: any, accessToken: string, refreshToken: string, profile: any, done: any) => {
         try {
           const email =
             profile.emails?.[0]?.value || `${profile.username}@github.noreply.com`;
-          const normalizedEmail = email.toLowerCase();
+          const normalizedEmail = email ? email.toLowerCase().trim() : null;
+
+          // Check if request is from an already logged-in user
+          let loggedInUserId: string | null = null;
+          const token =
+            req.cookies?.token ||
+            (req.query?.token as string) ||
+            req.headers?.authorization?.replace("Bearer ", "");
+
+          if (token) {
+            try {
+              const decoded = jwt.verify(token, config.jwtSecret) as any;
+              if (decoded?.userId) {
+                loggedInUserId = decoded.userId;
+              }
+            } catch (e) {
+              // Token invalid or expired; ignore
+            }
+          }
+
+          if (loggedInUserId) {
+            let user = await db.user.update({
+              where: { id: loggedInUserId },
+              data: {
+                githubId: profile.id,
+                emailVerified: true,
+                avatar_url: profile.photos?.[0]?.value || undefined,
+              },
+            });
+            return done(null, { ...user, userId: user.id });
+          }
 
           // Check if user exists by githubId OR email
           let user = await db.user.findFirst({
             where: {
-              OR: [{ githubId: profile.id }, { email: normalizedEmail }],
+              OR: [
+                { githubId: profile.id },
+                ...(normalizedEmail ? [{ email: normalizedEmail }] : []),
+              ],
             },
           });
 
@@ -127,13 +192,13 @@ if (config.GITHUB_CLIENT_ID && config.GITHUB_CLIENT_SECRET) {
           }
 
           // Create new user if not found
-          const baseUsername = profile.username || normalizedEmail.split("@")[0];
+          const baseUsername = profile.username || (normalizedEmail ? normalizedEmail.split("@")[0] : "user");
           const username = await generateUniqueUsername(baseUsername);
 
           user = await db.user.create({
             data: {
               name: profile.displayName || profile.username || baseUsername,
-              email: normalizedEmail,
+              email: normalizedEmail || `${profile.id}@github.oauth`,
               username,
               githubId: profile.id,
               avatar_url: profile.photos?.[0]?.value || null,

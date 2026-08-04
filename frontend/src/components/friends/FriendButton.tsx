@@ -63,6 +63,9 @@ export function FriendButton({
         targetUsername,
       });
       setStatus(res.data.status || "PENDING_SENT");
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("friend_request_updated"));
+      }
     } catch (err: any) {
       console.error("Failed to send friend request:", err);
     } finally {
@@ -75,6 +78,9 @@ export function FriendButton({
       setActionLoading(true);
       await api.post("/friends/accept", { senderId: targetUserId });
       setStatus("ACCEPTED");
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("friend_request_updated"));
+      }
     } catch (err: any) {
       console.error("Failed to accept friend request:", err);
     } finally {

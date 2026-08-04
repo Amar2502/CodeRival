@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { Header } from "@/components/header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,11 +13,12 @@ import {
   X,
   Clock,
   Trash2,
-  Trophy,
   Loader2,
   Sparkles,
   UserCheck,
   Zap,
+  Filter,
+  CheckCircle2,
 } from "lucide-react";
 import { api } from "@/lib/axios";
 import { socket } from "@/lib/socket";
@@ -63,7 +64,6 @@ interface SearchUserResult extends FriendUser {
 
 export default function FriendsPage() {
   const { user: currentUser } = useAuthStore();
-  const [activeTab, setActiveTab] = useState<"friends" | "search" | "pending">("friends");
 
   // Data states
   const [friends, setFriends] = useState<FriendItem[]>([]);
@@ -71,10 +71,12 @@ export default function FriendsPage() {
   const [outgoing, setOutgoing] = useState<OutgoingRequest[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
 
-  // Search state
+  // Search & Filter states
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [searchResults, setSearchResults] = useState<SearchUserResult[]>([]);
   const [searching, setSearching] = useState<boolean>(false);
+  const [filterMode, setFilterMode] = useState<"all" | "online">("all");
+  const [showOutgoing, setShowOutgoing] = useState<boolean>(false);
 
   // Fetch friends and requests
   const fetchData = useCallback(async () => {
@@ -95,22 +97,26 @@ export default function FriendsPage() {
     fetchData();
 
     // Listen for realtime friend request updates
-    const handleRequestReceived = () => fetchData();
-    const handleRequestAccepted = () => fetchData();
-    const handleFriendRemoved = () => fetchData();
+    const handleUpdate = () => {
+      fetchData();
+    };
 
-    socket.on("friend:request_received", handleRequestReceived);
-    socket.on("friend:request_accepted", handleRequestAccepted);
-    socket.on("friend:removed", handleFriendRemoved);
+    socket.on("friend:request_received", handleUpdate);
+    socket.on("friend:request_sent", handleUpdate);
+    socket.on("friend:request_accepted", handleUpdate);
+    socket.on("friend:request_declined", handleUpdate);
+    socket.on("friend:removed", handleUpdate);
 
     return () => {
-      socket.off("friend:request_received", handleRequestReceived);
-      socket.off("friend:request_accepted", handleRequestAccepted);
-      socket.off("friend:removed", handleFriendRemoved);
+      socket.off("friend:request_received", handleUpdate);
+      socket.off("friend:request_sent", handleUpdate);
+      socket.off("friend:request_accepted", handleUpdate);
+      socket.off("friend:request_declined", handleUpdate);
+      socket.off("friend:removed", handleUpdate);
     };
   }, [fetchData]);
 
-  // Handle user search
+  // Handle user directory search
   const handleSearch = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!searchQuery.trim()) {
@@ -145,6 +151,9 @@ export default function FriendsPage() {
     try {
       await api.post("/friends/accept", { requestId });
       fetchData();
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("friend_request_updated"));
+      }
     } catch (err) {
       console.error("Failed to accept request:", err);
     }
@@ -154,6 +163,9 @@ export default function FriendsPage() {
     try {
       await api.post("/friends/decline", { requestId });
       fetchData();
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("friend_request_updated"));
+      }
     } catch (err) {
       console.error("Failed to decline request:", err);
     }
@@ -173,7 +185,20 @@ export default function FriendsPage() {
     socket.emit("friend:challenge_send", { targetUserId });
   };
 
-  const totalPending = incoming.length + outgoing.length;
+  const onlineFriends = useMemo(() => friends.filter((f) => f.user.isOnline), [friends]);
+
+  const filteredFriends = useMemo(() => {
+    let list = filterMode === "online" ? onlineFriends : friends;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      list = list.filter(
+        (f) =>
+          f.user.username.toLowerCase().includes(q) ||
+          (f.user.name && f.user.name.toLowerCase().includes(q))
+      );
+    }
+    return list;
+  }, [friends, onlineFriends, filterMode, searchQuery]);
 
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col">
@@ -181,367 +206,382 @@ export default function FriendsPage() {
 
       <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-8 space-y-8">
         {/* Page Header Banner */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 p-6 rounded-2xl bg-gradient-to-r from-card via-surface to-card border border-border shadow-xl">
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-2">
-              <div className="p-2 rounded-xl bg-primary/10 border border-primary/20 text-primary">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 p-6 sm:p-8 rounded-2xl bg-gradient-to-br from-card via-surface to-card border border-border shadow-xl relative overflow-hidden">
+          <div className="space-y-1.5 z-10">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-primary/10 border border-primary/20 text-primary">
                 <Users className="w-6 h-6" />
               </div>
-              <h1 className="text-3xl font-black tracking-tight text-foreground">
+              <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground">
                 Friends & Rivals
               </h1>
             </div>
-            <p className="text-sm text-muted-foreground font-mono">
-              Connect with fellow coders, track online status, and challenge friends to live 1v1 duels.
+            <p className="text-xs sm:text-sm text-muted-foreground font-mono max-w-xl">
+              Connect with fellow competitive coders, track who is online, and challenge your rivals to live 1v1 duels.
             </p>
           </div>
 
-          <div className="flex items-center gap-4">
-            <div className="px-4 py-2.5 rounded-xl bg-surface border border-border text-center">
-              <div className="text-xs text-muted-foreground font-mono">Total Friends</div>
-              <div className="text-xl font-bold text-foreground">{friends.length}</div>
+          <div className="flex items-center gap-3 z-10 flex-wrap">
+            <div className="px-4 py-2.5 rounded-xl bg-surface border border-border text-center flex-1 sm:flex-none min-w-[100px]">
+              <div className="text-[11px] text-muted-foreground font-mono">Total Friends</div>
+              <div className="text-xl font-black text-foreground">{friends.length}</div>
             </div>
 
-            <div className="px-4 py-2.5 rounded-xl bg-surface border border-border text-center">
-              <div className="text-xs text-muted-foreground font-mono">Pending Requests</div>
-              <div className="text-xl font-bold text-amber-400">{incoming.length}</div>
+            <div className="px-4 py-2.5 rounded-xl bg-surface border border-border text-center flex-1 sm:flex-none min-w-[100px]">
+              <div className="text-[11px] text-muted-foreground font-mono">Online Now</div>
+              <div className="text-xl font-black text-emerald-400">{onlineFriends.length}</div>
             </div>
+
+            {incoming.length > 0 && (
+              <div className="px-4 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-center flex-1 sm:flex-none min-w-[100px] animate-pulse">
+                <div className="text-[11px] text-amber-400 font-mono font-bold">Pending Requests</div>
+                <div className="text-xl font-black text-amber-400">{incoming.length}</div>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Navigation Tabs & Search Input */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 border-b border-border pb-4">
-          <div className="flex items-center gap-2">
-            <Button
-              variant={activeTab === "friends" ? "secondary" : "ghost"}
-              onClick={() => setActiveTab("friends")}
-              className="gap-2 font-semibold text-sm h-10 px-4"
-            >
-              <Users className="w-4 h-4 text-primary" />
-              <span>My Friends ({friends.length})</span>
-            </Button>
-
-            <Button
-              variant={activeTab === "search" ? "secondary" : "ghost"}
-              onClick={() => setActiveTab("search")}
-              className="gap-2 font-semibold text-sm h-10 px-4"
-            >
-              <UserPlus className="w-4 h-4 text-accent" />
-              <span>Find Coders</span>
-            </Button>
-
-            <Button
-              variant={activeTab === "pending" ? "secondary" : "ghost"}
-              onClick={() => setActiveTab("pending")}
-              className="gap-2 font-semibold text-sm h-10 px-4 relative"
-            >
-              <Clock className="w-4 h-4 text-amber-400" />
-              <span>Requests</span>
-              {incoming.length > 0 && (
-                <span className="w-5 h-5 rounded-full bg-amber-500 text-black text-[10px] font-bold flex items-center justify-center">
-                  {incoming.length}
-                </span>
-              )}
-            </Button>
-          </div>
-
-          {/* Quick Search bar */}
-          <form onSubmit={handleSearch} className="relative w-full sm:w-72">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+        {/* Global Search Bar */}
+        <div className="relative space-y-4">
+          <form onSubmit={handleSearch} className="relative w-full">
+            <Search className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="Search username..."
+              placeholder="Search user directory by handle or name..."
               value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                if (activeTab !== "search") setActiveTab("search");
-              }}
-              className="pl-9 bg-surface border-border text-sm h-10"
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-12 pr-10 bg-surface border-border text-foreground font-mono h-12 rounded-xl text-sm shadow-sm focus:border-primary"
             />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
           </form>
-        </div>
 
-        {/* TAB 1: MY FRIENDS */}
-        {activeTab === "friends" && (
-          <div className="space-y-4">
-            {loading ? (
-              <div className="flex items-center justify-center py-16 gap-2 text-muted-foreground">
-                <Loader2 className="w-5 h-5 animate-spin text-primary" />
-                <span>Loading friends list...</span>
+          {/* Inline Search Directory Results */}
+          {searchQuery.trim().length > 0 && (
+            <div className="p-4 sm:p-6 rounded-2xl bg-card border border-primary/30 shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
+              <div className="flex items-center justify-between">
+                <h3 className="font-bold text-sm text-foreground flex items-center gap-2">
+                  <UserPlus className="w-4 h-4 text-primary" />
+                  <span>User Directory Search Results</span>
+                </h3>
+                <span className="text-xs text-muted-foreground font-mono">
+                  {searching ? "Searching..." : `${searchResults.length} user(s) found`}
+                </span>
               </div>
-            ) : friends.length === 0 ? (
-              <div className="text-center py-16 p-8 rounded-2xl bg-card border border-border space-y-4">
-                <div className="w-14 h-14 rounded-full bg-surface border border-border flex items-center justify-center mx-auto text-muted-foreground">
-                  <Users className="w-7 h-7" />
+
+              {searching ? (
+                <div className="flex items-center justify-center py-8 gap-2 text-muted-foreground text-xs font-mono">
+                  <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                  <span>Searching CodeRival directory...</span>
                 </div>
-                <div className="space-y-1">
-                  <h3 className="text-lg font-bold text-foreground">No Friends Added Yet</h3>
-                  <p className="text-xs text-muted-foreground max-w-sm mx-auto font-mono">
-                    Search for usernames or add opponents after duels to build your rivals list and challenge them anytime!
-                  </p>
-                </div>
-                <Button
-                  onClick={() => setActiveTab("search")}
-                  className="bg-primary text-primary-foreground font-semibold gap-2"
-                >
-                  <Search className="w-4 h-4" /> Find Coders
-                </Button>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {friends.map(({ friendshipId, user: friendUser }) => {
-                  const ratingInfo = getRatingInfo(friendUser.rating);
-                  return (
-                    <div
-                      key={friendshipId}
-                      className="p-5 rounded-2xl bg-card border border-border hover:border-primary/40 transition-all flex flex-col justify-between gap-4 group"
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-center gap-3">
-                          {/* Avatar & Online status indicator */}
-                          <div className="relative">
-                            <UserAvatar
-                              src={friendUser.avatar_url || friendUser.avatar}
-                              username={friendUser.username}
-                              name={friendUser.name}
-                              size="lg"
-                            />
-                            <span
-                              className={`absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full border-2 border-card ${
-                                friendUser.isOnline ? "bg-emerald-500 shadow-sm shadow-emerald-500" : "bg-gray-500"
-                              }`}
-                              title={friendUser.isOnline ? "Online" : "Offline"}
-                            />
-                          </div>
-
-                          <div>
-                            <div className="font-bold text-foreground text-sm flex items-center gap-1.5">
-                              <span>{friendUser.name || friendUser.username}</span>
-                            </div>
-                            <div className="text-xs text-muted-foreground font-mono">
-                              @{friendUser.username}
-                            </div>
-                            <div className="flex items-center gap-2 mt-1">
-                              <span className={`text-xs font-bold ${ratingInfo.colorClass}`}>
-                                {friendUser.rating} ELO
-                              </span>
-                              <span className="text-[10px] text-muted-foreground font-mono">
-                                ({friendUser.wins || 0}W / {friendUser.losses || 0}L)
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleRemoveFriend(friendUser.id)}
-                          title="Remove Friend"
-                          className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 transition-opacity"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-
-                      {/* Action Button: Challenge to Duel */}
-                      <Button
-                        disabled={!friendUser.isOnline}
-                        onClick={() => handleChallenge(friendUser.id)}
-                        className={`w-full font-bold gap-2 h-9 text-xs ${
-                          friendUser.isOnline
-                            ? "bg-primary hover:bg-primary/90 text-primary-foreground shadow-md"
-                            : "bg-surface text-muted-foreground border border-border"
-                        }`}
-                      >
-                        <Swords className="w-4 h-4" />
-                        <span>{friendUser.isOnline ? "Challenge to Duel" : "Offline"}</span>
-                      </Button>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* TAB 2: FIND CODERS / SEARCH */}
-        {activeTab === "search" && (
-          <div className="space-y-6">
-            <div className="p-4 rounded-xl bg-card border border-border">
-              <h3 className="font-bold text-sm text-foreground mb-1">Search for Coders</h3>
-              <p className="text-xs text-muted-foreground font-mono">
-                Type a username or display name to find real friends and add them to your duel roster.
-              </p>
-            </div>
-
-            {searching ? (
-              <div className="flex items-center justify-center py-12 gap-2 text-muted-foreground">
-                <Loader2 className="w-5 h-5 animate-spin text-primary" />
-                <span>Searching user directory...</span>
-              </div>
-            ) : searchResults.length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground font-mono text-xs">
-                {searchQuery.trim() ? "No users matching search query." : "Type a username above to start searching."}
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {searchResults.map((user) => {
-                  const ratingInfo = getRatingInfo(user.rating);
-                  return (
-                    <div
-                      key={user.id}
-                      className="p-4 rounded-xl bg-card border border-border flex items-center justify-between gap-4"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="relative">
-                          <UserAvatar
-                            src={user.avatar_url || user.avatar}
-                            username={user.username}
-                            name={user.name}
-                            size="md"
-                          />
-                          <span
-                            className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-card ${
-                              user.isOnline ? "bg-emerald-500" : "bg-gray-500"
-                            }`}
-                          />
-                        </div>
-                        <div>
-                          <div className="font-bold text-foreground text-sm">
-                            {user.name || user.username}
-                          </div>
-                          <div className="text-xs text-muted-foreground font-mono">
-                            @{user.username}
-                          </div>
-                          <div className={`text-xs font-semibold ${ratingInfo.colorClass}`}>
-                            {user.rating} ELO
-                          </div>
-                        </div>
-                      </div>
-
-                      <FriendButton
-                        targetUserId={user.id}
-                        targetUsername={user.username}
-                        initialStatus={user.relationshipStatus}
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* TAB 3: PENDING REQUESTS */}
-        {activeTab === "pending" && (
-          <div className="space-y-8">
-            {/* Incoming Requests */}
-            <div className="space-y-4">
-              <h3 className="font-bold text-lg text-foreground flex items-center gap-2">
-                <Clock className="w-5 h-5 text-amber-400" />
-                <span>Incoming Friend Requests ({incoming.length})</span>
-              </h3>
-
-              {incoming.length === 0 ? (
-                <div className="p-6 text-center text-xs text-muted-foreground font-mono bg-card border border-border rounded-xl">
-                  No incoming friend requests right now.
+              ) : searchResults.length === 0 ? (
+                <div className="text-center py-8 text-xs text-muted-foreground font-mono">
+                  No coders found matching &quot;{searchQuery}&quot;.
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {incoming.map(({ id, sender }) => {
-                    const ratingInfo = getRatingInfo(sender.rating);
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {searchResults.map((user) => {
+                    const ratingInfo = getRatingInfo(user.rating);
                     return (
                       <div
-                        key={id}
-                        className="p-4 rounded-xl bg-card border border-amber-500/30 flex items-center justify-between gap-4"
+                        key={user.id}
+                        className="p-3.5 rounded-xl bg-surface border border-border flex items-center justify-between gap-3"
                       >
                         <div className="flex items-center gap-3">
-                          <div className="w-11 h-11 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center font-bold text-amber-400">
-                            {sender.username.charAt(0).toUpperCase()}
+                          <div className="relative">
+                            <UserAvatar
+                              src={user.avatar_url || user.avatar}
+                              username={user.username}
+                              name={user.name}
+                              size="md"
+                            />
+                            <span
+                              className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-surface ${
+                                user.isOnline ? "bg-emerald-500" : "bg-gray-500"
+                              }`}
+                            />
                           </div>
                           <div>
-                            <div className="font-bold text-foreground text-sm">
-                              {sender.name || sender.username}
+                            <div className="font-bold text-foreground text-xs sm:text-sm">
+                              {user.name || user.username}
                             </div>
-                            <div className="text-xs text-muted-foreground font-mono">
-                              @{sender.username}
+                            <div className="text-[11px] text-muted-foreground font-mono">
+                              @{user.username}
                             </div>
-                            <div className={`text-xs font-semibold ${ratingInfo.colorClass}`}>
-                              {sender.rating} ELO
+                            <div className={`text-[11px] font-semibold ${ratingInfo.colorClass}`}>
+                              {user.rating} ELO
                             </div>
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleDecline(id)}
-                            className="h-8 text-xs border-border hover:bg-rose-500/10 hover:text-rose-400"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            onClick={() => handleAccept(id)}
-                            className="h-8 text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-semibold gap-1.5"
-                          >
-                            <Check className="w-3.5 h-3.5" /> Accept
-                          </Button>
-                        </div>
+                        <FriendButton
+                          targetUserId={user.id}
+                          targetUsername={user.username}
+                          initialStatus={user.relationshipStatus}
+                        />
                       </div>
                     );
                   })}
                 </div>
               )}
             </div>
+          )}
+        </div>
 
-            {/* Outgoing Requests */}
-            <div className="space-y-4">
-              <h3 className="font-bold text-lg text-foreground flex items-center gap-2">
-                <Clock className="w-5 h-5 text-muted-foreground" />
-                <span>Sent Requests ({outgoing.length})</span>
-              </h3>
+        {/* ─── INCOMING FRIEND REQUESTS SECTION ─── */}
+        {incoming.length > 0 && (
+          <div className="p-5 sm:p-6 rounded-2xl bg-amber-500/5 border border-amber-500/30 space-y-4 shadow-lg">
+            <div className="flex items-center justify-between">
+              <h2 className="font-extrabold text-base text-foreground flex items-center gap-2">
+                <Clock className="w-5 h-5 text-amber-400 animate-spin-slow" />
+                <span>Pending Friend Requests</span>
+                <span className="px-2 py-0.5 rounded-full text-xs font-black bg-amber-500 text-black">
+                  {incoming.length}
+                </span>
+              </h2>
+              <span className="text-xs text-muted-foreground font-mono hidden sm:inline">
+                Accept to add to your duel roster
+              </span>
+            </div>
 
-              {outgoing.length === 0 ? (
-                <div className="p-6 text-center text-xs text-muted-foreground font-mono bg-card border border-border rounded-xl">
-                  No pending outgoing requests.
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {outgoing.map(({ id, receiver }) => (
-                    <div
-                      key={id}
-                      className="p-4 rounded-xl bg-card border border-border flex items-center justify-between gap-4"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-11 h-11 rounded-full bg-surface border border-border flex items-center justify-center font-bold text-muted-foreground">
-                          {receiver.username.charAt(0).toUpperCase()}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {incoming.map(({ id, sender }) => {
+                const ratingInfo = getRatingInfo(sender.rating);
+                return (
+                  <div
+                    key={id}
+                    className="p-4 rounded-xl bg-card border border-amber-500/20 flex items-center justify-between gap-3 shadow-xs"
+                  >
+                    <div className="flex items-center gap-3">
+                      <UserAvatar
+                        src={sender.avatar_url || sender.avatar}
+                        username={sender.username}
+                        name={sender.name}
+                        size="md"
+                      />
+                      <div>
+                        <div className="font-bold text-foreground text-sm">
+                          {sender.name || sender.username}
                         </div>
+                        <div className="text-xs text-muted-foreground font-mono">
+                          @{sender.username}
+                        </div>
+                        <div className={`text-xs font-semibold ${ratingInfo.colorClass}`}>
+                          {sender.rating} ELO
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleDecline(id)}
+                        className="h-8 text-xs border-border hover:bg-rose-500/10 hover:text-rose-400"
+                        title="Decline"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={() => handleAccept(id)}
+                        className="h-8 text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-bold gap-1.5"
+                      >
+                        <Check className="w-3.5 h-3.5" /> Accept
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ─── OUTGOING SENT REQUESTS COLLAPSIBLE ─── */}
+        {outgoing.length > 0 && (
+          <div className="space-y-3">
+            <button
+              onClick={() => setShowOutgoing(!showOutgoing)}
+              className="text-xs font-mono text-muted-foreground hover:text-foreground flex items-center gap-2"
+            >
+              <Clock className="w-3.5 h-3.5 text-muted-foreground" />
+              <span>Sent Pending Requests ({outgoing.length}) {showOutgoing ? "▲ Hide" : "▼ Show"}</span>
+            </button>
+
+            {showOutgoing && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                {outgoing.map(({ id, receiver }) => (
+                  <div
+                    key={id}
+                    className="p-3.5 rounded-xl bg-card border border-border flex items-center justify-between gap-3"
+                  >
+                    <div className="flex items-center gap-3">
+                      <UserAvatar
+                        src={receiver.avatar_url || receiver.avatar}
+                        username={receiver.username}
+                        name={receiver.name}
+                        size="sm"
+                      />
+                      <div>
+                        <div className="font-bold text-foreground text-xs">
+                          {receiver.name || receiver.username}
+                        </div>
+                        <div className="text-[11px] text-muted-foreground font-mono">
+                          @{receiver.username}
+                        </div>
+                      </div>
+                    </div>
+
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleDecline(id)}
+                      className="h-7 text-[11px] text-muted-foreground hover:text-rose-400 border-border"
+                    >
+                      Cancel Request
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ─── MY FRIENDS LIST SECTION ─── */}
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-3">
+            <div className="flex items-center gap-2">
+              <h2 className="font-extrabold text-lg text-foreground flex items-center gap-2">
+                <Users className="w-5 h-5 text-primary" />
+                <span>My Friends ({friends.length})</span>
+              </h2>
+            </div>
+
+            {/* Filter Pills */}
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant={filterMode === "all" ? "secondary" : "ghost"}
+                onClick={() => setFilterMode("all")}
+                className="text-xs h-8 font-semibold"
+              >
+                All Friends ({friends.length})
+              </Button>
+              <Button
+                size="sm"
+                variant={filterMode === "online" ? "secondary" : "ghost"}
+                onClick={() => setFilterMode("online")}
+                className="text-xs h-8 font-semibold gap-1.5"
+              >
+                <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                Online ({onlineFriends.length})
+              </Button>
+            </div>
+          </div>
+
+          {loading ? (
+            <div className="flex items-center justify-center py-16 gap-2 text-muted-foreground font-mono text-xs">
+              <Loader2 className="w-5 h-5 animate-spin text-primary" />
+              <span>Loading friends directory...</span>
+            </div>
+          ) : filteredFriends.length === 0 ? (
+            <div className="text-center py-16 p-8 rounded-2xl bg-card border border-border space-y-4">
+              <div className="w-14 h-14 rounded-full bg-surface border border-border flex items-center justify-center mx-auto text-muted-foreground">
+                <Users className="w-7 h-7" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-lg font-bold text-foreground">
+                  {filterMode === "online" ? "No Friends Online Right Now" : "No Friends Found"}
+                </h3>
+                <p className="text-xs text-muted-foreground max-w-sm mx-auto font-mono">
+                  {filterMode === "online"
+                    ? "Check back later or invite your friends to get online for a duel!"
+                    : "Use the search bar above to find coders by handle and build your rival roster."}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredFriends.map(({ friendshipId, user: friendUser }) => {
+                const ratingInfo = getRatingInfo(friendUser.rating);
+                return (
+                  <div
+                    key={friendshipId}
+                    className="p-5 rounded-2xl bg-card border border-border hover:border-primary/40 transition-all flex flex-col justify-between gap-4 group shadow-sm hover:shadow-md"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="relative">
+                          <UserAvatar
+                            src={friendUser.avatar_url || friendUser.avatar}
+                            username={friendUser.username}
+                            name={friendUser.name}
+                            size="lg"
+                          />
+                          <span
+                            className={`absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full border-2 border-card ${
+                              friendUser.isOnline
+                                ? "bg-emerald-500 shadow-sm shadow-emerald-500"
+                                : "bg-gray-500"
+                            }`}
+                            title={friendUser.isOnline ? "Online" : "Offline"}
+                          />
+                        </div>
+
                         <div>
-                          <div className="font-bold text-foreground text-sm">
-                            {receiver.name || receiver.username}
+                          <div className="font-bold text-foreground text-sm flex items-center gap-1.5">
+                            <span>{friendUser.name || friendUser.username}</span>
                           </div>
                           <div className="text-xs text-muted-foreground font-mono">
-                            @{receiver.username}
+                            @{friendUser.username}
+                          </div>
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className={`text-xs font-bold ${ratingInfo.colorClass}`}>
+                              {friendUser.rating} ELO
+                            </span>
+                            <span className="text-[10px] text-muted-foreground font-mono">
+                              ({friendUser.wins || 0}W / {friendUser.losses || 0}L)
+                            </span>
                           </div>
                         </div>
                       </div>
 
                       <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleDecline(id)}
-                        className="h-8 text-xs text-muted-foreground hover:text-rose-400 border-border"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleRemoveFriend(friendUser.id)}
+                        title="Remove Friend"
+                        className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 transition-opacity"
                       >
-                        Cancel
+                        <Trash2 className="w-4 h-4" />
                       </Button>
                     </div>
-                  ))}
-                </div>
-              )}
+
+                    {/* Challenge Action Button */}
+                    <Button
+                      disabled={!friendUser.isOnline}
+                      onClick={() => handleChallenge(friendUser.id)}
+                      className={`w-full font-bold gap-2 h-9 text-xs ${
+                        friendUser.isOnline
+                          ? "bg-primary hover:bg-primary/90 text-primary-foreground shadow-md"
+                          : "bg-surface text-muted-foreground border border-border"
+                      }`}
+                    >
+                      <Swords className="w-4 h-4" />
+                      <span>{friendUser.isOnline ? "Challenge to Duel" : "Offline"}</span>
+                    </Button>
+                  </div>
+                );
+              })}
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </main>
     </div>
   );

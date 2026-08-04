@@ -77,6 +77,10 @@ export const sendRequestController = async (req: Request, res: Response) => {
           friendshipId: friendship.id,
           sender: currentUser,
         });
+        io.to(`user:${userId}`).emit("friend:request_sent", {
+          friendshipId: friendship.id,
+          receiver: targetUser,
+        });
       }
     }
 
@@ -107,11 +111,14 @@ export const acceptRequestController = async (req: Request, res: Response) => {
 
     const friendship = await acceptFriendRequest(userId, identifier);
 
-    // Notify sender over socket
+    // Notify both sender and receiver over socket
     const io = getIO();
     if (io) {
       io.to(`user:${friendship.senderId}`).emit("friend:request_accepted", {
         user: friendship.receiver,
+      });
+      io.to(`user:${friendship.receiverId}`).emit("friend:request_accepted", {
+        user: friendship.sender,
       });
     }
 
@@ -136,7 +143,14 @@ export const declineRequestController = async (req: Request, res: Response) => {
       return res.status(400).json({ message: "requestId or senderId is required" });
     }
 
-    await declineFriendRequest(userId, identifier);
+    const friendship = await declineFriendRequest(userId, identifier);
+    
+    const io = getIO();
+    if (io && friendship) {
+      io.to(`user:${friendship.senderId}`).emit("friend:request_declined", { requestId: friendship.id });
+      io.to(`user:${friendship.receiverId}`).emit("friend:request_declined", { requestId: friendship.id });
+    }
+
     return res.status(200).json({ message: "Friend request declined" });
   } catch (error: any) {
     console.error("declineRequestController error:", error);
@@ -161,6 +175,7 @@ export const removeFriendController = async (req: Request, res: Response) => {
     const io = getIO();
     if (io) {
       io.to(`user:${friendId}`).emit("friend:removed", { friendId: userId });
+      io.to(`user:${userId}`).emit("friend:removed", { friendId });
     }
 
     return res.status(200).json({ message: "Friend removed" });

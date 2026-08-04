@@ -227,7 +227,7 @@ export const declineFriendRequest = async (receiverId: string, identifier: strin
     where: { id: friendship.id },
   });
 
-  return { success: true };
+  return friendship;
 };
 
 export const removeFriend = async (userId: string, friendId: string) => {
