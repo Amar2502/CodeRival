@@ -59,15 +59,18 @@ if (config.GOOGLE_CLIENT_ID && config.GOOGLE_CLIENT_SECRET) {
           }
 
           if (loggedInUserId) {
-            let user = await db.user.update({
-              where: { id: loggedInUserId },
-              data: {
-                googleId: profile.id,
-                emailVerified: true,
-                avatar_url: profile.photos?.[0]?.value || undefined,
-              },
-            });
-            return done(null, { ...user, userId: user.id });
+            const existingUser = await db.user.findUnique({ where: { id: loggedInUserId } });
+            if (existingUser) {
+              let user = await db.user.update({
+                where: { id: loggedInUserId },
+                data: {
+                  googleId: profile.id,
+                  emailVerified: true,
+                  avatar_url: existingUser.avatar_url || profile.photos?.[0]?.value || undefined,
+                },
+              });
+              return done(null, { ...user, userId: user.id });
+            }
           }
 
           // Check if user exists by googleId OR email
@@ -155,15 +158,18 @@ if (config.GITHUB_CLIENT_ID && config.GITHUB_CLIENT_SECRET) {
           }
 
           if (loggedInUserId) {
-            let user = await db.user.update({
-              where: { id: loggedInUserId },
-              data: {
-                githubId: profile.id,
-                emailVerified: true,
-                avatar_url: profile.photos?.[0]?.value || undefined,
-              },
-            });
-            return done(null, { ...user, userId: user.id });
+            const existingUser = await db.user.findUnique({ where: { id: loggedInUserId } });
+            if (existingUser) {
+              let user = await db.user.update({
+                where: { id: loggedInUserId },
+                data: {
+                  githubId: profile.id,
+                  emailVerified: true,
+                  avatar_url: existingUser.avatar_url || profile.photos?.[0]?.value || undefined,
+                },
+              });
+              return done(null, { ...user, userId: user.id });
+            }
           }
 
           // Check if user exists by githubId OR email

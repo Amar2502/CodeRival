@@ -17,7 +17,7 @@ const app = express();
 app.use(express.json());
 app.use(
   cors({
-    origin: [config.FRONTEND_URL],
+    origin: config.ALLOWED_ORIGINS,
     credentials: true,
   })
 );

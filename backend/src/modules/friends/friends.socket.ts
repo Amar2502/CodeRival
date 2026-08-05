@@ -181,12 +181,55 @@ export const initializeFriendsSocket = (io: Server, socket: Socket) => {
       clearTimeout(challenge.timer);
       activeChallenges.delete(challengeId);
 
-      // Notify challenger that request was declined
-      io.to(`user:${challenge.challengerId}`).emit("friend:challenge_declined", {
-        recipientId: currentUserId,
-      });
+      if (challenge.challengerId === currentUserId) {
+        // If challenger declined/cancelled, notify recipient
+        io.to(`user:${challenge.recipientId}`).emit("friend:challenge_cancelled", { challengeId });
+      } else {
+        // Recipient declined, notify challenger
+        io.to(`user:${challenge.challengerId}`).emit("friend:challenge_declined", {
+          recipientId: currentUserId,
+          challengeId,
+        });
+      }
     } catch (error: any) {
       console.error("friend:challenge_decline error:", error);
     }
   });
+
+  // Cancel a duel challenge (by challenger)
+  socket.on("friend:challenge_cancel", async (data: { challengeId: string }) => {
+    try {
+      const { challengeId } = data;
+      const challenge = activeChallenges.get(challengeId);
+
+      if (!challenge) return;
+      if (challenge.challengerId !== currentUserId) return;
+
+      clearTimeout(challenge.timer);
+      activeChallenges.delete(challengeId);
+
+      // Notify recipient that challenge was cancelled by challenger
+      io.to(`user:${challenge.recipientId}`).emit("friend:challenge_cancelled", { challengeId });
+    } catch (error: any) {
+      console.error("friend:challenge_cancel error:", error);
+    }
+  });
 };
+
+export const cleanUserChallenges = (io: Server, userId: string) => {
+  for (const [challengeId, challenge] of activeChallenges.entries()) {
+    if (challenge.challengerId === userId) {
+      clearTimeout(challenge.timer);
+      activeChallenges.delete(challengeId);
+      io.to(`user:${challenge.recipientId}`).emit("friend:challenge_cancelled", { challengeId });
+    } else if (challenge.recipientId === userId) {
+      clearTimeout(challenge.timer);
+      activeChallenges.delete(challengeId);
+      io.to(`user:${challenge.challengerId}`).emit("friend:challenge_declined", {
+        recipientId: userId,
+        challengeId,
+      });
+    }
+  }
+};
+

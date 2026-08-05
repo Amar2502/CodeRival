@@ -58,6 +58,14 @@ export function FriendChallengeModal() {
       setTimeout(() => setErrorMsg(null), 4000);
     };
 
+    const handleChallengeCancelled = () => {
+      setIncoming(null);
+      setOutgoing(null);
+      setAccepting(false);
+      setErrorMsg("Challenge was cancelled by sender");
+      setTimeout(() => setErrorMsg(null), 4000);
+    };
+
     const handleChallengeError = (data: { message: string }) => {
       setAccepting(false);
       setErrorMsg(data.message || "Challenge failed");
@@ -77,6 +85,7 @@ export function FriendChallengeModal() {
     socket.on("friend:challenge_sent", handleChallengeSent);
     socket.on("friend:challenge_expired", handleChallengeExpired);
     socket.on("friend:challenge_declined", handleChallengeDeclined);
+    socket.on("friend:challenge_cancelled", handleChallengeCancelled);
     socket.on("friend:challenge_error", handleChallengeError);
     socket.on("match:start", handleMatchStart);
     socket.on("match:found", handleMatchStart);
@@ -86,6 +95,7 @@ export function FriendChallengeModal() {
       socket.off("friend:challenge_sent", handleChallengeSent);
       socket.off("friend:challenge_expired", handleChallengeExpired);
       socket.off("friend:challenge_declined", handleChallengeDeclined);
+      socket.off("friend:challenge_cancelled", handleChallengeCancelled);
       socket.off("friend:challenge_error", handleChallengeError);
       socket.off("match:start", handleMatchStart);
       socket.off("match:found", handleMatchStart);
@@ -124,7 +134,7 @@ export function FriendChallengeModal() {
 
   const handleCancelOutgoing = () => {
     if (!outgoing) return;
-    socket.emit("friend:challenge_decline", { challengeId: outgoing.challengeId });
+    socket.emit("friend:challenge_cancel", { challengeId: outgoing.challengeId });
     setOutgoing(null);
   };
 

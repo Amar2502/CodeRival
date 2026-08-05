@@ -4,17 +4,18 @@ import { authSocket } from "./middleware/auth.socket";
 import { connectUser, disconnectUser } from "./socketManager";
 import { initializeMatchmakingSocket } from "../modules/matchmaking/matchmaking.socket";
 import { initializeMatchSocket } from "../modules/match/match.socket";
-import { initializeFriendsSocket } from "../modules/friends/friends.socket";
+import { initializeFriendsSocket, cleanUserChallenges } from "../modules/friends/friends.socket";
 import { initializeTournamentSocket } from "../modules/tournament/tournament.socket";
 import { leaveQueue, initMatchmakingTicker } from "../modules/matchmaking/matchmaking.service";
 import { handlePlayerMatchDisconnect } from "../modules/match/match.service";
+import { config } from "../config/config";
 
 let io: Server;
 
 export const initializeSocket = (httpServer: HTTPServer) => {
   io = new Server(httpServer, {
     cors: {
-      origin: process.env.FRONTEND_URL,
+      origin: config.ALLOWED_ORIGINS,
       credentials: true,
     },
   });
@@ -45,7 +46,10 @@ export const initializeSocket = (httpServer: HTTPServer) => {
       // 2. Handle disconnect grace period if user is in an active match
       await handlePlayerMatchDisconnect(io, userId);
 
-      // 3. Remove socket tracking
+      // 3. Clean up pending friend challenges for disconnected user
+      cleanUserChallenges(io, userId);
+
+      // 4. Remove socket tracking
       disconnectUser(userId, socket.id);
     });
   });
