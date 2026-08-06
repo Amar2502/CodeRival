@@ -6,16 +6,18 @@ import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { ArrowRight, Check, X, Zap, Mail, Lock } from 'lucide-react'
+import { ArrowRight, Check, X, Zap, Mail, Lock, AlertCircle } from 'lucide-react'
 import { FcGoogle } from 'react-icons/fc'
 import { FaGithub } from 'react-icons/fa6'
 import { FaEye, FaEyeSlash } from 'react-icons/fa'
 import { api } from "../../lib/axios";
 import { socket } from '@/lib/socket'
 import { Spinner } from '@/components/ui/spinner'
+import { useAuthStore, refreshCurrentUser } from '@/lib/authStore'
 
 export default function RegisterPage() {
   const router = useRouter()
+  const { setUser } = useAuthStore()
   const [step, setStep] = useState<'signup' | 'verify' | 'otp'>('signup')
   const [slideOut, setSlideOut] = useState(false)
   const [formData, setFormData] = useState({
@@ -31,6 +33,7 @@ export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [generalError, setGeneralError] = useState('')
   const [usernameStatus, setUsernameStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isVerifying, setIsVerifying] = useState(false)
@@ -65,15 +68,21 @@ export default function RegisterPage() {
   }
 
   const handleCreateAccount = async () => {
+    setGeneralError('')
     if (!validateForm()) return
 
     setIsSubmitting(true)
     try {
       const response = await api.post('/auth/register', formData)
       if (response.status !== 201) {
-        console.log('Registration failed:', response.data)
+        setGeneralError(response.data?.message || 'Registration failed. Please try again.')
         return
       }
+
+      if (response.data?.user) {
+        useAuthStore.getState().setUser(response.data.user)
+      }
+      await refreshCurrentUser()
       
       socket.connect()
 
@@ -82,8 +91,27 @@ export default function RegisterPage() {
         setStep('verify')
         setSlideOut(false)
       }, 300)
-    } catch (error) {
+    } catch (error: any) {
       console.error('Registration error:', error)
+      const data = error.response?.data
+      const msg = data?.message || 'Registration failed. Please try again.'
+
+      if (data?.errors && Array.isArray(data.errors)) {
+        const fieldErrors: Record<string, string> = {}
+        data.errors.forEach((err: { field: string; message: string }) => {
+          if (err.field) {
+            const fieldName = err.field.replace('body.', '')
+            fieldErrors[fieldName] = err.message
+          }
+        })
+        setErrors(prev => ({ ...prev, ...fieldErrors }))
+      } else if (msg.toLowerCase().includes('email')) {
+        setErrors(prev => ({ ...prev, email: msg }))
+      } else if (msg.toLowerCase().includes('username')) {
+        setErrors(prev => ({ ...prev, username: msg }))
+      }
+
+      setGeneralError(msg)
     } finally {
       setIsSubmitting(false)
     }
@@ -119,6 +147,7 @@ export default function RegisterPage() {
     try {
       const response = await api.post('/auth/check-verify-email-otp', { email: formData.email, otp })
       if (response.status === 200) {
+        await refreshCurrentUser()
         router.push('/dashboard')
       } else {
         setOtpError('Invalid OTP. Please try again.')
@@ -133,7 +162,8 @@ export default function RegisterPage() {
     }
   }
 
-  const handleSkip = () => {
+  const handleSkip = async () => {
+    await refreshCurrentUser()
     router.push('/dashboard')
   }
 
@@ -248,6 +278,12 @@ export default function RegisterPage() {
                 {/* Step 1: Signup Form */}
                 {step === 'signup' && (
                   <div className="space-y-4">
+                    {generalError && (
+                      <div className="p-3 rounded-lg border border-danger/30 bg-danger/10 text-danger text-xs font-medium flex items-center gap-2 animate-fade-in-up">
+                        <AlertCircle className="w-4 h-4 shrink-0" />
+                        <span>{generalError}</span>
+                      </div>
+                    )}
                     {/* Full Name */}
                     <div>
                       <label className="text-sm font-medium text-foreground block mb-1">Full Name</label>

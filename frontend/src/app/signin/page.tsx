@@ -13,9 +13,11 @@ import { api } from "../../lib/axios";
 import { socket } from '@/lib/socket'
 import { useRouter } from 'next/navigation'
 import { Spinner } from '@/components/ui/spinner'
+import { useAuthStore, refreshCurrentUser } from '@/lib/authStore'
 
 export default function SignInPage() {
   const router = useRouter()
+  const { setUser } = useAuthStore()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -36,6 +38,11 @@ export default function SignInPage() {
         setErrorMsg('Login failed. Please check your credentials and try again.')
         return
       }
+
+      if (response.data?.user) {
+        setUser(response.data.user)
+      }
+      await refreshCurrentUser()
 
       socket.connect()
       setIsLoading(false)

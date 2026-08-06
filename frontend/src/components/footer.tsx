@@ -3,8 +3,11 @@
 import Link from 'next/link'
 import { Zap } from 'lucide-react'
 import { FaGithub, FaXTwitter, FaDiscord } from 'react-icons/fa6'
+import { useAuthStore } from '@/lib/authStore'
 
 export function Footer() {
+  const { user } = useAuthStore()
+
   return (
     <footer className="border-t border-border bg-background/95 relative">
       {/* Top accent line */}
@@ -15,7 +18,7 @@ export function Footer() {
         <div className="grid grid-cols-2 md:grid-cols-5 gap-8 mb-12">
           {/* Brand Column */}
           <div className="col-span-2 space-y-4">
-            <Link href="/" className="inline-flex items-center gap-2 font-bold text-xl text-foreground hover:opacity-90 transition-opacity">
+            <Link href={user ? "/dashboard" : "/"} className="inline-flex items-center gap-2 font-bold text-xl text-foreground hover:opacity-90 transition-opacity">
               <div className="p-2 rounded-lg bg-linear-to-br from-primary to-accent shadow-sm shadow-primary/20">
                 <Zap className="w-5 h-5 text-primary-foreground" />
               </div>

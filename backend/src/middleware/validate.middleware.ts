@@ -45,8 +45,30 @@ export const validate =
     if (isStructured && typeof result.data === "object" && result.data !== null) {
       const data = result.data as Record<string, any>;
       if ("body" in data && data.body !== undefined) req.body = data.body;
-      if ("params" in data && data.params !== undefined) req.params = data.params;
-      if ("query" in data && data.query !== undefined) req.query = data.query;
+      if ("params" in data && data.params !== undefined) {
+        try {
+          req.params = data.params;
+        } catch {
+          Object.defineProperty(req, "params", {
+            value: data.params,
+            writable: true,
+            configurable: true,
+            enumerable: true,
+          });
+        }
+      }
+      if ("query" in data && data.query !== undefined) {
+        try {
+          req.query = data.query;
+        } catch {
+          Object.defineProperty(req, "query", {
+            value: data.query,
+            writable: true,
+            configurable: true,
+            enumerable: true,
+          });
+        }
+      }
     } else {
       req.body = result.data;
     }

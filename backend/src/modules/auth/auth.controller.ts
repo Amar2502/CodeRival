@@ -338,3 +338,13 @@ export const handleOAuthSuccess = async (req: Request, res: Response) => {
     return res.redirect(`${config.FRONTEND_URL}/signin?error=OAuthServerError`);
   }
 };
+
+// --------------------------- logout -------------------------------
+export const logout = async (req: Request, res: Response) => {
+  res.clearCookie("token", {
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+  });
+  res.status(200).json({ message: "Logged out successfully" });
+};

@@ -19,10 +19,15 @@ export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [pendingFriendsCount, setPendingFriendsCount] = useState<number>(0)
 
-  const handleLogout = () => {
-    logout()
-    document.cookie = "token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;"
-    router.push('/signin')
+  const handleLogout = async () => {
+    try {
+      await api.post('/auth/logout')
+    } catch (err) {
+      console.error('Logout error:', err)
+    } finally {
+      logout()
+      router.push('/signin')
+    }
   }
 
   const ratingInfo = getRatingInfo(user?.rating || 1200)
