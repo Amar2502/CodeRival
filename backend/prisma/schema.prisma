@@ -75,7 +75,12 @@ model User {
   avatar_url   String?
   avatar_id    String?
   username     String  @unique
-  country      String?
+  country        String?
+  gender         String?
+  website        String?
+  githubHandle   String?
+  twitterHandle  String?
+  linkedinHandle String?
 
   // Competitive stats (denormalized for fast reads)
   rating         Int @default(1200)
@@ -84,6 +89,17 @@ model User {
   draws          Int @default(0)
   matchesPlayed  Int @default(0)
   problemsSolved Int @default(0)
+
+  // Privacy Preferences
+  appearOnLeaderboard Boolean @default(true)
+  allowPublicProfile  Boolean @default(true)
+
+  // Notification Preferences
+  notifySiteFriendRequest   Boolean @default(true)
+  notifySiteDuelChallenge   Boolean @default(true)
+  notifySiteMatchTournament Boolean @default(true)
+  notifyEmailAnnouncements  Boolean @default(true)
+  notifyEmailPromotions     Boolean @default(true)
 
   // OAuth & verification
   googleId      String?

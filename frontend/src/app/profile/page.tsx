@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useMemo, useRef } from 'react'
+import Link from 'next/link'
 import { Header } from '@/components/header'
 import { Footer } from '@/components/footer'
 import { Button } from '@/components/ui/button'
@@ -19,16 +20,14 @@ import {
   TrendingUp,
   Globe,
   Link2,
-  Sparkles,
   Code2,
   BadgeCheck,
-  Zap,
-  ArrowUpRight,
-  ArrowDownRight,
-  Minus,
   Camera,
   Trash2,
   X,
+  Check,
+  Edit3,
+  ExternalLink,
 } from 'lucide-react'
 import { useAuthStore } from '@/lib/authStore'
 import { getRatingInfo } from '@/lib/rating'
@@ -36,7 +35,7 @@ import { api } from '@/lib/axios'
 import { RatingChart } from '@/components/RatingChart'
 
 import { FcGoogle } from 'react-icons/fc'
-import { FaGithub } from 'react-icons/fa6'
+import { FaGithub, FaXTwitter, FaLinkedin } from 'react-icons/fa6'
 
 interface RatingHistoryItem {
   id: string
@@ -54,6 +53,7 @@ interface RecentSubmissionItem {
   problem: {
     title: string
     slug: string
+    difficulty?: string
   }
 }
 
@@ -62,9 +62,15 @@ interface RecentMatchItem {
   createdAt: string
   status: string
   win: boolean
+  reason: string | null
+  opponent?: {
+    username: string
+    name: string
+  } | null
   problem: {
     title: string
     slug: string
+    difficulty?: string
   }
 }
 
@@ -75,6 +81,14 @@ export default function ProfilePage() {
   const [name, setName] = useState('')
   const [username, setUsername] = useState('')
   const [country, setCountry] = useState('')
+  const [website, setWebsite] = useState('')
+  const [githubHandle, setGithubHandle] = useState('')
+  const [twitterHandle, setTwitterHandle] = useState('')
+  const [linkedinHandle, setLinkedinHandle] = useState('')
+
+  // Modals & UI Tab States
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+  const [activeTab, setActiveTab] = useState<'matches' | 'submissions'>('matches')
 
   // Validation & Loading States
   const [isUsernameAvailable, setIsUsernameAvailable] = useState<boolean | null>(null)
@@ -88,6 +102,54 @@ export default function ProfilePage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
 
+  // Message Feedback State
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+
+  // Profile Extended Data
+  const [ratingHistory, setRatingHistory] = useState<RatingHistoryItem[]>([])
+  const [recentMatches, setRecentMatches] = useState<RecentMatchItem[]>([])
+  const [recentSubmissions, setRecentSubmissions] = useState<RecentSubmissionItem[]>([])
+  const [userRank, setUserRank] = useState<number | null>(null)
+
+  // Email Verification OTP Modal States
+  const [isOtpModalOpen, setIsOtpModalOpen] = useState(false)
+  const [otp, setOtp] = useState('')
+  const [isSendingOtp, setIsSendingOtp] = useState(false)
+  const [isCheckingOtp, setIsCheckingOtp] = useState(false)
+  const [otpError, setOtpError] = useState('')
+
+  // Fetch complete profile on mount
+  useEffect(() => {
+    fetchProfileData()
+  }, [])
+
+  const fetchProfileData = async () => {
+    setIsLoadingProfile(true)
+    try {
+      const res = await api.get('/user/profile/me')
+      if (res.data?.user) {
+        const u = res.data.user
+        setUser(u)
+        setName(u.name || '')
+        setUsername(u.username || '')
+        setCountry(u.country || '')
+        setWebsite(u.website || '')
+        setGithubHandle(u.githubHandle || '')
+        setTwitterHandle(u.twitterHandle || '')
+        setLinkedinHandle(u.linkedinHandle || '')
+        if (u.rank) setUserRank(u.rank)
+      }
+      setRatingHistory(res.data?.ratingHistory || [])
+      setRecentMatches(res.data?.formattedRecentMatches || [])
+      setRecentSubmissions(res.data?.user?.submissions || [])
+    } catch (err) {
+      console.error('Failed to load profile data:', err)
+    } finally {
+      setIsLoadingProfile(false)
+    }
+  }
+
+  // Handle avatar upload
   const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -102,7 +164,7 @@ export default function ProfilePage() {
       })
       if (res.data?.user) {
         setUser(res.data.user)
-        setMessage({ type: 'success', text: 'Avatar uploaded successfully to ImageKit!' })
+        setMessage({ type: 'success', text: 'Avatar uploaded successfully!' })
       }
     } catch (err: any) {
       console.error('Failed to upload avatar:', err)
@@ -126,37 +188,6 @@ export default function ProfilePage() {
       setMessage({ type: 'error', text: 'Failed to remove avatar' })
     } finally {
       setIsUploadingAvatar(false)
-    }
-  }
-
-  // Profile Extended Data
-  const [ratingHistory, setRatingHistory] = useState<RatingHistoryItem[]>([])
-  const [recentMatches, setRecentMatches] = useState<RecentMatchItem[]>([])
-  const [recentSubmissions, setRecentSubmissions] = useState<RecentSubmissionItem[]>([])
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
-
-  // Fetch complete profile on mount
-  useEffect(() => {
-    fetchProfileData()
-  }, [])
-
-  const fetchProfileData = async () => {
-    setIsLoadingProfile(true)
-    try {
-      const res = await api.get('/user/profile/me')
-      if (res.data?.user) {
-        setUser(res.data.user)
-        setName(res.data.user.name || '')
-        setUsername(res.data.user.username || '')
-        setCountry(res.data.user.country || '')
-      }
-      setRatingHistory(res.data?.ratingHistory || [])
-      setRecentMatches(res.data?.formattedRecentMatches || [])
-      setRecentSubmissions(res.data?.user?.submissions || [])
-    } catch (err) {
-      console.error('Failed to load profile data:', err)
-    } finally {
-      setIsLoadingProfile(false)
     }
   }
 
@@ -192,12 +223,17 @@ export default function ProfilePage() {
         name,
         username,
         country,
+        website,
+        githubHandle,
+        twitterHandle,
+        linkedinHandle,
       })
 
       setMessage({ type: 'success', text: 'Profile details saved successfully!' })
       if (res.data?.user) {
         setUser(res.data.user)
       }
+      setIsEditModalOpen(false)
     } catch (err: any) {
       setMessage({
         type: 'error',
@@ -207,13 +243,6 @@ export default function ProfilePage() {
       setIsSaving(false)
     }
   }
-
-  // Email Verification OTP Modal States
-  const [isOtpModalOpen, setIsOtpModalOpen] = useState(false)
-  const [otp, setOtp] = useState('')
-  const [isSendingOtp, setIsSendingOtp] = useState(false)
-  const [isCheckingOtp, setIsCheckingOtp] = useState(false)
-  const [otpError, setOtpError] = useState('')
 
   const handleVerifyEmail = async () => {
     if (!user?.email) return
@@ -258,7 +287,7 @@ export default function ProfilePage() {
       setOtp('')
       setMessage({
         type: 'success',
-        text: 'Email verified successfully! Blue badge unlocked.',
+        text: 'Email verified successfully!',
       })
     } catch (err: any) {
       setOtpError(err.response?.data?.message || 'Invalid or expired OTP. Please try again.')
@@ -288,410 +317,418 @@ export default function ProfilePage() {
     window.location.href = `${API_URL}/auth/${provider}`
   }
 
-  const userRating = user?.rating || 1200
+  // Exact real stats without fake hardcoded defaults
+  const userRating = user?.rating ?? 1200
   const ratingInfo = getRatingInfo(userRating)
 
-  const wins = user?.wins || 0
-  const losses = user?.losses || 0
-  const draws = user?.draws || 0
-  const matchesPlayed = user?.matchesPlayed || wins + losses + draws
+  const wins = user?.wins ?? 0
+  const losses = user?.losses ?? 0
+  const draws = user?.draws ?? 0
+  const matchesPlayed = user?.matchesPlayed ?? (wins + losses + draws)
   const winRate = matchesPlayed > 0 ? Math.round((wins / matchesPlayed) * 100) : 0
-  const problemsSolved = user?.problemsSolved || 0
+  const problemsSolved = user?.problemsSolved ?? 0
 
-  // Calculation for SVG rating trajectory line
-  const chartPoints = useMemo(() => {
-    if (ratingHistory.length === 0) return ''
-    const maxR = Math.max(...ratingHistory.map((h) => h.rating), 1600)
-    const minR = Math.min(...ratingHistory.map((h) => h.rating), 1000)
-    const range = maxR - minR || 1
+  // Format match result reasons
+  const formatMatchReason = (reason: string | null, win: boolean) => {
+    if (!reason) return win ? 'Victory' : 'Defeat'
+    switch (reason) {
+      case 'OPPONENT_CHEATED':
+        return 'Rival Disqualified (Cheating)'
+      case 'OPPONENT_SURRENDERED':
+        return 'Rival Surrendered'
+      case 'OPPONENT_DISCONNECTED':
+        return 'Rival Disconnected'
+      case 'SOLUTION_ACCEPTED':
+        return win ? 'Victory (AC)' : 'Defeat (AC)'
+      case 'TIMEOUT':
+        return 'Time Limit Exceeded'
+      case 'DRAW':
+        return 'Draw'
+      default:
+        return reason.replace(/_/g, ' ')
+    }
+  }
 
-    return ratingHistory
-      .map((h, idx) => {
-        const x = (idx / Math.max(ratingHistory.length - 1, 1)) * 300
-        const y = 80 - ((h.rating - minR) / range) * 60
-        return `${x.toFixed(1)},${y.toFixed(1)}`
-      })
-      .join(' ')
-  }, [ratingHistory])
+  // Format date as M/D/YY (e.g., 8/6/26)
+  const formatDateString = (dateStr: string) => {
+    try {
+      const d = new Date(dateStr)
+      if (isNaN(d.getTime())) return '-'
+      const month = d.getMonth() + 1
+      const day = d.getDate()
+      const year = String(d.getFullYear()).slice(-2)
+      return `${month}/${day}/${year}`
+    } catch (e) {
+      return '-'
+    }
+  }
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col">
+    <div className="min-h-screen bg-background text-foreground flex flex-col font-sans">
       <Header />
 
-      <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-8 space-y-8">
-        {/* ─── PROFILE HERO BANNER ─── */}
-        <div className="relative p-6 sm:p-8 rounded-3xl bg-card border border-border overflow-hidden shadow-lg">
-          <div className="absolute top-0 right-0 -mt-16 -mr-16 w-96 h-96 bg-primary/10 rounded-full blur-3xl pointer-events-none" />
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-8">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           
-          <div className="relative z-10 flex flex-col md:flex-row items-center md:items-start justify-between gap-6">
-            <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 text-center sm:text-left">
-              {/* Avatar Box with ImageKit Upload */}
-              <div className="relative flex flex-col items-center gap-2">
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={handleAvatarChange}
-                  accept="image/*"
-                  className="hidden"
-                />
-
-                <div className="relative group">
-                  <div className="w-24 h-24 rounded-2xl overflow-hidden bg-linear-to-br from-primary via-accent to-purple-600 flex items-center justify-center text-white font-black text-4xl shadow-xl border-2 border-background shrink-0">
-                    {user?.avatar_url || user?.avatar ? (
-                      <img
-                        src={user.avatar_url || user.avatar}
-                        alt={user.username}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <span>{user?.name?.charAt(0) || user?.username?.charAt(0) || 'U'}</span>
-                    )}
-                  </div>
-
-                  {/* Camera Upload Button Overlay */}
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={isUploadingAvatar}
-                    className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 rounded-2xl flex flex-col items-center justify-center text-white transition-opacity font-bold text-xs gap-1 cursor-pointer"
-                    title="Upload new avatar to ImageKit"
-                  >
-                    {isUploadingAvatar ? (
-                      <Loader2 className="w-6 h-6 animate-spin text-primary" />
-                    ) : (
-                      <>
-                        <Camera className="w-5 h-5 text-primary" />
-                        <span className="text-[10px] uppercase font-mono">Upload</span>
-                      </>
-                    )}
-                  </button>
-
-                  {user?.emailVerified && (
-                    <div className="absolute -bottom-1.5 -right-1.5 p-1 bg-blue-600 rounded-full text-white shadow-md border-2 border-background z-10" title="Verified Coder">
-                      <BadgeCheck className="w-5 h-5 fill-white text-blue-600" />
-                    </div>
-                  )}
-                </div>
-
-                {(user?.avatar_url || user?.avatar_id) && (
-                  <button
-                    onClick={handleRemoveAvatar}
-                    disabled={isUploadingAvatar}
-                    className="text-[11px] text-muted-foreground hover:text-rose-400 flex items-center gap-1 font-mono hover:underline"
-                  >
-                    <Trash2 className="w-3 h-3" /> Remove Avatar
-                  </button>
+          {/* ─── LEFT SIDEBAR: PROFILE CARD & DETAILED INFO ─── */}
+          <div className="lg:col-span-4 flex flex-col items-start space-y-5">
+            
+            {/* Avatar & Basic Identity Side-by-Side */}
+            <div className="flex flex-row items-center gap-4 sm:gap-5 w-full">
+              <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full border-2 border-border bg-surface flex items-center justify-center text-foreground font-extrabold text-3xl sm:text-4xl overflow-hidden shadow-xl shrink-0">
+                {user?.avatar_url || user?.avatar ? (
+                  <img
+                    src={user.avatar_url || user.avatar}
+                    alt={user.username}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <span>{user?.name?.charAt(0) || user?.username?.charAt(0) || 'U'}</span>
                 )}
               </div>
 
-              {/* Identity & Badges */}
-              <div className="space-y-1.5">
-                <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2.5">
-                  <h1 className="text-2xl sm:text-3xl font-black tracking-tight">{user?.name || user?.username}</h1>
-                  
-                  {/* Verified Blue Tick Badge */}
-                  {user?.emailVerified ? (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-500/10 text-blue-400 border border-blue-500/30 shadow-xs">
-                      <BadgeCheck className="w-3.5 h-3.5 fill-blue-400 text-background" /> Verified Coder
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-500/10 text-amber-400 border border-amber-500/30">
-                      <AlertCircle className="w-3.5 h-3.5" /> Unverified Email
+              {/* Display Name, Handle, Rank beside photo */}
+              <div className="space-y-1 text-left min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground truncate">
+                    {user?.name || user?.username || 'User'}
+                  </h1>
+                  {user?.emailVerified && (
+                    <span title="Verified Coder">
+                      <BadgeCheck className="w-5 h-5 fill-blue-500 text-background shrink-0" />
                     </span>
                   )}
-
-                  {/* Rating Rank Badge */}
-                  <span className={`px-3 py-0.5 rounded-full text-xs font-bold border ${ratingInfo.bgClass}`}>
-                    {ratingInfo.title}
-                  </span>
                 </div>
 
-                <p className="text-xs text-muted-foreground font-mono">@{user?.username}</p>
-
-                {/* Sub Metadata Row */}
-                <div className="flex flex-wrap items-center justify-center sm:justify-start gap-4 pt-1.5 text-xs text-muted-foreground font-mono">
-                  <span className="flex items-center gap-1 text-foreground">
-                    <Mail className="w-3.5 h-3.5 text-accent shrink-0" /> {user?.email}
-                  </span>
-                  {user?.country && (
-                    <span className="flex items-center gap-1 text-foreground">
-                      <MapPin className="w-3.5 h-3.5 text-emerald-400 shrink-0" /> {user.country}
-                    </span>
-                  )}
-                  <span className="flex items-center gap-1 text-foreground">
-                    <Trophy className="w-3.5 h-3.5 text-amber-400 shrink-0" /> {userRating} ELO
-                  </span>
-                  <span className="flex items-center gap-1 text-foreground">
-                    <Code2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" /> {problemsSolved} Solved
-                  </span>
-                </div>
+                <p className="text-sm font-mono text-muted-foreground truncate">
+                  @{user?.username || 'username'}
+                </p>
+                <p className="text-sm font-semibold text-foreground/90 pt-0.5">
+                  Rank {userRank ? `#${userRank}` : user?.rank ? `#${user.rank}` : '-'}
+                </p>
               </div>
             </div>
 
-            {/* Quick Actions & Social Integration Panel */}
-            <div className="flex flex-col items-center md:items-end gap-3 w-full md:w-auto border-t md:border-t-0 border-border pt-4 md:pt-0">
-              {/* Email Verification Action */}
-              {!user?.emailVerified && (
-                <Button
-                  size="sm"
-                  onClick={handleVerifyEmail}
-                  disabled={isVerifyingEmail}
-                  className="w-full sm:w-auto bg-blue-600 hover:bg-blue-500 text-white font-bold gap-2 shadow-sm text-xs"
-                >
-                  {isVerifyingEmail ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <BadgeCheck className="w-3.5 h-3.5 fill-white text-blue-600" />}
-                  <span>Verify Email for Blue Tick</span>
-                </Button>
-              )}
+            {/* Edit Profile Button */}
+            <Link
+              href="/settings/profile"
+              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 px-6 rounded-xl shadow-md transition-all cursor-pointer text-sm font-sans tracking-wide text-center block"
+            >
+              Edit Profile
+            </Link>
 
-              {/* OAuth Account Integrations */}
-              <div className="flex flex-wrap items-center gap-2 w-full justify-center md:justify-end">
-                {/* Google Integration */}
-                {user?.googleId ? (
-                  <span className="px-3 py-1.5 rounded-xl bg-surface border border-emerald-500/30 text-emerald-400 text-xs font-semibold flex items-center gap-1.5">
-                    <FcGoogle className="w-4 h-4" /> Google Linked
-                  </span>
-                ) : (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handleLinkOAuth('google')}
-                    disabled={linkingProvider === 'google'}
-                    className="border-border bg-surface hover:bg-surface-2 text-foreground text-xs gap-1.5"
+            {/* Profile Info Details List */}
+            <div className="w-full space-y-3 text-sm font-sans text-foreground/90 pt-1 text-left">
+              {/* 1. Location Pin: Country */}
+              <div className="flex items-center gap-2.5">
+                <MapPin className="w-4 h-4 text-muted-foreground shrink-0" />
+                <span className={user?.country ? 'text-foreground' : 'text-muted-foreground italic text-xs'}>
+                  {user?.country || 'No location set'}
+                </span>
+              </div>
+
+              {/* 2. Website Globe: Website */}
+              <div className="flex items-center gap-2.5 font-mono text-accent">
+                <Globe className="w-4 h-4 text-muted-foreground shrink-0" />
+                {user?.website ? (
+                  <a
+                    href={user.website.startsWith('http') ? user.website : `https://${user.website}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="hover:underline hover:text-accent/90 truncate"
                   >
-                    {linkingProvider === 'google' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FcGoogle className="w-4 h-4" />}
-                    <span>Link Google Account</span>
-                  </Button>
+                    {user.website.replace(/^https?:\/\//, '')}
+                  </a>
+                ) : (
+                  <span className="text-muted-foreground italic text-xs font-sans">No website set</span>
                 )}
+              </div>
 
-                {/* GitHub Integration */}
-                {user?.githubId ? (
-                  <span className="px-3 py-1.5 rounded-xl bg-surface border border-emerald-500/30 text-emerald-400 text-xs font-semibold flex items-center gap-1.5">
-                    <FaGithub className="w-4 h-4" /> GitHub Linked
-                  </span>
-                ) : (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handleLinkOAuth('github')}
-                    disabled={linkingProvider === 'github'}
-                    className="border-border hover:bg-surface-2 text-foreground text-xs gap-1.5"
+              {/* 3. GitHub */}
+              <div className="flex items-center gap-2.5 font-mono text-foreground/90">
+                <FaGithub className="w-4 h-4 text-muted-foreground shrink-0" />
+                {user?.githubHandle ? (
+                  <a
+                    href={`https://github.com/${user.githubHandle}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="hover:underline hover:text-accent truncate"
                   >
-                    {linkingProvider === 'github' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FaGithub className="w-4 h-4" />}
-                    <span>Link GitHub Account</span>
-                  </Button>
+                    {user.githubHandle}
+                  </a>
+                ) : (
+                  <span className="text-muted-foreground italic text-xs font-sans">No GitHub handle</span>
+                )}
+              </div>
+
+              {/* 4. Twitter / X */}
+              <div className="flex items-center gap-2.5 font-mono text-foreground/90">
+                <FaXTwitter className="w-4 h-4 text-muted-foreground shrink-0" />
+                {user?.twitterHandle ? (
+                  <a
+                    href={`https://x.com/${user.twitterHandle}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="hover:underline hover:text-accent truncate"
+                  >
+                    {user.twitterHandle}
+                  </a>
+                ) : (
+                  <span className="text-muted-foreground italic text-xs font-sans">No Twitter handle</span>
+                )}
+              </div>
+
+              {/* 5. LinkedIn */}
+              <div className="flex items-center gap-2.5 font-mono text-foreground/90">
+                <FaLinkedin className="w-4 h-4 text-muted-foreground shrink-0" />
+                {user?.linkedinHandle ? (
+                  <a
+                    href={`https://linkedin.com/in/${user.linkedinHandle}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="hover:underline hover:text-accent truncate"
+                  >
+                    {user.linkedinHandle}
+                  </a>
+                ) : (
+                  <span className="text-muted-foreground italic text-xs font-sans">No LinkedIn handle</span>
                 )}
               </div>
             </div>
           </div>
-        </div>
 
-        {/* ─── COMPETITIVE STATS CARDS GRID ─── */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card className="border-border bg-card">
-            <CardContent className="p-5 flex items-center justify-between">
-              <div>
-                <p className="text-xs text-muted-foreground font-medium">Competitive ELO</p>
-                <h3 className={`text-2xl font-black mt-1 ${ratingInfo.colorClass}`}>
-                  {userRating}
-                </h3>
-                <p className="text-[11px] text-muted-foreground mt-0.5">{ratingInfo.title} tier</p>
-              </div>
-              <div className="p-3 rounded-xl bg-surface border border-border">
-                <Trophy className="w-6 h-6 text-amber-400" />
-              </div>
-            </CardContent>
-          </Card>
+          {/* ─── RIGHT MAIN COLUMN: STAT CARDS, CHART & TABS ─── */}
+          <div className="lg:col-span-8 space-y-6">
 
-          <Card className="border-border bg-card">
-            <CardContent className="p-5 flex items-center justify-between">
-              <div>
-                <p className="text-xs text-muted-foreground font-medium">Problems Solved</p>
-                <h3 className="text-2xl font-black text-emerald-400 mt-1">
-                  {problemsSolved}
-                </h3>
-                <p className="text-[11px] text-muted-foreground mt-0.5">Accepted submissions</p>
-              </div>
-              <div className="p-3 rounded-xl bg-surface border border-border">
-                <Code2 className="w-6 h-6 text-emerald-400" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-border bg-card">
-            <CardContent className="p-5 flex items-center justify-between">
-              <div>
-                <p className="text-xs text-muted-foreground font-medium">Matches Played</p>
-                <h3 className="text-2xl font-black text-accent mt-1">
-                  {matchesPlayed}
-                </h3>
-                <p className="text-[11px] text-muted-foreground mt-0.5">
-                  {wins} W / {losses} L / {draws} D
-                </p>
-              </div>
-              <div className="p-3 rounded-xl bg-surface border border-border">
-                <Swords className="w-6 h-6 text-accent" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-border bg-card">
-            <CardContent className="p-5 flex items-center justify-between">
-              <div>
-                <p className="text-xs text-muted-foreground font-medium">Win Ratio</p>
-                <h3 className="text-2xl font-black text-rose-500 mt-1">
-                  {winRate}%
-                </h3>
-                <p className="text-[11px] text-muted-foreground mt-0.5">1v1 Arena victory rate</p>
-              </div>
-              <div className="p-3 rounded-xl bg-surface border border-border">
-                <TrendingUp className="w-6 h-6 text-rose-500" />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* ─── RATING HISTORY TRAJECTORY & DELTA LOG ─── */}
-        <Card className="border-border bg-card">
-          <CardHeader className="border-b border-border pb-4">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-              <div>
-                <CardTitle className="text-base font-bold flex items-center gap-2">
-                  <TrendingUp className="w-5 h-5 text-accent" /> Competitive Rating History & Progress
-                </CardTitle>
-                <CardDescription className="text-xs">
-                  Visual ELO trajectory and match rating adjustments
-                </CardDescription>
-              </div>
-              <span className="text-xs font-mono px-2.5 py-1 rounded-md bg-surface border border-border text-accent font-semibold">
-                Current Rating: {userRating} ELO
-              </span>
-            </div>
-          </CardHeader>
-
-          <CardContent className="p-6 space-y-6">
-            {/* Rating Trajectory Line Chart */}
-            <RatingChart history={ratingHistory} currentRating={userRating} />
-
-            {/* Rating History List */}
-            <div className="space-y-3">
-              <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Recent Rating Adjustments</h4>
+            {/* 4 Stat Cards Row */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               
-              {ratingHistory.length === 0 ? (
-                <p className="text-xs text-muted-foreground py-4 text-center">No rating history available.</p>
-              ) : (
-                <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                  {[...ratingHistory].reverse().map((item) => (
-                    <div
-                      key={item.id}
-                      className="p-3 rounded-xl border border-border bg-surface flex items-center justify-between text-xs"
-                    >
-                      <div className="flex items-center gap-3">
-                        {item.delta > 0 ? (
-                          <div className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                            <ArrowUpRight className="w-4 h-4" />
-                          </div>
-                        ) : item.delta < 0 ? (
-                          <div className="p-1.5 rounded-lg bg-rose-500/10 text-rose-400 border border-rose-500/20">
-                            <ArrowDownRight className="w-4 h-4" />
-                          </div>
-                        ) : (
-                          <div className="p-1.5 rounded-lg bg-muted/20 text-muted-foreground border border-border">
-                            <Minus className="w-4 h-4" />
-                          </div>
-                        )}
+              {/* Card 1: Rating */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-card border border-border shadow-xs flex flex-col justify-between">
+                <span className="text-sm font-sans text-muted-foreground font-medium">Rating</span>
+                <span className="text-2xl sm:text-3xl font-black text-foreground mt-3 tracking-tight font-sans">
+                  {userRating}
+                </span>
+              </div>
 
-                        <div>
-                          <p className="font-bold text-foreground">
-                            {item.matchId ? '1v1 Duel Match' : 'Account Initial Rating'}
-                          </p>
-                          <p className="text-[11px] text-muted-foreground font-mono">
-                            {new Date(item.createdAt).toLocaleString()}
-                          </p>
-                        </div>
-                      </div>
+              {/* Card 2: Problems */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-card border border-border shadow-xs flex flex-col justify-between">
+                <span className="text-sm font-sans text-muted-foreground font-medium">problems</span>
+                <span className="text-2xl sm:text-3xl font-black text-foreground mt-3 tracking-tight font-sans">
+                  {problemsSolved}
+                </span>
+              </div>
 
-                      <div className="text-right font-mono">
-                        <span className="font-bold text-foreground text-sm">{item.rating} ELO</span>
-                        {item.delta !== 0 && (
-                          <p className={`text-[11px] font-bold ${item.delta > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                            {item.delta > 0 ? `+${item.delta}` : item.delta}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  ))}
+              {/* Card 3: Matches Played */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-card border border-border shadow-xs flex flex-col justify-between">
+                <span className="text-sm font-sans text-muted-foreground font-medium">Matches Played</span>
+                <div className="mt-3">
+                  <span className="text-2xl sm:text-3xl font-black text-foreground tracking-tight block font-sans">
+                    {matchesPlayed}
+                  </span>
+                  <span className="text-xs text-muted-foreground font-mono block mt-1">
+                    {wins} W / {losses} L / {draws} D
+                  </span>
                 </div>
-              )}
+              </div>
+
+              {/* Card 4: Win Ratio */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-card border border-border shadow-xs flex flex-col justify-between">
+                <span className="text-sm font-sans text-muted-foreground font-medium">Win Ratio</span>
+                <span className="text-2xl sm:text-3xl font-black text-foreground mt-3 tracking-tight font-sans">
+                  {winRate} %
+                </span>
+              </div>
+
             </div>
-          </CardContent>
-        </Card>
 
-        {/* ─── PROFILE EDIT FORM ─── */}
-        <Card className="border-border bg-card">
-          <CardHeader className="border-b border-border pb-4">
-            <CardTitle className="text-base font-bold flex items-center gap-2">
-              <User className="w-5 h-5 text-accent" /> Profile Settings & Personal Details
-            </CardTitle>
-            <CardDescription className="text-xs">Update your display handle, name, and country</CardDescription>
-          </CardHeader>
+            {/* Rating Chart Box */}
+            <div className="rounded-2xl bg-card border border-border p-5 sm:p-6 shadow-xs space-y-4">
+              <h2 className="text-lg font-bold text-foreground font-sans tracking-wide">Rating Chart</h2>
+              <div className="pt-2">
+                <RatingChart history={ratingHistory} currentRating={userRating} />
+              </div>
+            </div>
 
-          <CardContent className="p-6">
-            <form onSubmit={handleSaveProfile} className="space-y-5">
-              {message && (
-                <div
-                  className={`p-3.5 rounded-xl border text-xs font-medium flex items-center gap-2.5 ${
-                    message.type === 'success'
-                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
-                      : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+            {/* Tabs & Content Box */}
+            <div className="space-y-4">
+              
+              {/* Tab Header Selector */}
+              <div className="flex items-center gap-2 border-b border-border/80 pb-3">
+                <button
+                  onClick={() => setActiveTab('matches')}
+                  className={`px-4 py-1.5 rounded-xl text-sm font-semibold transition-colors cursor-pointer border ${
+                    activeTab === 'matches'
+                      ? 'border-border bg-surface-2 text-foreground shadow-xs'
+                      : 'border-transparent text-muted-foreground hover:text-foreground'
                   }`}
                 >
-                  {message.type === 'success' ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
-                  <span>{message.text}</span>
+                  Recent Matches
+                </button>
+                <button
+                  onClick={() => setActiveTab('submissions')}
+                  className={`px-4 py-1.5 rounded-xl text-sm font-semibold transition-colors cursor-pointer border ${
+                    activeTab === 'submissions'
+                      ? 'border-border bg-surface-2 text-foreground shadow-xs'
+                      : 'border-transparent text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  Submissions
+                </button>
+              </div>
+
+              {/* Tab 1 Content: Recent Matches List */}
+              {activeTab === 'matches' && (
+                <div className="space-y-3 pt-1">
+                  {recentMatches.length === 0 ? (
+                    <div className="p-8 text-center rounded-xl bg-card border border-border text-muted-foreground text-sm font-mono">
+                      No recent matches played yet.
+                    </div>
+                  ) : (
+                    recentMatches.map((match) => (
+                      <div
+                        key={match.id}
+                        className="p-4 rounded-xl bg-card border border-border flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-border/80 transition-colors"
+                      >
+                        <div className="flex items-center gap-4">
+                          {match.win ? (
+                            <Check className="w-5 h-5 text-emerald-400 shrink-0 font-extrabold stroke-[3]" />
+                          ) : (
+                            <X className="w-5 h-5 text-rose-400 shrink-0 font-bold" />
+                          )}
+                          <span className="text-sm font-mono text-foreground w-28 truncate">
+                            @{match.opponent?.username || 'Opponent'}
+                          </span>
+                          <div className="flex flex-col">
+                            <span className="text-xs font-semibold text-emerald-400 uppercase tracking-wide">
+                              {match.problem?.difficulty?.toLowerCase() || 'Easy'}
+                            </span>
+                            <span className="text-sm font-medium text-foreground">
+                              {match.problem?.title || 'Problem'}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between sm:justify-end gap-6 font-mono">
+                          <span className="px-3.5 py-1 rounded-xl border border-border bg-surface text-xs text-foreground/90">
+                            {formatMatchReason(match.reason, match.win)}
+                          </span>
+                          <span className="text-xs text-muted-foreground font-sans">
+                            {formatDateString(match.createdAt)}
+                          </span>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               )}
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Full Name */}
-                <div className="space-y-2">
-                  <label className="text-xs font-medium text-foreground">Display Name</label>
-                  <Input
-                    type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="Enter full name"
-                    className="bg-surface border-border text-foreground"
-                  />
-                </div>
+              {/* Tab 2 Content: Submissions List */}
+              {activeTab === 'submissions' && (
+                <div className="space-y-3 pt-1">
+                  {recentSubmissions.length === 0 ? (
+                    <div className="p-8 text-center rounded-xl bg-card border border-border text-muted-foreground text-sm font-mono">
+                      No recent submissions recorded yet.
+                    </div>
+                  ) : (
+                    recentSubmissions.map((sub) => (
+                      <div
+                        key={sub.id}
+                        className="p-4 rounded-xl bg-card border border-border flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-border/80 transition-colors"
+                      >
+                        <div className="flex items-center gap-4">
+                          <span
+                            className={`px-2.5 py-0.5 rounded text-xs font-mono font-bold ${
+                              sub.verdict === 'AC'
+                                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                                : 'bg-rose-500/10 text-rose-400 border border-rose-500/30'
+                            }`}
+                          >
+                            {sub.verdict || sub.status || 'SUBMITTED'}
+                          </span>
+                          <div className="flex flex-col">
+                            <span className="text-xs font-semibold text-emerald-400 uppercase tracking-wide">
+                              {sub.problem?.difficulty?.toLowerCase() || 'Easy'}
+                            </span>
+                            <span className="text-sm font-medium text-foreground">{sub.problem?.title}</span>
+                          </div>
+                        </div>
 
-                {/* Country */}
-                <div className="space-y-2">
-                  <label className="text-xs font-medium text-foreground">Country / Region</label>
-                  <Input
-                    type="text"
-                    value={country}
-                    onChange={(e) => setCountry(e.target.value)}
-                    placeholder="e.g. India, United States, Japan"
-                    className="bg-surface border-border text-foreground"
-                  />
+                        <span className="text-xs text-muted-foreground font-mono">
+                          {formatDateString(sub.submittedAt)}
+                        </span>
+                      </div>
+                    ))
+                  )}
                 </div>
+              )}
+
+            </div>
+
+          </div>
+
+        </div>
+      </main>
+
+      {/* ─── EDIT PROFILE MODAL DIALOG ─── */}
+      {isEditModalOpen && (
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-2xl p-6 max-w-lg w-full shadow-2xl relative space-y-6 animate-in fade-in zoom-in-95">
+            <button
+              onClick={() => setIsEditModalOpen(false)}
+              className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div>
+              <h3 className="text-xl font-bold text-foreground tracking-tight flex items-center gap-2">
+                <Edit3 className="w-5 h-5 text-accent" /> Edit Profile Settings
+              </h3>
+              <p className="text-xs text-muted-foreground mt-1">Update your public details and account parameters</p>
+            </div>
+
+            {message && (
+              <div
+                className={`p-3 rounded-xl border text-xs font-medium flex items-center gap-2 ${
+                  message.type === 'success'
+                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                    : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+                }`}
+              >
+                {message.type === 'success' ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
+                <span>{message.text}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveProfile} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-foreground">Display Name</label>
+                <Input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Enter full name"
+                  className="bg-surface border-border text-foreground"
+                />
               </div>
 
-              {/* Username Handle */}
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-medium text-foreground">Username Handle</label>
                   {isCheckingUsername && (
                     <span className="text-[11px] text-muted-foreground flex items-center gap-1 font-mono">
-                      <Loader2 className="w-3 h-3 animate-spin text-accent" /> Checking availability...
+                      <Loader2 className="w-3 h-3 animate-spin text-accent" /> Checking...
                     </span>
                   )}
                   {!isCheckingUsername && isUsernameAvailable === true && (
                     <span className="text-[11px] text-emerald-400 flex items-center gap-1 font-semibold">
-                      <CheckCircle2 className="w-3.5 h-3.5" /> Available
+                      <CheckCircle2 className="w-3 h-3" /> Available
                     </span>
                   )}
                   {!isCheckingUsername && isUsernameAvailable === false && (
                     <span className="text-[11px] text-rose-400 flex items-center gap-1 font-semibold">
-                      <AlertCircle className="w-3.5 h-3.5" /> Handle Taken
+                      <AlertCircle className="w-3 h-3" /> Handle Taken
                     </span>
                   )}
                 </div>
@@ -699,48 +736,137 @@ export default function ProfilePage() {
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder="Enter unique handle"
+                  placeholder="Enter handle"
                   className="bg-surface border-border text-foreground font-mono"
                 />
               </div>
 
-              {/* Read-only Email field */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-medium text-muted-foreground">Email Address (Read-only)</label>
-                  {user?.emailVerified && (
-                    <span className="text-[11px] text-blue-400 font-bold flex items-center gap-1">
-                      <BadgeCheck className="w-3.5 h-3.5 fill-blue-400 text-background" /> Verified Email
-                    </span>
-                  )}
-                </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-foreground">Country / Region</label>
                 <Input
-                  type="email"
-                  value={user?.email || ''}
-                  disabled
-                  className="bg-surface/50 border-border text-muted-foreground cursor-not-allowed font-mono"
+                  type="text"
+                  value={country}
+                  onChange={(e) => setCountry(e.target.value)}
+                  placeholder="e.g. India"
+                  className="bg-surface border-border text-foreground"
                 />
               </div>
 
-              <div className="pt-2">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-foreground">Website URL</label>
+                <Input
+                  type="text"
+                  value={website}
+                  onChange={(e) => setWebsite(e.target.value)}
+                  placeholder="e.g. amarpandey.in"
+                  className="bg-surface border-border text-foreground font-mono"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-foreground">GitHub Handle</label>
+                  <Input
+                    type="text"
+                    value={githubHandle}
+                    onChange={(e) => setGithubHandle(e.target.value)}
+                    placeholder="e.g. mayur420"
+                    className="bg-surface border-border text-foreground font-mono"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-foreground">Twitter Handle</label>
+                  <Input
+                    type="text"
+                    value={twitterHandle}
+                    onChange={(e) => setTwitterHandle(e.target.value)}
+                    placeholder="e.g. amarpandey2502"
+                    className="bg-surface border-border text-foreground font-mono"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-foreground">LinkedIn Handle</label>
+                  <Input
+                    type="text"
+                    value={linkedinHandle}
+                    onChange={(e) => setLinkedinHandle(e.target.value)}
+                    placeholder="e.g. amar"
+                    className="bg-surface border-border text-foreground font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* Connected Accounts */}
+              <div className="pt-2 border-t border-border space-y-2">
+                <label className="text-xs font-medium text-muted-foreground block">Connected OAuth Accounts</label>
+                <div className="flex flex-wrap gap-2">
+                  {user?.googleId ? (
+                    <span className="px-3 py-1.5 rounded-xl bg-surface border border-emerald-500/30 text-emerald-400 text-xs font-semibold flex items-center gap-1.5">
+                      <FcGoogle className="w-4 h-4" /> Google Connected
+                    </span>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      type="button"
+                      onClick={() => handleLinkOAuth('google')}
+                      disabled={linkingProvider === 'google'}
+                      className="border-border bg-surface hover:bg-surface-2 text-foreground text-xs gap-1.5"
+                    >
+                      {linkingProvider === 'google' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FcGoogle className="w-4 h-4" />}
+                      <span>Link Google</span>
+                    </Button>
+                  )}
+
+                  {user?.githubId ? (
+                    <span className="px-3 py-1.5 rounded-xl bg-surface border border-emerald-500/30 text-emerald-400 text-xs font-semibold flex items-center gap-1.5">
+                      <FaGithub className="w-4 h-4" /> GitHub Connected
+                    </span>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      type="button"
+                      onClick={() => handleLinkOAuth('github')}
+                      disabled={linkingProvider === 'github'}
+                      className="border-border bg-surface hover:bg-surface-2 text-foreground text-xs gap-1.5"
+                    >
+                      {linkingProvider === 'github' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FaGithub className="w-4 h-4" />}
+                      <span>Link GitHub</span>
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              <div className="pt-4 flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsEditModalOpen(false)}
+                  className="border-border text-muted-foreground hover:bg-surface-2"
+                >
+                  Cancel
+                </Button>
                 <Button
                   type="submit"
                   disabled={isSaving || isUsernameAvailable === false}
-                  className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold gap-2 px-6 shadow-md"
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold gap-2 px-6"
                 >
                   {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                   <span>Save Changes</span>
                 </Button>
               </div>
             </form>
-          </CardContent>
-        </Card>
-      </main>
+          </div>
+        </div>
+      )}
 
       {/* ─── EMAIL VERIFICATION OTP MODAL ─── */}
       {isOtpModalOpen && (
-        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="rounded-2xl bg-surface border border-border p-6 sm:p-8 max-w-md w-full shadow-2xl relative animate-in fade-in zoom-in-95">
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="rounded-2xl bg-card border border-border p-6 max-w-md w-full shadow-2xl relative space-y-4">
             <button
               onClick={() => {
                 setIsOtpModalOpen(false)
@@ -752,15 +878,15 @@ export default function ProfilePage() {
               <X className="w-5 h-5" />
             </button>
 
-            <div className="flex flex-col items-center text-center space-y-4">
-              <div className="w-12 h-12 rounded-2xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-blue-400">
+            <div className="flex flex-col items-center text-center space-y-3">
+              <div className="w-12 h-12 rounded-xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-blue-400">
                 <Mail className="w-6 h-6" />
               </div>
 
               <div>
-                <h3 className="text-xl font-bold tracking-tight">Verify Your Email</h3>
+                <h3 className="text-xl font-bold tracking-tight text-foreground">Verify Your Email</h3>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Enter the 6-digit code sent to <span className="font-mono text-foreground font-semibold">{user?.email}</span>
+                  Enter 6-digit code sent to <span className="font-mono text-foreground font-semibold">{user?.email}</span>
                 </p>
               </div>
 
@@ -775,7 +901,7 @@ export default function ProfilePage() {
                     if (otpError) setOtpError('')
                   }}
                   placeholder="000000"
-                  className="bg-background border-border text-center font-mono text-2xl tracking-[0.5em] h-12 text-foreground font-bold"
+                  className="bg-surface border-border text-center font-mono text-2xl tracking-[0.5em] h-12 text-foreground font-bold"
                   autoFocus
                 />
 
@@ -804,7 +930,7 @@ export default function ProfilePage() {
                       type="button"
                       onClick={handleResendOtp}
                       disabled={isSendingOtp}
-                      className="text-blue-400 hover:underline font-medium disabled:opacity-50"
+                      className="text-accent hover:underline font-medium disabled:opacity-50"
                     >
                       {isSendingOtp ? 'Sending...' : "Didn't receive code? Resend"}
                     </button>

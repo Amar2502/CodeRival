@@ -4,7 +4,15 @@ import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
-import { Zap, Code2, Swords, LayoutDashboard, User, LogOut, Trophy, Users, Menu, X } from 'lucide-react'
+import { Zap, Code2, Swords, LayoutDashboard, User, LogOut, Trophy, Users, Menu, X, Bell, Settings } from 'lucide-react'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectSeparator,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { useAuthStore } from '@/lib/authStore'
 import { getRatingInfo } from '@/lib/rating'
 import { UserAvatar } from '@/components/UserAvatar'
@@ -27,6 +35,16 @@ export function Header() {
     } finally {
       logout()
       router.push('/signin')
+    }
+  }
+
+  const handleUserMenuAction = (value: string) => {
+    if (value === 'profile') {
+      router.push('/profile')
+    } else if (value === 'settings') {
+      router.push('/settings')
+    } else if (value === 'logout') {
+      handleLogout()
     }
   }
 
@@ -96,17 +114,7 @@ export function Header() {
                 className="gap-2 text-sm font-medium"
               >
                 <LayoutDashboard className="w-4 h-4 text-primary" />
-                <span>Dashboard</span>
-              </Button>
-            </Link>
-            <Link href="/problems">
-              <Button
-                variant={pathname.startsWith('/problems') ? 'secondary' : 'ghost'}
-                size="sm"
-                className="gap-2 text-sm font-medium"
-              >
-                <Code2 className="w-4 h-4 text-emerald-400" />
-                <span>Problems</span>
+                <span>Home</span>
               </Button>
             </Link>
             <Link href="/battles">
@@ -116,7 +124,7 @@ export function Header() {
                 className="gap-2 text-sm font-medium"
               >
                 <Swords className="w-4 h-4 text-rose-500 animate-pulse" />
-                <span>1v1 Battles</span>
+                <span>Battle</span>
               </Button>
             </Link>
             <Link href="/friends">
@@ -128,23 +136,8 @@ export function Header() {
                 <Users className="w-4 h-4 text-accent" />
                 <span>Friends</span>
                 {pendingFriendsCount > 0 && (
-                  <span className="ml-0.5 inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full text-[10px] font-black bg-rose-500 text-white animate-pulse shadow-sm shadow-rose-500/50">
+                  <span className="ml-0.5 inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full text-[10px] font-black bg-rose-500 text-white animate-pulse shadow-xs shadow-rose-500/50">
                     {pendingFriendsCount > 99 ? '99+' : pendingFriendsCount}
-                  </span>
-                )}
-              </Button>
-            </Link>
-            <Link href="/tournaments">
-              <Button
-                variant={pathname.startsWith('/tournaments') ? 'secondary' : 'ghost'}
-                size="sm"
-                className="gap-2 text-sm font-medium"
-              >
-                <Trophy className="w-4 h-4 text-purple-400" />
-                <span>Tournaments</span>
-                {!isDevelopment && (
-                  <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30 tracking-wide">
-                    Upcoming
                   </span>
                 )}
               </Button>
@@ -157,6 +150,16 @@ export function Header() {
               >
                 <Trophy className="w-4 h-4 text-amber-400" />
                 <span>Leaderboard</span>
+              </Button>
+            </Link>
+            <Link href="/tournaments">
+              <Button
+                variant={pathname.startsWith('/tournaments') ? 'secondary' : 'ghost'}
+                size="sm"
+                className="gap-2 text-sm font-medium"
+              >
+                <Trophy className="w-4 h-4 text-purple-400" />
+                <span>Tournament</span>
               </Button>
             </Link>
           </div>
@@ -178,22 +181,73 @@ export function Header() {
         <div className="flex items-center gap-3">
           {user ? (
             <div className="flex items-center gap-2 sm:gap-3">
-              <Link href="/profile" className="flex items-center gap-2 px-2.5 py-1 rounded-xl bg-surface/80 border border-border hover:border-primary/40 transition-all group">
-                <UserAvatar src={user.avatar_url || user.avatar} username={user.username} name={user.name} size="sm" />
-                <div className="hidden sm:flex flex-col text-left">
-                  <span className="text-xs font-bold text-foreground group-hover:text-primary transition-colors">@{user.username}</span>
-                  <span className={`text-[10px] font-extrabold ${ratingInfo.colorClass}`}>{user.rating || 1200} ELO</span>
-                </div>
+              {/* Notification Bell Button */}
+              <Link href="/friends" title="Notifications">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="relative text-muted-foreground hover:text-foreground hover:bg-surface border border-border/60 rounded-xl h-9 w-9"
+                >
+                  <Bell className="w-4 h-4 text-foreground" />
+                  {pendingFriendsCount > 0 && (
+                    <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-rose-500 animate-pulse ring-2 ring-background" />
+                  )}
+                </Button>
               </Link>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={handleLogout}
-                title="Log out"
-                className="hidden sm:flex text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-              >
-                <LogOut className="w-4 h-4" />
-              </Button>
+
+              {/* Avatar Circle Dropdown using shadcn Select */}
+              <Select onValueChange={handleUserMenuAction}>
+                <SelectTrigger className="w-auto h-auto p-0 border-none bg-transparent hover:opacity-90 focus:ring-0 focus:outline-none rounded-full shadow-none cursor-pointer [&>svg]:hidden">
+                  <div className="relative p-0.5 rounded-full border border-border hover:border-primary/50 transition-colors">
+                    <UserAvatar src={user.avatar_url || user.avatar} username={user.username} name={user.name} size="md" />
+                  </div>
+                </SelectTrigger>
+                <SelectContent position="popper" align="end" sideOffset={8} className="bg-card/95 backdrop-blur-xl border border-border shadow-2xl min-w-[210px] p-1.5 rounded-2xl z-50 animate-in fade-in-0 zoom-in-95">
+                  {/* Clickable Profile Card Item */}
+                  <SelectItem 
+                    value="profile" 
+                    className="cursor-pointer p-2 rounded-xl focus:bg-surface-2 hover:bg-surface-2 text-foreground focus:text-foreground data-[highlighted]:bg-surface-2 data-[highlighted]:text-foreground transition-colors group [&>span:first-child]:hidden"
+                  >
+                    <div className="flex items-center gap-3 w-full">
+                      <UserAvatar src={user.avatar_url || user.avatar} username={user.username} name={user.name} size="md" />
+                      <div className="flex flex-col text-left min-w-0">
+                        <span className="text-xs font-bold text-foreground truncate group-hover:text-primary transition-colors">
+                          @{user.username}
+                        </span>
+                        <span className={`text-[10px] font-extrabold ${ratingInfo.colorClass}`}>
+                          {user.rating || 1200} ELO
+                        </span>
+                      </div>
+                    </div>
+                  </SelectItem>
+
+                  <SelectSeparator className="my-1.5 bg-border/60" />
+
+                  {/* Settings Item */}
+                  <SelectItem 
+                    value="settings" 
+                    className="cursor-pointer px-3 py-2 rounded-xl text-xs font-semibold text-foreground focus:bg-surface-2 hover:bg-surface-2 focus:text-foreground data-[highlighted]:bg-surface-2 data-[highlighted]:text-foreground transition-colors [&>span:first-child]:hidden"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Settings className="w-4 h-4 text-accent" />
+                      <span>Settings</span>
+                    </div>
+                  </SelectItem>
+
+                  <SelectSeparator className="my-1 bg-border/60" />
+
+                  {/* Logout Item */}
+                  <SelectItem 
+                    value="logout" 
+                    className="cursor-pointer px-3 py-2 rounded-xl text-xs font-semibold text-rose-400 focus:bg-rose-500/10 hover:bg-rose-500/10 focus:text-rose-400 data-[highlighted]:bg-rose-500/10 data-[highlighted]:text-rose-400 transition-colors [&>span:first-child]:hidden"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <LogOut className="w-4 h-4 text-rose-400" />
+                      <span>Log Out</span>
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           ) : (
             <div className="hidden sm:flex items-center gap-3">
@@ -241,12 +295,7 @@ export function Header() {
                   <span>Dashboard</span>
                 </Button>
               </Link>
-              <Link href="/problems" onClick={() => setMobileMenuOpen(false)}>
-                <Button variant={pathname.startsWith('/problems') ? 'secondary' : 'ghost'} className="w-full justify-start gap-3">
-                  <Code2 className="w-4 h-4 text-emerald-400" />
-                  <span>Problems</span>
-                </Button>
-              </Link>
+
               <Link href="/battles" onClick={() => setMobileMenuOpen(false)}>
                 <Button variant={pathname.startsWith('/battles') ? 'secondary' : 'ghost'} className="w-full justify-start gap-3">
                   <Swords className="w-4 h-4 text-rose-500 animate-pulse" />
@@ -266,6 +315,12 @@ export function Header() {
                   )}
                 </Button>
               </Link>
+              <Link href="/leaderboard" onClick={() => setMobileMenuOpen(false)}>
+                <Button variant={pathname.startsWith('/leaderboard') ? 'secondary' : 'ghost'} className="w-full justify-start gap-3">
+                  <Trophy className="w-4 h-4 text-amber-400" />
+                  <span>Leaderboard</span>
+                </Button>
+              </Link>
               <Link href="/tournaments" onClick={() => setMobileMenuOpen(false)}>
                 <Button variant={pathname.startsWith('/tournaments') ? 'secondary' : 'ghost'} className="w-full justify-between gap-3">
                   <div className="flex items-center gap-3">
@@ -277,12 +332,6 @@ export function Header() {
                       Upcoming
                     </span>
                   )}
-                </Button>
-              </Link>
-              <Link href="/leaderboard" onClick={() => setMobileMenuOpen(false)}>
-                <Button variant={pathname.startsWith('/leaderboard') ? 'secondary' : 'ghost'} className="w-full justify-start gap-3">
-                  <Trophy className="w-4 h-4 text-amber-400" />
-                  <span>Leaderboard</span>
                 </Button>
               </Link>
               <div className="pt-3 border-t border-border flex items-center justify-between">

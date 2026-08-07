@@ -220,12 +220,6 @@ export default function TournamentsLobbyPage() {
               </Button>
             </Link>
           </div>
-
-          <div className="pt-8 border-t border-border/60 w-full max-w-md">
-            <p className="text-[11px] text-muted-foreground font-mono">
-              💡 Developer Note: Set <code className="text-primary bg-surface px-1.5 py-0.5 rounded">NEXT_PUBLIC_APP_ENV=DEVELOPMENT</code> in your <code className="text-primary bg-surface px-1.5 py-0.5 rounded">.env</code> file to enable full tournament mode.
-            </p>
-          </div>
         </main>
       </div>
     )

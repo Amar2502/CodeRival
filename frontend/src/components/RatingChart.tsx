@@ -64,8 +64,7 @@ export function RatingChart({ history, currentRating }: RatingChartProps) {
     const realMatches = items.filter((h) => h.id !== "initial" && h.delta !== 0);
 
     if (realMatches.length === 0) {
-      // User has not completed any matches yet
-      const base = 1200;
+      const base = currentRating || 1200;
       return {
         chartData: [],
         initialRating: base,
@@ -143,16 +142,8 @@ export function RatingChart({ history, currentRating }: RatingChartProps) {
   const maxY = Math.max(...ratings) + 30;
 
   return (
-    <div className="p-6 rounded-2xl bg-card border border-border shadow-xl space-y-6">
-      {/* Header section */}
-      <div className="text-center space-y-1">
-        <h3 className="text-xl font-bold tracking-tight text-foreground">
-          ELO Rating Trajectory
-        </h3>
-        <p className="text-xs text-muted-foreground font-mono">
-          Match-wise rating progress ({chartData.length - 1} {chartData.length - 1 === 1 ? "Match" : "Matches"} recorded • Baseline: {initialRating} ELO)
-        </p>
-      </div>
+    <div className="w-full space-y-4">
+      {/* Recharts Responsive Container */}
 
       {/* Recharts Responsive Container */}
       <div className="h-64 w-full">

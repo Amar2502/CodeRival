@@ -15,10 +15,24 @@ export type User = {
   draws?: number;
   matchesPlayed?: number;
   problemsSolved?: number;
-  country?: string;
+  country?: string | null;
+  gender?: string | null;
+  website?: string | null;
+  githubHandle?: string | null;
+  twitterHandle?: string | null;
+  linkedinHandle?: string | null;
+  rank?: number | null;
   googleId?: string | null;
   githubId?: string | null;
+  hasPassword?: boolean;
   emailVerified?: boolean;
+  appearOnLeaderboard?: boolean;
+  allowPublicProfile?: boolean;
+  notifySiteFriendRequest?: boolean;
+  notifySiteDuelChallenge?: boolean;
+  notifySiteMatchTournament?: boolean;
+  notifyEmailAnnouncements?: boolean;
+  notifyEmailPromotions?: boolean;
   createdAt?: string;
 };
 

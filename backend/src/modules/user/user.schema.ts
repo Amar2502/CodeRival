@@ -34,12 +34,36 @@ export const updateUserProfileSchema = z.object({
       name: nameSchema.optional(),
       username: usernameSchema.optional(),
       country: countrySchema,
+      gender: z.string().trim().max(30).optional().nullable(),
+      website: z.string().trim().max(100).optional().nullable(),
+      githubHandle: z.string().trim().max(50).optional().nullable(),
+      twitterHandle: z.string().trim().max(50).optional().nullable(),
+      linkedinHandle: z.string().trim().max(50).optional().nullable(),
+      appearOnLeaderboard: z.boolean().optional(),
+      allowPublicProfile: z.boolean().optional(),
+      notifySiteFriendRequest: z.boolean().optional(),
+      notifySiteDuelChallenge: z.boolean().optional(),
+      notifySiteMatchTournament: z.boolean().optional(),
+      notifyEmailAnnouncements: z.boolean().optional(),
+      notifyEmailPromotions: z.boolean().optional(),
     })
     .refine(
       (data) =>
         data.name !== undefined ||
         data.username !== undefined ||
-        data.country !== undefined,
+        data.country !== undefined ||
+        data.gender !== undefined ||
+        data.website !== undefined ||
+        data.githubHandle !== undefined ||
+        data.twitterHandle !== undefined ||
+        data.linkedinHandle !== undefined ||
+        data.appearOnLeaderboard !== undefined ||
+        data.allowPublicProfile !== undefined ||
+        data.notifySiteFriendRequest !== undefined ||
+        data.notifySiteDuelChallenge !== undefined ||
+        data.notifySiteMatchTournament !== undefined ||
+        data.notifyEmailAnnouncements !== undefined ||
+        data.notifyEmailPromotions !== undefined,
       {
         message: "Provide at least one field to update.",
       }

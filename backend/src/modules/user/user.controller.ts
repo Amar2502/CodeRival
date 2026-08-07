@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import bcrypt from "bcrypt";
 import { db } from "../../config/db";
 import { Verdict } from "../../generated/prisma/client";
 import { uploadAvatarToImageKit, deleteAvatarFromImageKit } from "../../utils/imagekitUpload";
@@ -53,6 +54,11 @@ export const getMe = async (req: Request, res: Response) => {
         avatar_url: true,
         avatar_id: true,
         country: true,
+        gender: true,
+        website: true,
+        githubHandle: true,
+        twitterHandle: true,
+        linkedinHandle: true,
         rating: true,
         wins: true,
         losses: true,
@@ -62,6 +68,14 @@ export const getMe = async (req: Request, res: Response) => {
         googleId: true,
         githubId: true,
         emailVerified: true,
+        appearOnLeaderboard: true,
+        allowPublicProfile: true,
+        notifySiteFriendRequest: true,
+        notifySiteDuelChallenge: true,
+        notifySiteMatchTournament: true,
+        notifyEmailAnnouncements: true,
+        notifyEmailPromotions: true,
+        passwordHash: true,
         createdAt: true,
       },
     });
@@ -78,7 +92,13 @@ export const getMe = async (req: Request, res: Response) => {
       user.problemsSolved = actualSolved;
     }
 
-    return res.status(200).json({ user });
+    const { passwordHash, ...userWithoutPassword } = user;
+    const userResponse = {
+      ...userWithoutPassword,
+      hasPassword: Boolean(passwordHash),
+    };
+
+    return res.status(200).json({ user: userResponse });
   } catch (error) {
     console.error("getMe error:", error);
     return res.status(500).json({ message: "Internal server error" });
@@ -113,6 +133,11 @@ export const getUserProfile = async (req: Request, res: Response) => {
         avatar_id: true,
         username: true,
         country: true,
+        gender: true,
+        website: true,
+        githubHandle: true,
+        twitterHandle: true,
+        linkedinHandle: true,
         rating: true,
         wins: true,
         losses: true,
@@ -122,13 +147,21 @@ export const getUserProfile = async (req: Request, res: Response) => {
         googleId: true,
         githubId: true,
         emailVerified: true,
+        appearOnLeaderboard: true,
+        allowPublicProfile: true,
+        notifySiteFriendRequest: true,
+        notifySiteDuelChallenge: true,
+        notifySiteMatchTournament: true,
+        notifyEmailAnnouncements: true,
+        notifyEmailPromotions: true,
+        passwordHash: true,
         createdAt: true,
 
         submissions: {
           orderBy: {
             submittedAt: "desc",
           },
-          take: 7,
+          take: 10,
           select: {
             id: true,
             submittedAt: true,
@@ -138,6 +171,7 @@ export const getUserProfile = async (req: Request, res: Response) => {
               select: {
                 title: true,
                 slug: true,
+                difficulty: true,
               },
             },
           },
@@ -157,6 +191,17 @@ export const getUserProfile = async (req: Request, res: Response) => {
       user.problemsSolved = actualSolved;
     }
 
+    // Compute global rank
+    let globalRank: number | null = null;
+    try {
+      const higherCount = await db.user.count({
+        where: { rating: { gt: user.rating } },
+      });
+      globalRank = higherCount + 1;
+    } catch (e) {
+      globalRank = null;
+    }
+
     const recentMatches = await db.match.findMany({
       where: {
         OR: [{ player1Id: targetUserId }, { player2Id: targetUserId }],
@@ -164,7 +209,7 @@ export const getUserProfile = async (req: Request, res: Response) => {
       orderBy: {
         createdAt: "desc",
       },
-      take: 7,
+      take: 10,
       select: {
         id: true,
         createdAt: true,
@@ -178,15 +223,33 @@ export const getUserProfile = async (req: Request, res: Response) => {
           select: {
             title: true,
             slug: true,
+            difficulty: true,
+          },
+        },
+        player1: {
+          select: {
+            username: true,
+            name: true,
+          },
+        },
+        player2: {
+          select: {
+            username: true,
+            name: true,
           },
         },
       },
     });
 
-    const formattedRecentMatches = recentMatches.map((match) => ({
-      ...match,
-      win: match.winnerId === targetUserId,
-    }));
+    const formattedRecentMatches = recentMatches.map((match) => {
+      const isPlayer1 = match.player1Id === targetUserId;
+      const opponent = isPlayer1 ? match.player2 : match.player1;
+      return {
+        ...match,
+        win: match.winnerId === targetUserId,
+        opponent: opponent ? { username: opponent.username, name: opponent.name } : null,
+      };
+    });
 
     const ratingHistory = await db.ratingHistory.findMany({
       where: {
@@ -218,8 +281,15 @@ export const getUserProfile = async (req: Request, res: Response) => {
             },
           ];
 
+    const { passwordHash, ...userWithoutPassword } = user;
+    const userResponse = {
+      ...userWithoutPassword,
+      hasPassword: Boolean(passwordHash),
+      rank: globalRank,
+    };
+
     return res.status(200).json({
-      user,
+      user: userResponse,
       formattedRecentMatches,
       ratingHistory: formattedRatingHistory,
     });
@@ -233,7 +303,23 @@ export const getUserProfile = async (req: Request, res: Response) => {
 };
 
 export const updateUserProfile = async (req: Request, res: Response) => {
-  const { name, username, country } = req.body;
+  const {
+    name,
+    username,
+    country,
+    gender,
+    website,
+    githubHandle,
+    twitterHandle,
+    linkedinHandle,
+    appearOnLeaderboard,
+    allowPublicProfile,
+    notifySiteFriendRequest,
+    notifySiteDuelChallenge,
+    notifySiteMatchTournament,
+    notifyEmailAnnouncements,
+    notifyEmailPromotions,
+  } = req.body;
 
   try {
     const userId = req.user?.userId;
@@ -247,7 +333,19 @@ export const updateUserProfile = async (req: Request, res: Response) => {
     if (
       name === undefined &&
       username === undefined &&
-      country === undefined
+      country === undefined &&
+      gender === undefined &&
+      website === undefined &&
+      githubHandle === undefined &&
+      twitterHandle === undefined &&
+      linkedinHandle === undefined &&
+      appearOnLeaderboard === undefined &&
+      allowPublicProfile === undefined &&
+      notifySiteFriendRequest === undefined &&
+      notifySiteDuelChallenge === undefined &&
+      notifySiteMatchTournament === undefined &&
+      notifyEmailAnnouncements === undefined &&
+      notifyEmailPromotions === undefined
     ) {
       return res.status(400).json({
         message: "Provide at least one field to update.",
@@ -257,7 +355,19 @@ export const updateUserProfile = async (req: Request, res: Response) => {
     const updateData: {
       name?: string;
       username?: string;
-      country?: string;
+      country?: string | null;
+      gender?: string | null;
+      website?: string | null;
+      githubHandle?: string | null;
+      twitterHandle?: string | null;
+      linkedinHandle?: string | null;
+      appearOnLeaderboard?: boolean;
+      allowPublicProfile?: boolean;
+      notifySiteFriendRequest?: boolean;
+      notifySiteDuelChallenge?: boolean;
+      notifySiteMatchTournament?: boolean;
+      notifyEmailAnnouncements?: boolean;
+      notifyEmailPromotions?: boolean;
     } = {};
 
     if (name !== undefined) {
@@ -266,6 +376,54 @@ export const updateUserProfile = async (req: Request, res: Response) => {
 
     if (country !== undefined) {
       updateData.country = country;
+    }
+
+    if (gender !== undefined) {
+      updateData.gender = gender;
+    }
+
+    if (website !== undefined) {
+      updateData.website = website;
+    }
+
+    if (githubHandle !== undefined) {
+      updateData.githubHandle = githubHandle;
+    }
+
+    if (twitterHandle !== undefined) {
+      updateData.twitterHandle = twitterHandle;
+    }
+
+    if (linkedinHandle !== undefined) {
+      updateData.linkedinHandle = linkedinHandle;
+    }
+
+    if (appearOnLeaderboard !== undefined) {
+      updateData.appearOnLeaderboard = appearOnLeaderboard;
+    }
+
+    if (allowPublicProfile !== undefined) {
+      updateData.allowPublicProfile = allowPublicProfile;
+    }
+
+    if (notifySiteFriendRequest !== undefined) {
+      updateData.notifySiteFriendRequest = notifySiteFriendRequest;
+    }
+
+    if (notifySiteDuelChallenge !== undefined) {
+      updateData.notifySiteDuelChallenge = notifySiteDuelChallenge;
+    }
+
+    if (notifySiteMatchTournament !== undefined) {
+      updateData.notifySiteMatchTournament = notifySiteMatchTournament;
+    }
+
+    if (notifyEmailAnnouncements !== undefined) {
+      updateData.notifyEmailAnnouncements = notifyEmailAnnouncements;
+    }
+
+    if (notifyEmailPromotions !== undefined) {
+      updateData.notifyEmailPromotions = notifyEmailPromotions;
     }
 
     if (username !== undefined) {
@@ -299,6 +457,11 @@ export const updateUserProfile = async (req: Request, res: Response) => {
         avatar_url: true,
         avatar_id: true,
         country: true,
+        gender: true,
+        website: true,
+        githubHandle: true,
+        twitterHandle: true,
+        linkedinHandle: true,
         rating: true,
         wins: true,
         losses: true,
@@ -308,12 +471,26 @@ export const updateUserProfile = async (req: Request, res: Response) => {
         googleId: true,
         githubId: true,
         emailVerified: true,
+        appearOnLeaderboard: true,
+        allowPublicProfile: true,
+        notifySiteFriendRequest: true,
+        notifySiteDuelChallenge: true,
+        notifySiteMatchTournament: true,
+        notifyEmailAnnouncements: true,
+        notifyEmailPromotions: true,
+        passwordHash: true,
       },
     });
 
+    const { passwordHash, ...userWithoutPassword } = updatedUser;
+    const userResponse = {
+      ...userWithoutPassword,
+      hasPassword: Boolean(passwordHash),
+    };
+
     return res.status(200).json({
       message: "Profile updated successfully.",
-      user: updatedUser,
+      user: userResponse,
     });
   } catch (error) {
     console.error("Update Profile Error:", error);
@@ -526,5 +703,61 @@ export const removeAvatarController = async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error("removeAvatarController error:", error);
     return res.status(500).json({ message: error.message || "Failed to remove avatar" });
+  }
+};
+
+export const changePassword = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+
+    const { oldPassword, newPassword } = req.body;
+    if (!newPassword || newPassword.length < 6) {
+      return res.status(400).json({ message: "New password must be at least 6 characters." });
+    }
+
+    const user = await db.user.findUnique({ where: { id: userId } });
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    if (user.passwordHash) {
+      if (!oldPassword) {
+        return res.status(400).json({ message: "Old password is required." });
+      }
+      const isValid = await bcrypt.compare(oldPassword, user.passwordHash);
+      if (!isValid) {
+        return res.status(400).json({ message: "Incorrect old password." });
+      }
+    }
+
+    const newHash = await bcrypt.hash(newPassword, 10);
+    await db.user.update({
+      where: { id: userId },
+      data: { passwordHash: newHash },
+    });
+
+    return res.status(200).json({ message: "Password updated successfully." });
+  } catch (error) {
+    console.error("changePassword error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+export const deleteAccountController = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+
+    await db.user.delete({ where: { id: userId } });
+
+    res.clearCookie("token", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+    });
+
+    return res.status(200).json({ message: "Account deleted successfully." });
+  } catch (error) {
+    console.error("deleteAccount error:", error);
+    return res.status(500).json({ message: "Internal server error" });
   }
 };
