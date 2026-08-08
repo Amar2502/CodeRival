@@ -36,6 +36,7 @@ export interface RatingPoint {
   rating: number
   createdAt: string
   matchId?: string | null
+  delta?: number
 }
 
 interface SidebarState {

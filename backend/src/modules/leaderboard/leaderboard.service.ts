@@ -10,6 +10,16 @@ const GLOBAL_LEADERBOARD_KEY = "leaderboard:global";
  */
 export const updateUserRatingInLeaderboard = async (userId: string, rating: number) => {
   try {
+    const user = await db.user.findUnique({
+      where: { id: userId },
+      select: { appearOnLeaderboard: true },
+    });
+
+    if (user && !user.appearOnLeaderboard) {
+      await redis.zrem(GLOBAL_LEADERBOARD_KEY, userId);
+      return;
+    }
+
     await redis.zadd(GLOBAL_LEADERBOARD_KEY, rating, userId);
   } catch (error) {
     console.error(`Failed to update Redis leaderboard for user ${userId}:`, error);
@@ -21,7 +31,10 @@ export const updateUserRatingInLeaderboard = async (userId: string, rating: numb
  */
 export const syncGlobalLeaderboard = async () => {
   try {
+    await redis.del(GLOBAL_LEADERBOARD_KEY);
+
     const users = await db.user.findMany({
+      where: { appearOnLeaderboard: true },
       select: { id: true, rating: true },
     });
 
@@ -69,9 +82,9 @@ export const getGlobalLeaderboard = async (currentUserId?: string, limit: number
       return { leaderboard: [], currentUserRank: null };
     }
 
-    // Fetch rich user profiles from DB preserving rank order
+    // Fetch rich user profiles from DB preserving rank order, filtering appearOnLeaderboard
     const users = await db.user.findMany({
-      where: { id: { in: userIds } },
+      where: { id: { in: userIds }, appearOnLeaderboard: true },
       select: {
         id: true,
         username: true,
@@ -84,6 +97,7 @@ export const getGlobalLeaderboard = async (currentUserId?: string, limit: number
         losses: true,
         draws: true,
         problemsSolved: true,
+        appearOnLeaderboard: true,
       },
     });
 
@@ -113,24 +127,35 @@ export const getGlobalLeaderboard = async (currentUserId?: string, limit: number
       })
       .filter(Boolean);
 
-    // Compute current user's global rank & rating
+    // Compute current user's global rank & rating (only if user opted into global leaderboard)
     let currentUserRankInfo = null;
     if (currentUserId) {
-      const revRank = await redis.zrevrank(GLOBAL_LEADERBOARD_KEY, currentUserId);
-      const score = await redis.zscore(GLOBAL_LEADERBOARD_KEY, currentUserId);
+      const currentUser = await db.user.findUnique({
+        where: { id: currentUserId },
+        select: { appearOnLeaderboard: true },
+      });
 
-      if (revRank !== null && score !== null) {
-        currentUserRankInfo = {
-          rank: revRank + 1,
-          rating: parseInt(score, 10),
-        };
+      if (currentUser?.appearOnLeaderboard) {
+        const revRank = await redis.zrevrank(GLOBAL_LEADERBOARD_KEY, currentUserId);
+        const score = await redis.zscore(GLOBAL_LEADERBOARD_KEY, currentUserId);
+
+        if (revRank !== null && score !== null) {
+          currentUserRankInfo = {
+            rank: revRank + 1,
+            rating: parseInt(score, 10),
+          };
+        }
       }
     }
+
+    const totalPlayersCount = await db.user.count({
+      where: { appearOnLeaderboard: true },
+    });
 
     return {
       leaderboard,
       currentUserRank: currentUserRankInfo,
-      totalPlayers: card,
+      totalPlayers: totalPlayersCount,
     };
   } catch (error) {
     console.error("Error getting global leaderboard:", error);

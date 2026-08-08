@@ -385,8 +385,8 @@ export default function BattlesPage() {
   const userRating = profile?.rating || authUser?.rating || 1215
   const wins = profile?.wins || 0
   const losses = profile?.losses || 0
-  const totalMatches = profile?.matchesPlayed || (wins + losses > 0 ? wins + losses : 6)
-  const winRate = totalMatches > 0 ? Math.round((wins / totalMatches) * 100) : 50
+  const totalMatches = profile?.matchesPlayed ?? authUser?.matchesPlayed ?? (wins + losses)
+  const winRate = totalMatches > 0 ? Math.round((wins / totalMatches) * 100) : 0
 
   const displayFriends = useMemo(() => {
     return friends.slice(0, 3)

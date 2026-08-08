@@ -1,14 +1,24 @@
 'use client'
 
-import { useEffect, useState, use } from 'react'
+import { useEffect, useState, use, useCallback } from 'react'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import {
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerTrigger,
+} from '@/components/ui/drawer'
 import {
   Select,
   SelectContent,
   SelectItem,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
@@ -56,9 +66,15 @@ import {
   Timer as TimerIcon,
   Maximize2,
   AlertTriangle,
-  Sparkles,
+  Menu,
+  Search,
+  Bell,
+  Settings,
+  LogOut,
 } from 'lucide-react'
-import { refreshCurrentUser } from '@/lib/authStore'
+import { useAuthStore, refreshCurrentUser } from '@/lib/authStore'
+import { UserAvatar } from '@/components/UserAvatar'
+import { getRatingInfo } from '@/lib/rating'
 
 interface Example {
   id: string
@@ -136,6 +152,8 @@ interface ExecutionResult {
 export default function ProblemWorkspacePage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = use(params)
   const router = useRouter()
+  const { user, logout } = useAuthStore()
+  const ratingInfo = getRatingInfo(user?.rating || 1200)
 
   const [problem, setProblem] = useState<ProblemDetail | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -159,9 +177,70 @@ export default function ProblemWorkspacePage({ params }: { params: Promise<{ slu
   // Selected submission in history tab
   const [expandedSubmission, setExpandedSubmission] = useState<SubmissionRecord | null>(null)
 
+  // Notifications State (Kite Button)
+  const [pendingFriendsCount, setPendingFriendsCount] = useState<number>(0)
+
+  // Problem List Drawer State
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false)
+  const [drawerProblems, setDrawerProblems] = useState<Array<{ problemNumber: number; title: string; slug: string; difficulty: string }>>([])
+  const [drawerSearch, setDrawerSearch] = useState('')
+  const [isDrawerLoading, setIsDrawerLoading] = useState(false)
+
   // Timer State
   const [secondsElapsed, setSecondsElapsed] = useState(0)
-  const [isTimerRunning, setIsTimerRunning] = useState(true)
+  const [isTimerRunning, setIsTimerRunning] = useState(false)
+
+  // Fetch pending friend request notifications
+  const fetchPendingCount = useCallback(async () => {
+    if (!user) {
+      setPendingFriendsCount(0)
+      return
+    }
+    try {
+      const res = await api.get('/friends')
+      const incoming = res.data?.incomingRequests || []
+      setPendingFriendsCount(incoming.length)
+    } catch (err) {
+      // Silently ignore
+    }
+  }, [user])
+
+  useEffect(() => {
+    if (!user) return
+    fetchPendingCount()
+
+    const handleUpdate = () => fetchPendingCount()
+    socket.on('friend:request_received', handleUpdate)
+    socket.on('friend:request_accepted', handleUpdate)
+    socket.on('friend:removed', handleUpdate)
+
+    return () => {
+      socket.off('friend:request_received', handleUpdate)
+      socket.off('friend:request_accepted', handleUpdate)
+      socket.off('friend:removed', handleUpdate)
+    }
+  }, [user, fetchPendingCount])
+
+  const fetchDrawerProblems = async () => {
+    setIsDrawerLoading(true)
+    try {
+      const res = await api.get('/problem/get/get-all/1/100')
+      setDrawerProblems(res.data?.problems || [])
+    } catch (err) {
+      console.error('Failed to fetch drawer problems:', err)
+    } finally {
+      setIsDrawerLoading(false)
+    }
+  }
+
+  const filteredDrawerProblems = drawerProblems.filter((p) => {
+    const query = drawerSearch.toLowerCase()
+    return (
+      p.title.toLowerCase().includes(query) ||
+      p.slug.toLowerCase().includes(query) ||
+      p.problemNumber.toString().includes(query)
+    )
+  })
 
   useEffect(() => {
     fetchProblemDetails()
@@ -482,112 +561,277 @@ export default function ProblemWorkspacePage({ params }: { params: Promise<{ slu
   return (
     <div className="h-screen bg-background text-foreground flex flex-col overflow-hidden select-none">
       {/* ─── WORKSPACE SUB-HEADER ─── */}
-      <header className="h-14 border-b border-border bg-card/80 backdrop-blur-md px-4 flex items-center justify-between shrink-0 z-30">
+      <header className="h-12 border-b border-border bg-[#0d1117] px-4 flex items-center justify-between shrink-0 z-30 font-sans">
         <TooltipProvider>
-          {/* Left: Back button & Title */}
-          <div className="flex items-center gap-3 min-w-0">
+          {/* Left: (C) logo & ≡ Problem List Drawer */}
+          <div className="flex items-center gap-3">
+            {/* Circle Logo (C) */}
             <Tooltip>
               <TooltipTrigger asChild>
-                <Link href="/problems" className="p-1.5 rounded-lg hover:bg-surface text-muted-foreground hover:text-foreground transition-colors">
-                  <ArrowLeft className="w-4 h-4" />
+                <Link
+                  href={user ? "/dashboard" : "/"}
+                  className="w-7 h-7 rounded-full border border-border/80 bg-surface/60 flex items-center justify-center font-bold text-xs text-foreground hover:border-primary/50 hover:bg-surface transition-colors shadow-xs"
+                >
+                  <span className="text-primary font-bold">C</span>
                 </Link>
               </TooltipTrigger>
               <TooltipContent side="bottom" className="text-xs">
-                Back to Problems
+                CodeRival Home
               </TooltipContent>
             </Tooltip>
 
-            <div className="h-4 w-px bg-border" />
+            {/* Menu icon ≡ + Problem List (Opens Drawer) */}
+            <Drawer
+              direction="left"
+              open={isDrawerOpen}
+              onOpenChange={(open) => {
+                setIsDrawerOpen(open)
+                if (open && drawerProblems.length === 0) {
+                  fetchDrawerProblems()
+                }
+              }}
+            >
+              <DrawerTrigger asChild>
+                <button className="flex items-center gap-2 px-2.5 py-1 rounded-md text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-surface/80 transition-colors cursor-pointer">
+                  <Menu className="w-4 h-4 text-foreground/80" />
+                  <span>Problem List</span>
+                </button>
+              </DrawerTrigger>
+              <DrawerContent className="bg-[#0d1117] border-r border-border text-foreground flex flex-col h-full max-w-sm sm:max-w-md z-50">
+                <DrawerHeader className="border-b border-border/80 pb-4 text-left">
+                  <DrawerTitle className="text-base font-extrabold text-foreground flex items-center justify-between">
+                    <span>Problem List</span>
+                    <span className="text-xs font-mono text-muted-foreground font-normal">
+                      {drawerProblems.length} Problems
+                    </span>
+                  </DrawerTitle>
+                  <DrawerDescription className="text-xs text-muted-foreground">
+                    Select a problem to solve in the workspace
+                  </DrawerDescription>
 
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground font-mono">#{problem.problemNumber}</span>
-              <h1 className="text-sm font-semibold text-foreground truncate max-w-xs sm:max-w-md">
-                {problem.title}
-              </h1>
+                  {/* Search Input */}
+                  <div className="relative mt-3">
+                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      placeholder="Search problems..."
+                      value={drawerSearch}
+                      onChange={(e) => setDrawerSearch(e.target.value)}
+                      className="pl-9 bg-surface/50 border-border text-xs h-9"
+                    />
+                  </div>
+                </DrawerHeader>
+
+                {/* Scrollable Problem List */}
+                <div className="flex-1 overflow-y-auto p-3 space-y-1">
+                  {isDrawerLoading ? (
+                    <div className="flex items-center justify-center py-12 gap-2 text-xs text-muted-foreground font-mono">
+                      <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                      <span>Loading problems...</span>
+                    </div>
+                  ) : filteredDrawerProblems.length === 0 ? (
+                    <div className="text-center py-12 text-xs text-muted-foreground">
+                      No problems found
+                    </div>
+                  ) : (
+                    filteredDrawerProblems.map((p) => {
+                      const isCurrent = p.slug === slug
+                      return (
+                        <div
+                          key={p.slug}
+                          onClick={() => {
+                            setIsDrawerOpen(false)
+                            if (!isCurrent) {
+                              router.push(`/problems/${p.slug}`)
+                            }
+                          }}
+                          className={`flex items-center justify-between p-2.5 rounded-lg border text-xs cursor-pointer transition-colors ${
+                            isCurrent
+                              ? 'bg-primary/10 border-primary/40 text-primary font-semibold'
+                              : 'bg-surface/30 border-border/50 hover:bg-surface text-foreground'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                            <span className="font-mono text-muted-foreground text-[11px] shrink-0">
+                              #{p.problemNumber}
+                            </span>
+                            <span className="truncate">{p.title}</span>
+                          </div>
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
+                              p.difficulty === 'EASY'
+                                ? 'bg-easy-subtle text-easy'
+                                : p.difficulty === 'MEDIUM'
+                                ? 'bg-medium-subtle text-medium'
+                                : 'bg-hard-subtle text-hard'
+                            }`}
+                          >
+                            {p.difficulty.charAt(0) + p.difficulty.slice(1).toLowerCase()}
+                          </span>
+                        </div>
+                      )
+                    })
+                  )}
+                </div>
+              </DrawerContent>
+            </Drawer>
+          </div>
+
+          {/* Center: Joined Pill [ ▷ | Submit ] */}
+          <div className="flex items-center">
+            <div className="flex items-center rounded-lg border border-border/80 bg-surface/30 p-0.5 shadow-xs hover:border-border transition-colors">
+              {/* Play / Run code side */}
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold cursor-help ${
-                    problem.difficulty === 'EASY' ? 'bg-easy-subtle text-easy' :
-                    problem.difficulty === 'MEDIUM' ? 'bg-medium-subtle text-medium' : 'bg-hard-subtle text-hard'
-                  }`}>
-                    {problem.difficulty.charAt(0) + problem.difficulty.slice(1).toLowerCase()}
-                  </span>
+                  <button
+                    onClick={handleRunCode}
+                    disabled={isRunning || isSubmitting}
+                    className="flex items-center justify-center px-3 py-1 text-xs font-medium text-foreground hover:bg-surface/80 hover:text-primary transition-colors rounded-l-md cursor-pointer disabled:opacity-50"
+                  >
+                    {isRunning ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
+                    ) : (
+                      <Play className="w-3.5 h-3.5 fill-foreground text-foreground" />
+                    )}
+                  </button>
                 </TooltipTrigger>
                 <TooltipContent side="bottom" className="text-xs">
-                  Problem Difficulty: {problem.difficulty}
+                  Run Code (Ctrl + Enter)
+                </TooltipContent>
+              </Tooltip>
+
+              {/* Vertical divider */}
+              <div className="w-px h-4 bg-border/80 mx-0.5" />
+
+              {/* Submit side */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={handleSubmitCode}
+                    disabled={isRunning || isSubmitting}
+                    className="flex items-center justify-center px-4 py-1 text-xs font-semibold text-foreground hover:bg-surface/80 hover:text-emerald-400 transition-colors rounded-r-md cursor-pointer disabled:opacity-50"
+                  >
+                    {isSubmitting ? (
+                      <div className="flex items-center gap-1.5">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400" />
+                        <span>Submitting</span>
+                      </div>
+                    ) : (
+                      <span>Submit</span>
+                    )}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">
+                  Submit Solution
                 </TooltipContent>
               </Tooltip>
             </div>
           </div>
 
-          {/* Center: Language Selector & Run/Submit Controls */}
-          <div className="flex items-center gap-2">
-            {/* Run Button */}
+          {/* Right: Clock Timer [ (o) ], Kite Notification Bell ◇, User Avatar (A) */}
+          <div className="flex items-center gap-2 sm:gap-3">
+            {/* Clock Timer button [ (o) ] */}
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button
-                  size="sm"
-                  onClick={handleRunCode}
-                  disabled={isRunning || isSubmitting}
-                  className="bg-surface hover:bg-surface-2 text-foreground border border-border text-xs font-semibold gap-1.5 h-8 px-3 cursor-pointer"
-                >
-                  {isRunning ? <Loader2 className="w-3.5 h-3.5 animate-spin text-accent" /> : <Play className="w-3.5 h-3.5 text-emerald-400 fill-emerald-400" />}
-                  <span>Run</span>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" className="text-xs">
-                Execute code against sample test cases
-              </TooltipContent>
-            </Tooltip>
-
-            {/* Submit Button */}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  size="sm"
-                  onClick={handleSubmitCode}
-                  disabled={isRunning || isSubmitting}
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold gap-1.5 h-8 px-4 shadow-sm cursor-pointer"
-                >
-                  {isSubmitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                  <span>Submit</span>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" className="text-xs">
-                Submit solution against full test suite
-              </TooltipContent>
-            </Tooltip>
-          </div>
-
-          {/* Right: Timer & Tools */}
-          <div className="flex items-center gap-3">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div
+                <button
                   onClick={() => setIsTimerRunning(!isTimerRunning)}
-                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-surface border border-border text-xs font-mono text-muted-foreground cursor-pointer hover:text-foreground transition-colors"
+                  className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border transition-all cursor-pointer text-xs font-mono ${
+                    isTimerRunning
+                      ? 'border-primary/50 bg-primary/10 text-primary font-semibold'
+                      : 'border-border/80 text-muted-foreground hover:text-foreground hover:bg-surface/80'
+                  }`}
                 >
-                  <TimerIcon className={`w-3.5 h-3.5 ${isTimerRunning ? 'text-accent' : 'text-muted-foreground'}`} />
+                  <Clock className="w-3.5 h-3.5 text-current shrink-0" />
                   <span>{formatTimer(secondsElapsed)}</span>
-                </div>
+                </button>
               </TooltipTrigger>
               <TooltipContent side="bottom" className="text-xs">
-                {isTimerRunning ? 'Click to pause timer' : 'Click to resume timer'}
+                {isTimerRunning ? 'Click to pause timer' : 'Click to start timer'}
               </TooltipContent>
             </Tooltip>
 
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Link href="/battles">
-                  <Button size="sm" variant="ghost" className="text-xs text-rose-400 hover:bg-rose-500/10 gap-1 h-8">
-                    <Sparkles className="w-3.5 h-3.5" /> 1v1 Arena
-                  </Button>
-                </Link>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" className="text-xs">
-                Enter live 1v1 battle match arena
-              </TooltipContent>
-            </Tooltip>
+            {/* Notification Bell Button (Matching Header style) */}
+            <Link href="/friends" title="Notifications">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="relative text-muted-foreground hover:text-foreground hover:bg-surface border border-border/60 rounded-xl h-8 w-8 cursor-pointer"
+              >
+                <Bell className="w-4 h-4 text-foreground" />
+                {pendingFriendsCount > 0 && (
+                  <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-rose-500 animate-pulse ring-2 ring-background" />
+                )}
+              </Button>
+            </Link>
+
+            {/* Avatar Circle Dropdown (Matching Header style) */}
+            {user ? (
+              <Select onValueChange={(val) => {
+                if (val === 'profile') router.push('/profile')
+                if (val === 'settings') router.push('/settings')
+                if (val === 'logout') {
+                  api.post('/auth/logout').catch(() => {})
+                  logout()
+                  router.push('/signin')
+                }
+              }}>
+                <SelectTrigger className="w-auto h-auto p-0 border-none bg-transparent hover:opacity-90 focus:ring-0 focus:outline-none rounded-full shadow-none cursor-pointer [&>svg]:hidden">
+                  <div className="relative p-0.5 rounded-full border border-border hover:border-primary/50 transition-colors">
+                    <UserAvatar src={user.avatar_url || user.avatar} username={user.username} name={user.name} size="sm" />
+                  </div>
+                </SelectTrigger>
+                <SelectContent position="popper" align="end" sideOffset={8} className="bg-card/95 backdrop-blur-xl border border-border shadow-2xl min-w-[210px] p-1.5 rounded-2xl z-50 animate-in fade-in-0 zoom-in-95">
+                  {/* Clickable Profile Card Item */}
+                  <SelectItem 
+                    value="profile" 
+                    className="cursor-pointer p-2 rounded-xl focus:bg-surface-2 hover:bg-surface-2 text-foreground focus:text-foreground data-[highlighted]:bg-surface-2 data-[highlighted]:text-foreground transition-colors group [&>span:first-child]:hidden"
+                  >
+                    <div className="flex items-center gap-3 w-full">
+                      <UserAvatar src={user.avatar_url || user.avatar} username={user.username} name={user.name} size="md" />
+                      <div className="flex flex-col text-left min-w-0">
+                        <span className="text-xs font-bold text-foreground truncate group-hover:text-primary transition-colors">
+                          @{user.username}
+                        </span>
+                        <span className={`text-[10px] font-extrabold ${ratingInfo.colorClass}`}>
+                          {user.rating || 1200} ELO
+                        </span>
+                      </div>
+                    </div>
+                  </SelectItem>
+
+                  <SelectSeparator className="my-1.5 bg-border/60" />
+
+                  {/* Settings Item */}
+                  <SelectItem 
+                    value="settings" 
+                    className="cursor-pointer px-3 py-2 rounded-xl text-xs font-semibold text-foreground focus:bg-surface-2 hover:bg-surface-2 focus:text-foreground data-[highlighted]:bg-surface-2 data-[highlighted]:text-foreground transition-colors [&>span:first-child]:hidden"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Settings className="w-4 h-4 text-accent" />
+                      <span>Settings</span>
+                    </div>
+                  </SelectItem>
+
+                  <SelectSeparator className="my-1 bg-border/60" />
+
+                  {/* Logout Item */}
+                  <SelectItem 
+                    value="logout" 
+                    className="cursor-pointer px-3 py-2 rounded-xl text-xs font-semibold text-rose-400 focus:bg-rose-500/10 hover:bg-rose-500/10 focus:text-rose-400 data-[highlighted]:bg-rose-500/10 data-[highlighted]:text-rose-400 transition-colors [&>span:first-child]:hidden"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <LogOut className="w-4 h-4 text-rose-400" />
+                      <span>Log Out</span>
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            ) : (
+              <Link href="/signin">
+                <div className="w-8 h-8 rounded-full border border-border bg-surface flex items-center justify-center font-bold text-xs text-muted-foreground hover:text-foreground">
+                  A
+                </div>
+              </Link>
+            )}
           </div>
         </TooltipProvider>
       </header>

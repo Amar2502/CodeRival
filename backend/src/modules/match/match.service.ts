@@ -15,6 +15,8 @@ import { updateUserRatingInLeaderboard } from "../leaderboard/leaderboard.servic
 import { handleTournamentMatchFinished } from "../tournament/tournament.service";
 
 const activeMatchTimers = new Map<string, NodeJS.Timeout>();
+const startingMatchUsers = new Set<string>();
+const endingMatches = new Set<string>();
 
 export const calculateElo = (
   r1: number,
@@ -100,67 +102,112 @@ export const startMatch = async (
   player1: QueuePlayer,
   player2: QueuePlayer
 ) => {
-  // 1. Create match in DB
-  const match = await createMatch(player1, player2);
-
-  // 2. Fetch sockets
-  const player1Socket = getSocket(player1.userId);
-  const player2Socket = getSocket(player2.userId);
-
-  const roomId = `match:${match.id}`;
-
-  // Make all connected sockets for both players join the match room
-  io.in(`user:${player1.userId}`).socketsJoin(roomId);
-  io.in(`user:${player2.userId}`).socketsJoin(roomId);
-
-  if (player1Socket) {
-    player1Socket.join(roomId);
-  }
-  if (player2Socket) {
-    player2Socket.join(roomId);
+  if (startingMatchUsers.has(player1.userId) || startingMatchUsers.has(player2.userId)) {
+    console.warn(`[startMatch] User ${player1.userId} or ${player2.userId} match creation in progress. Skipping.`);
+    return null;
   }
 
-  // 3. Mark players active in match
-  setUserActiveMatch(player1.userId, match.id);
-  setUserActiveMatch(player2.userId, match.id);
-
-  // 4. Set match duration timeout (15 minutes)
-  const matchDurationMs = 15 * 60 * 1000;
-  const matchTimeoutTimer = setTimeout(async () => {
-    await handleMatchTimeout(io, match.id);
-  }, matchDurationMs);
-
-  activeMatchTimers.set(match.id, matchTimeoutTimer);
-
-  const startPayload = {
-    matchId: match.id,
-    roomId,
-    startedAt: match.startedAt ? match.startedAt.getTime() : Date.now(),
-    durationMs: matchDurationMs,
-    problem: match.problem,
-    player1: match.player1,
-    player2: match.player2,
-  };
-
-  // 5. Notify both clients directly via user rooms, direct sockets, and match room
-  io.to(`user:${player1.userId}`).emit("match:start", startPayload);
-  io.to(`user:${player1.userId}`).emit("match:found", startPayload);
-  io.to(`user:${player2.userId}`).emit("match:start", startPayload);
-  io.to(`user:${player2.userId}`).emit("match:found", startPayload);
-
-  if (player1Socket) {
-    player1Socket.emit("match:start", startPayload);
-    player1Socket.emit("match:found", startPayload);
-  }
-  if (player2Socket) {
-    player2Socket.emit("match:start", startPayload);
-    player2Socket.emit("match:found", startPayload);
+  const activeP1 = getUserActiveMatch(player1.userId);
+  const activeP2 = getUserActiveMatch(player2.userId);
+  if (activeP1 || activeP2) {
+    const existingMatchId = activeP1 || activeP2;
+    console.warn(`[startMatch] User already in active match (${existingMatchId}). Skipping creation.`);
+    return await db.match.findUnique({
+      where: { id: existingMatchId! },
+      include: {
+        problem: true,
+        player1: { select: { id: true, username: true, name: true, avatar_url: true, avatar_id: true, rating: true } },
+        player2: { select: { id: true, username: true, name: true, avatar_url: true, avatar_id: true, rating: true } },
+      },
+    });
   }
 
-  io.to(roomId).emit("match:start", startPayload);
-  io.to(roomId).emit("match:found", startPayload);
+  const existingDbMatch = await db.match.findFirst({
+    where: {
+      OR: [
+        { player1Id: player1.userId, status: MatchStatus.ACTIVE },
+        { player2Id: player1.userId, status: MatchStatus.ACTIVE },
+        { player1Id: player2.userId, status: MatchStatus.ACTIVE },
+        { player2Id: player2.userId, status: MatchStatus.ACTIVE },
+      ],
+    },
+  });
 
-  return match;
+  if (existingDbMatch) {
+    setUserActiveMatch(player1.userId, existingDbMatch.id);
+    setUserActiveMatch(player2.userId, existingDbMatch.id);
+    return existingDbMatch;
+  }
+
+  startingMatchUsers.add(player1.userId);
+  startingMatchUsers.add(player2.userId);
+
+  try {
+    // 1. Create match in DB
+    const match = await createMatch(player1, player2);
+
+    // 2. Fetch sockets
+    const player1Socket = getSocket(player1.userId);
+    const player2Socket = getSocket(player2.userId);
+
+    const roomId = `match:${match.id}`;
+
+    // Make all connected sockets for both players join the match room
+    io.in(`user:${player1.userId}`).socketsJoin(roomId);
+    io.in(`user:${player2.userId}`).socketsJoin(roomId);
+
+    if (player1Socket) {
+      player1Socket.join(roomId);
+    }
+    if (player2Socket) {
+      player2Socket.join(roomId);
+    }
+
+    // 3. Mark players active in match
+    setUserActiveMatch(player1.userId, match.id);
+    setUserActiveMatch(player2.userId, match.id);
+
+    // 4. Set match duration timeout (15 minutes)
+    const matchDurationMs = 15 * 60 * 1000;
+    const matchTimeoutTimer = setTimeout(async () => {
+      await handleMatchTimeout(io, match.id);
+    }, matchDurationMs);
+
+    activeMatchTimers.set(match.id, matchTimeoutTimer);
+
+    const startPayload = {
+      matchId: match.id,
+      roomId,
+      startedAt: match.startedAt ? match.startedAt.getTime() : Date.now(),
+      durationMs: matchDurationMs,
+      problem: match.problem,
+      player1: match.player1,
+      player2: match.player2,
+    };
+
+    // 5. Notify both clients directly via user rooms, direct sockets, and match room
+    io.to(`user:${player1.userId}`).emit("match:start", startPayload);
+    io.to(`user:${player1.userId}`).emit("match:found", startPayload);
+    io.to(`user:${player2.userId}`).emit("match:start", startPayload);
+    io.to(`user:${player2.userId}`).emit("match:found", startPayload);
+
+    if (player1Socket) {
+      player1Socket.emit("match:start", startPayload);
+      player1Socket.emit("match:found", startPayload);
+    }
+    if (player2Socket) {
+      player2Socket.emit("match:start", startPayload);
+      player2Socket.emit("match:found", startPayload);
+    }
+
+    io.to(roomId).emit("match:start", startPayload);
+    io.to(roomId).emit("match:found", startPayload);
+
+    return match;
+  } finally {
+    startingMatchUsers.delete(player1.userId);
+    startingMatchUsers.delete(player2.userId);
+  }
 };
 
 export const endMatch = async (
@@ -170,55 +217,65 @@ export const endMatch = async (
   result: MatchResult,
   reason?: MatchFinishReason | null
 ) => {
-  // Clear match timer
-  const matchTimeoutTimer = activeMatchTimers.get(matchId);
-  if (matchTimeoutTimer) {
-    clearTimeout(matchTimeoutTimer);
-    activeMatchTimers.delete(matchId);
-  }
-
-  // Idempotency check: verify match status in DB
-  const currentMatch = await db.match.findUnique({
-    where: { id: matchId },
-    include: { player1: true, player2: true },
-  });
-
-  if (
-    !currentMatch ||
-    currentMatch.status === MatchStatus.FINISHED ||
-    currentMatch.status === MatchStatus.CANCELLED
-  ) {
+  // Guard against concurrent endMatch calls for the same matchId in memory
+  if (endingMatches.has(matchId)) {
     return null;
   }
+  endingMatches.add(matchId);
 
-  const p1 = currentMatch.player1;
-  const p2 = currentMatch.player2;
+  try {
+    // Clear match timer
+    const matchTimeoutTimer = activeMatchTimers.get(matchId);
+    if (matchTimeoutTimer) {
+      clearTimeout(matchTimeoutTimer);
+      activeMatchTimers.delete(matchId);
+    }
 
-  let score1 = 0.5;
-  if (result === MatchResult.PLAYER1) {
-    score1 = 1;
-  } else if (result === MatchResult.PLAYER2) {
-    score1 = 0;
-  } else if (result === MatchResult.ABANDONED) {
-    score1 = winnerId === p1.id ? 1 : 0;
-  }
-
-  const { newR1, newR2, delta1, delta2 } = calculateElo(p1.rating, p2.rating, score1);
-
-  let matchResult: MatchResult = result;
-  if (!matchResult) {
-    if (winnerId === p1.id) matchResult = MatchResult.PLAYER1;
-    else if (winnerId === p2.id) matchResult = MatchResult.PLAYER2;
-    else matchResult = MatchResult.DRAW;
-  }
-
-  const isP1Winner = winnerId === p1.id || matchResult === MatchResult.PLAYER1;
-  const isP2Winner = winnerId === p2.id || matchResult === MatchResult.PLAYER2;
-  const isDraw = matchResult === MatchResult.DRAW;
-
-  const [updatedMatch] = await db.$transaction([
-    db.match.update({
+    // Idempotency check: verify match status in DB
+    const currentMatch = await db.match.findUnique({
       where: { id: matchId },
+      include: { player1: true, player2: true },
+    });
+
+    if (
+      !currentMatch ||
+      currentMatch.status === MatchStatus.FINISHED ||
+      currentMatch.status === MatchStatus.CANCELLED
+    ) {
+      return null;
+    }
+
+    const p1 = currentMatch.player1;
+    const p2 = currentMatch.player2;
+
+    let score1 = 0.5;
+    if (result === MatchResult.PLAYER1) {
+      score1 = 1;
+    } else if (result === MatchResult.PLAYER2) {
+      score1 = 0;
+    } else if (result === MatchResult.ABANDONED) {
+      score1 = winnerId === p1.id ? 1 : 0;
+    }
+
+    const { newR1, newR2, delta1, delta2 } = calculateElo(p1.rating, p2.rating, score1);
+
+    let matchResult: MatchResult = result;
+    if (!matchResult) {
+      if (winnerId === p1.id) matchResult = MatchResult.PLAYER1;
+      else if (winnerId === p2.id) matchResult = MatchResult.PLAYER2;
+      else matchResult = MatchResult.DRAW;
+    }
+
+    const isP1Winner = winnerId === p1.id || matchResult === MatchResult.PLAYER1;
+    const isP2Winner = winnerId === p2.id || matchResult === MatchResult.PLAYER2;
+    const isDraw = matchResult === MatchResult.DRAW;
+
+    // Perform atomic status transition from ACTIVE to FINISHED in DB first
+    const statusUpdateResult = await db.match.updateMany({
+      where: {
+        id: matchId,
+        status: MatchStatus.ACTIVE,
+      },
       data: {
         status: MatchStatus.FINISHED,
         winnerId: winnerId || null,
@@ -226,44 +283,51 @@ export const endMatch = async (
         reason: reason || null,
         endedAt: new Date(),
       },
-    }),
-    db.user.update({
-      where: { id: p1.id },
-      data: {
-        rating: newR1,
-        wins: isP1Winner ? { increment: 1 } : undefined,
-        losses: isP2Winner ? { increment: 1 } : undefined,
-        draws: isDraw ? { increment: 1 } : undefined,
-        matchesPlayed: { increment: 1 },
-      },
-    }),
-    db.user.update({
-      where: { id: p2.id },
-      data: {
-        rating: newR2,
-        wins: isP2Winner ? { increment: 1 } : undefined,
-        losses: isP1Winner ? { increment: 1 } : undefined,
-        draws: isDraw ? { increment: 1 } : undefined,
-        matchesPlayed: { increment: 1 },
-      },
-    }),
-    db.ratingHistory.create({
-      data: {
-        userId: p1.id,
-        matchId: matchId,
-        rating: newR1,
-        delta: delta1,
-      },
-    }),
-    db.ratingHistory.create({
-      data: {
-        userId: p2.id,
-        matchId: matchId,
-        rating: newR2,
-        delta: delta2,
-      },
-    }),
-  ]);
+    });
+
+    // If count is 0, another execution already marked this match FINISHED
+    if (statusUpdateResult.count === 0) {
+      return null;
+    }
+
+    await db.$transaction([
+      db.user.update({
+        where: { id: p1.id },
+        data: {
+          rating: newR1,
+          wins: isP1Winner ? { increment: 1 } : undefined,
+          losses: isP2Winner ? { increment: 1 } : undefined,
+          draws: isDraw ? { increment: 1 } : undefined,
+          matchesPlayed: { increment: 1 },
+        },
+      }),
+      db.user.update({
+        where: { id: p2.id },
+        data: {
+          rating: newR2,
+          wins: isP2Winner ? { increment: 1 } : undefined,
+          losses: isP1Winner ? { increment: 1 } : undefined,
+          draws: isDraw ? { increment: 1 } : undefined,
+          matchesPlayed: { increment: 1 },
+        },
+      }),
+      db.ratingHistory.create({
+        data: {
+          userId: p1.id,
+          matchId: matchId,
+          rating: newR1,
+          delta: delta1,
+        },
+      }),
+      db.ratingHistory.create({
+        data: {
+          userId: p2.id,
+          matchId: matchId,
+          rating: newR2,
+          delta: delta2,
+        },
+      }),
+    ]);
 
   // Update Redis Leaderboards
   updateUserRatingInLeaderboard(p1.id, newR1);
@@ -311,7 +375,12 @@ export const endMatch = async (
     });
   }
 
-  return updatedMatch;
+    const updatedMatch = await db.match.findUnique({ where: { id: matchId } });
+
+    return updatedMatch;
+  } finally {
+    endingMatches.delete(matchId);
+  }
 };
 
 export const handleMatchSubmission = async (
@@ -433,6 +502,11 @@ export const handlePlayerMatchReconnect = async (socket: Socket, io: Server, mat
     return;
   }
 
+  if (match.startedAt && Date.now() - match.startedAt.getTime() >= 15 * 60 * 1000) {
+    await handleMatchTimeout(io, matchId);
+    return;
+  }
+
   const isParticipant = match.player1Id === userId || match.player2Id === userId;
   const isTournamentMatch = match.tournamentMatches && match.tournamentMatches.length > 0;
 
@@ -462,8 +536,8 @@ export const handlePlayerMatchReconnect = async (socket: Socket, io: Server, mat
   });
 };
 
-export const getMatch = async (matchId: string) => {
-  return await db.match.findUnique({
+export const getMatch = async (matchId: string, io?: Server) => {
+  const match = await db.match.findUnique({
     where: { id: matchId },
     include: {
       player1: { select: { id: true, username: true, name: true, avatar_url: true, avatar_id: true, rating: true } },
@@ -475,4 +549,46 @@ export const getMatch = async (matchId: string) => {
       },
     },
   });
+
+  if (match && match.status === MatchStatus.ACTIVE && match.startedAt) {
+    const elapsed = Date.now() - match.startedAt.getTime();
+    if (elapsed >= 15 * 60 * 1000) {
+      if (io) {
+        await handleMatchTimeout(io, matchId);
+      }
+      return await db.match.findUnique({
+        where: { id: matchId },
+        include: {
+          player1: { select: { id: true, username: true, name: true, avatar_url: true, avatar_id: true, rating: true } },
+          player2: { select: { id: true, username: true, name: true, avatar_url: true, avatar_id: true, rating: true } },
+          problem: true,
+          tournamentMatches: true,
+          submissions: {
+            orderBy: { submittedAt: "desc" },
+          },
+        },
+      });
+    }
+  }
+
+  return match;
+};
+
+export const checkExpiredMatches = async (io: Server) => {
+  try {
+    const fifteenMinsAgo = new Date(Date.now() - 15 * 60 * 1000);
+    const expiredMatches = await db.match.findMany({
+      where: {
+        status: MatchStatus.ACTIVE,
+        startedAt: { lte: fifteenMinsAgo },
+      },
+      select: { id: true },
+    });
+
+    for (const m of expiredMatches) {
+      await handleMatchTimeout(io, m.id);
+    }
+  } catch (error) {
+    console.error("Error checking expired matches:", error);
+  }
 };

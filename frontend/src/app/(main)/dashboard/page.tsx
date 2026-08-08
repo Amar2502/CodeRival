@@ -63,6 +63,7 @@ interface ProblemItem {
   difficulty: 'EASY' | 'MEDIUM' | 'HARD'
   topics?: string[]
   solved?: boolean
+  status?: 'SOLVED' | 'ATTEMPTED' | 'UNSOLVED'
 }
 
 interface RatingPoint {
@@ -462,11 +463,11 @@ export default function DashboardPage() {
                   {/* Solved checkmark & Title */}
                   <div className="flex items-center gap-3.5 min-w-0">
                     <div className="w-5 h-5 flex items-center justify-center shrink-0">
-                      {prob.solved ? (
+                      {prob.status === 'SOLVED' || (prob.solved && !prob.status) ? (
                         <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                      ) : (
-                        <div className="w-3.5 h-3.5 rounded-full border border-border group-hover:border-accent/50 transition-colors" />
-                      )}
+                      ) : prob.status === 'ATTEMPTED' ? (
+                        <span className="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.5)]" title="In Progress" />
+                      ) : null}
                     </div>
 
                     <div className="truncate font-semibold text-sm text-foreground group-hover:text-accent transition-colors flex items-center gap-2">

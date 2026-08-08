@@ -1,6 +1,17 @@
 import { db } from "../../config/db";
-import { Difficulty } from "../../generated/prisma/client";
+import { Difficulty, SubmissionType, Verdict } from "../../generated/prisma/client";
 import { NotFoundError, BadRequestError } from "../../utils/errors";
+
+const getProblemUserStatus = (submissions?: { verdict: Verdict | null }[] | false) => {
+  if (!Array.isArray(submissions) || submissions.length === 0) {
+    return { status: "UNSOLVED" as const, solved: false };
+  }
+  const hasAC = submissions.some((s) => s.verdict === Verdict.AC);
+  if (hasAC) {
+    return { status: "SOLVED" as const, solved: true };
+  }
+  return { status: "ATTEMPTED" as const, solved: false };
+};
 
 export class ProblemService {
   static async getProblemBySlug(slug: string, userId?: string) {
@@ -26,7 +37,7 @@ export class ProblemService {
         },
         submissions: userId
           ? {
-              where: { userId },
+              where: { userId, submissionType: SubmissionType.SUBMIT },
               orderBy: { submittedAt: "desc" },
               select: {
                 id: true,
@@ -68,21 +79,24 @@ export class ProblemService {
         difficulty: true,
         submissions: userId
           ? {
-              where: { userId },
-              select: { id: true },
-              take: 1,
+              where: { userId, submissionType: SubmissionType.SUBMIT },
+              select: { verdict: true },
             }
           : false,
       },
     });
 
-    return problems.map((problem) => ({
-      problemNumber: problem.problemNumber,
-      title: problem.title,
-      slug: problem.slug,
-      difficulty: problem.difficulty,
-      solved: Array.isArray(problem.submissions) && problem.submissions.length > 0,
-    }));
+    return problems.map((problem) => {
+      const userStatus = getProblemUserStatus(problem.submissions);
+      return {
+        problemNumber: problem.problemNumber,
+        title: problem.title,
+        slug: problem.slug,
+        difficulty: problem.difficulty,
+        solved: userStatus.solved,
+        status: userStatus.status,
+      };
+    });
   }
 
   static async getProblemsByDifficulty(difficultyParam: string, userId?: string) {
@@ -108,21 +122,24 @@ export class ProblemService {
         difficulty: true,
         submissions: userId
           ? {
-              where: { userId },
-              select: { id: true },
-              take: 1,
+              where: { userId, submissionType: SubmissionType.SUBMIT },
+              select: { verdict: true },
             }
           : false,
       },
     });
 
-    return problems.map((problem) => ({
-      problemNumber: problem.problemNumber,
-      title: problem.title,
-      slug: problem.slug,
-      difficulty: problem.difficulty,
-      solved: Array.isArray(problem.submissions) && problem.submissions.length > 0,
-    }));
+    return problems.map((problem) => {
+      const userStatus = getProblemUserStatus(problem.submissions);
+      return {
+        problemNumber: problem.problemNumber,
+        title: problem.title,
+        slug: problem.slug,
+        difficulty: problem.difficulty,
+        solved: userStatus.solved,
+        status: userStatus.status,
+      };
+    });
   }
 
   static async getAllProblems(page: number, limit: number, userId?: string) {
@@ -140,9 +157,8 @@ export class ProblemService {
           },
           submissions: userId
             ? {
-                where: { userId },
-                select: { id: true },
-                take: 1,
+                where: { userId, submissionType: SubmissionType.SUBMIT },
+                select: { verdict: true },
               }
             : false,
         },
@@ -155,14 +171,18 @@ export class ProblemService {
       db.problem.count(),
     ]);
 
-    const formattedProblems = problems.map((problem) => ({
-      problemNumber: problem.problemNumber,
-      title: problem.title,
-      slug: problem.slug,
-      difficulty: problem.difficulty,
-      topics: problem.topics.map((t) => t.name),
-      solved: Array.isArray(problem.submissions) && problem.submissions.length > 0,
-    }));
+    const formattedProblems = problems.map((problem) => {
+      const userStatus = getProblemUserStatus(problem.submissions);
+      return {
+        problemNumber: problem.problemNumber,
+        title: problem.title,
+        slug: problem.slug,
+        difficulty: problem.difficulty,
+        topics: problem.topics.map((t) => t.name),
+        solved: userStatus.solved,
+        status: userStatus.status,
+      };
+    });
 
     return { problems: formattedProblems, totalCount };
   }

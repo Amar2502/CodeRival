@@ -26,6 +26,7 @@ interface ProblemItem {
   difficulty: 'EASY' | 'MEDIUM' | 'HARD'
   topics?: string[]
   solved?: boolean
+  status?: 'SOLVED' | 'ATTEMPTED' | 'UNSOLVED'
 }
 
 export default function ProblemsPage() {
@@ -263,11 +264,11 @@ export default function ProblemsPage() {
                       >
                         {/* Status Icon */}
                         <td className="py-3.5 px-4 text-center">
-                          {problem.solved ? (
+                          {problem.status === 'SOLVED' || (problem.solved && !problem.status) ? (
                             <CheckCircle2 className="w-5 h-5 text-emerald-400 mx-auto" />
-                          ) : (
-                            <span className="w-2 h-2 rounded-full bg-border inline-block" />
-                          )}
+                          ) : problem.status === 'ATTEMPTED' ? (
+                            <span className="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.5)] inline-block mx-auto" title="In Progress" />
+                          ) : null}
                         </td>
 
                         {/* Title & Number */}

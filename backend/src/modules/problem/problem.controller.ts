@@ -5,6 +5,8 @@ import { SubmissionService } from "../submission/submission.service";
 import { SubmissionStatus, SubmissionType } from "../../generated/prisma/client";
 import { submissionEvents } from "../submission/submission.events";
 
+import { ExecutionService } from "../submission/execution.service";
+
 export const getProblem = asyncHandler(async (req: Request, res: Response) => {
   const slug = String(req.params.slug);
   const problem = await ProblemService.getProblemBySlug(slug, req.user?.userId);
@@ -24,25 +26,23 @@ export const getProblemByDifficulty = asyncHandler(async (req: Request, res: Res
 });
 
 export const getAllProblems = asyncHandler(async (req: Request, res: Response) => {
-  const page = Number(req.params.page) || 1;
-  const limit = Number(req.params.limit) || 20;
+  const page = parseInt(req.query.page as string) || 1;
+  const limit = parseInt(req.query.limit as string) || 50;
   const { problems, totalCount } = await ProblemService.getAllProblems(page, limit, req.user?.userId);
   return res.status(200).json({ problems, totalCount, page, limit });
 });
 
 export const runCode = asyncHandler(async (req: Request, res: Response) => {
   const { problemId, language, sourceCode } = req.body;
-  const userId = req.user?.userId || "anonymous";
 
-  const result = await SubmissionService.processSubmission({
-    userId,
+  const result = await ExecutionService.executeCode({
     problemId,
     language,
     sourceCode,
-    submissionType: SubmissionType.RUN,
+    isSampleOnly: true,
   });
 
-  return res.status(202).json(result);
+  return res.status(200).json(result);
 });
 
 export const submitCode = asyncHandler(async (req: Request, res: Response) => {

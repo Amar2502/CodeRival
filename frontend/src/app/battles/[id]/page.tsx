@@ -67,6 +67,7 @@ import { useAuthStore } from '@/lib/authStore'
 import { socket } from '@/lib/socket'
 import { api } from '@/lib/axios'
 import { FriendButton } from '@/components/friends/FriendButton'
+import { UserAvatar } from '@/components/UserAvatar'
 
 const SecureMonacoEditor = dynamic(
   () => import('@/components/editor/SecureMonacoEditor').then((m) => m.SecureMonacoEditor),
@@ -85,6 +86,7 @@ interface Player {
   id: string
   username: string
   name?: string
+  avatar_url?: string | null
   avatar?: string
   rating: number
 }
@@ -174,14 +176,12 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
   // Editor State
   const [selectedLanguage, setSelectedLanguage] = useState<'CPP' | 'JAVA' | 'PYTHON'>('PYTHON')
   const [code, setCode] = useState<string>('')
-  const [opponentCode, setOpponentCode] = useState<string>('')
-  const [opponentLanguage, setOpponentLanguage] = useState<string>('PYTHON')
 
   // Live Activity Feed State
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([])
 
   // UI Tabs & Panels State
-  const [activeLeftTab, setActiveLeftTab] = useState<'problem' | 'feed' | 'opponent'>('problem')
+  const [activeLeftTab, setActiveLeftTab] = useState<'problem' | 'feed'>('problem')
   const [activeBottomTab, setActiveBottomTab] = useState<'testcase' | 'result'>('testcase')
   const [isBottomOpen, setIsBottomOpen] = useState(true)
   const [selectedTestCaseIndex, setSelectedTestCaseIndex] = useState(0)
@@ -239,13 +239,6 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
     const onSyncState = (data: any) => {
       hydrateMatch(data)
       addActivityLog('🔄 Match state synchronized.', 'info')
-    }
-
-    const onOpponentCodeSync = (data: { userId: string; code: string; language: string }) => {
-      if (data.userId !== user?.id) {
-        setOpponentCode(data.code)
-        if (data.language) setOpponentLanguage(data.language)
-      }
     }
 
     const onOpponentSubmitted = (data: { userId: string }) => {
@@ -370,7 +363,6 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
     socket.on('match:start', onStart)
     socket.on('match:found', onStart)
     socket.on('match:sync_state', onSyncState)
-    socket.on('match:opponent_code_sync', onOpponentCodeSync)
     socket.on('match:opponent_submitted', onOpponentSubmitted)
     socket.on('match:submission_result', onSubmissionResult)
     socket.on('submission:result', onSubmissionResult)
@@ -383,7 +375,6 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
       socket.off('match:start', onStart)
       socket.off('match:found', onStart)
       socket.off('match:sync_state', onSyncState)
-      socket.off('match:opponent_code_sync', onOpponentCodeSync)
       socket.off('match:opponent_submitted', onOpponentSubmitted)
       socket.off('match:submission_result', onSubmissionResult)
       socket.off('submission:result', onSubmissionResult)
@@ -477,14 +468,21 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
   useEffect(() => {
     if (!startedAt || matchStatus !== 'ACTIVE') return
 
+    let timeoutEmitted = false
+
     const interval = setInterval(() => {
       const elapsed = Date.now() - startedAt
       const remaining = Math.max(0, durationMs - elapsed)
       setRemainingMs(remaining)
+
+      if (remaining <= 0 && !timeoutEmitted) {
+        timeoutEmitted = true
+        socket.emit('match:timeout', { matchId })
+      }
     }, 1000)
 
     return () => clearInterval(interval)
-  }, [startedAt, durationMs, matchStatus])
+  }, [startedAt, durationMs, matchStatus, matchId])
 
   // 3. Disconnect Grace Period Countdown Timer
   useEffect(() => {
@@ -673,16 +671,6 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
   const handleCodeChange = (val: string | undefined) => {
     if (val === undefined) return
     setCode(val)
-
-    // Debounced Socket Sync to server (500ms)
-    if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current)
-    syncTimeoutRef.current = setTimeout(() => {
-      socket.emit('match:code_sync', {
-        matchId,
-        code: val,
-        language: selectedLanguage,
-      })
-    }, 500)
   }
 
   // Handle Language Switch
@@ -923,9 +911,12 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
           <div className="flex items-center gap-4">
             {/* You */}
             <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-full bg-accent/20 border border-accent flex items-center justify-center text-xs font-bold text-accent">
-                {me?.username.charAt(0).toUpperCase()}
-              </div>
+              <UserAvatar
+                src={me?.avatar_url || me?.avatar}
+                username={me?.username || 'You'}
+                name={me?.name}
+                size="sm"
+              />
               <div className="hidden md:block text-left">
                 <div className="text-xs font-bold text-accent truncate max-w-[100px]">{me?.username}</div>
                 <div className="text-[10px] text-muted-foreground font-mono">{me?.rating} ELO</div>
@@ -957,8 +948,13 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
                 <div className="text-xs font-bold text-primary truncate max-w-[100px]">{rival?.username}</div>
                 <div className="text-[10px] text-muted-foreground font-mono">{rival?.rating} ELO</div>
               </div>
-              <div className="w-7 h-7 rounded-full bg-primary/20 border border-primary flex items-center justify-center text-xs font-bold text-primary relative">
-                {rival?.username.charAt(0).toUpperCase()}
+              <div className="relative">
+                <UserAvatar
+                  src={rival?.avatar_url || rival?.avatar}
+                  username={rival?.username || 'Rival'}
+                  name={rival?.name}
+                  size="sm"
+                />
                 {opponentDisconnected && (
                   <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping" />
                 )}
@@ -1085,17 +1081,6 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
                   </span>
                 )}
               </button>
-
-              <button
-                onClick={() => setActiveLeftTab('opponent')}
-                className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors ${
-                  activeLeftTab === 'opponent'
-                    ? 'border-accent text-accent bg-surface/60'
-                    : 'border-transparent text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                <Eye className="w-3.5 h-3.5" /> Rival Preview
-              </button>
             </div>
 
             {/* Tab Content */}
@@ -1156,7 +1141,7 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
                     </div>
                   )}
                 </>
-              ) : activeLeftTab === 'feed' ? (
+              ) : (
                 /* Battle Activity Feed Tab */
                 <div className="space-y-3 font-mono text-xs">
                   <div className="text-xs text-muted-foreground font-semibold flex items-center justify-between border-b border-border pb-2">
@@ -1191,41 +1176,6 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
                       ))}
                     </div>
                   )}
-                </div>
-              ) : (
-                /* Opponent Code Preview Tab */
-                <div className="space-y-4">
-                  <div className="p-4 rounded-xl border border-border bg-surface flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-primary/20 border border-primary flex items-center justify-center font-bold text-primary">
-                        {rival?.username.charAt(0).toUpperCase()}
-                      </div>
-                      <div>
-                        <div className="text-xs font-bold text-foreground">@{rival?.username}</div>
-                        <div className="text-[11px] text-muted-foreground font-mono">
-                          Active Language: <strong className="text-accent">{opponentLanguage}</strong>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="text-right font-mono text-xs text-muted-foreground">
-                      Code Length: <strong className="text-foreground">{opponentCode.length} chars</strong>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
-                      <Code2 className="w-3.5 h-3.5 text-accent" /> Live Sync Code Preview:
-                    </div>
-                    {opponentCode ? (
-                      <pre className="p-4 rounded-xl bg-[#0d1117] border border-border text-xs font-mono text-foreground/90 overflow-x-auto max-h-[400px]">
-                        {opponentCode}
-                      </pre>
-                    ) : (
-                      <div className="p-8 text-center text-muted-foreground text-xs bg-surface rounded-xl border border-border">
-                        Rival code will preview here as they type...
-                      </div>
-                    )}
-                  </div>
                 </div>
               )}
             </div>
@@ -1286,27 +1236,28 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
 
                 {/* Bottom Panel: Testcases & Output */}
                 <ResizablePanel defaultSize="35%" minSize="4%" className="border-t border-border bg-card flex flex-col overflow-hidden">
-                  <div className="h-8 border-b border-border bg-surface/50 px-3 flex items-center justify-between shrink-0">
+                  {/* Bottom Bar Header */}
+                  <div className="h-9 border-b border-border bg-surface/50 px-3 flex items-center justify-between shrink-0">
                     <div className="flex items-center gap-1">
                       <button
                         onClick={() => { setIsBottomOpen(true); setActiveBottomTab('testcase'); }}
-                        className={`flex items-center gap-1.5 px-3 py-0.5 text-xs font-semibold rounded-md transition-colors ${
+                        className={`flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-md transition-colors ${
                           activeBottomTab === 'testcase' && isBottomOpen
                             ? 'bg-surface text-accent'
                             : 'text-muted-foreground hover:text-foreground'
                         }`}
                       >
-                        <Terminal className="w-3.5 h-3.5" /> Sample Inputs
+                        <Terminal className="w-3.5 h-3.5" /> Testcase
                       </button>
                       <button
                         onClick={() => { setIsBottomOpen(true); setActiveBottomTab('result'); }}
-                        className={`flex items-center gap-1.5 px-3 py-0.5 text-xs font-semibold rounded-md transition-colors ${
+                        className={`flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-md transition-colors ${
                           activeBottomTab === 'result' && isBottomOpen
                             ? 'bg-surface text-accent'
                             : 'text-muted-foreground hover:text-foreground'
                         }`}
                       >
-                        <Code2 className="w-3.5 h-3.5" /> Output & Verdict
+                        <Code2 className="w-3.5 h-3.5" /> Test Result
                         {executionResult && (
                           <span className={`w-2 h-2 rounded-full ${
                             executionResult.verdict === 'AC' ? 'bg-emerald-400' : 'bg-rose-500'
@@ -1323,39 +1274,109 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
                     </button>
                   </div>
 
+                  {/* Bottom Content Body */}
                   <div className="flex-1 p-4 overflow-y-auto font-mono text-xs space-y-3">
                     {activeBottomTab === 'testcase' ? (
+                      /* Sample Test Cases View */
                       <div className="space-y-3">
-                        {problem.examples && problem.examples.length > 0 ? (
-                          problem.examples.map((ex, idx) => (
-                            <div key={ex.id || idx} className="p-3 rounded-lg bg-surface border border-border space-y-1">
-                              <div className="text-[11px] text-muted-foreground font-semibold">Sample {idx + 1}:</div>
-                              <div><span className="text-muted-foreground">Input: </span><span className="text-foreground">{ex.input}</span></div>
-                              <div><span className="text-muted-foreground">Expected: </span><span className="text-emerald-400 font-semibold">{ex.output}</span></div>
+                        <div className="flex items-center gap-2">
+                          {((problem.testCases && problem.testCases.length > 0)
+                            ? problem.testCases
+                            : problem.examples?.map((ex, idx) => ({
+                                id: ex.id || String(idx),
+                                input: ex.input,
+                                expected: ex.output,
+                                order: idx,
+                                isSample: true,
+                              }))
+                          )?.map((tc: any, idx: number) => (
+                            <button
+                              key={tc.id || idx}
+                              onClick={() => setSelectedTestCaseIndex(idx)}
+                              className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors ${
+                                selectedTestCaseIndex === idx
+                                  ? 'bg-surface text-foreground border border-border'
+                                  : 'text-muted-foreground hover:text-foreground'
+                              }`}
+                            >
+                              Case {idx + 1}
+                            </button>
+                          ))}
+                        </div>
+
+                        {((problem.testCases && problem.testCases.length > 0)
+                          ? problem.testCases
+                          : problem.examples?.map((ex, idx) => ({
+                              id: ex.id || String(idx),
+                              input: ex.input,
+                              expected: ex.output,
+                              order: idx,
+                              isSample: true,
+                            }))
+                        )?.[selectedTestCaseIndex] && (
+                          <div className="space-y-3">
+                            <div>
+                              <div className="text-muted-foreground text-[11px] mb-1 font-semibold">Input:</div>
+                              <div className="p-3 rounded-lg bg-surface border border-border">
+                                {Array.isArray(
+                                  ((problem.testCases && problem.testCases.length > 0) ? problem.testCases : problem.examples)?.[selectedTestCaseIndex]?.input
+                                ) &&
+                                problem.signature?.params &&
+                                Array.isArray(problem.signature.params) ? (
+                                  <div className="space-y-1">
+                                    {(problem.signature.params as any[]).map((param: any, idx: number) => (
+                                      <div key={param.name || idx} className="flex items-center gap-2">
+                                        <span className="text-muted-foreground">{param.name} =</span>
+                                        <span className="text-foreground font-semibold">
+                                          {JSON.stringify(
+                                            ((problem.testCases && problem.testCases.length > 0) ? problem.testCases : problem.examples)?.[selectedTestCaseIndex]?.input[idx]
+                                          )}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <div className="text-foreground">
+                                    {typeof ((problem.testCases && problem.testCases.length > 0) ? problem.testCases : problem.examples)?.[selectedTestCaseIndex]?.input === 'string'
+                                      ? ((problem.testCases && problem.testCases.length > 0) ? problem.testCases : problem.examples)?.[selectedTestCaseIndex]?.input
+                                      : JSON.stringify(((problem.testCases && problem.testCases.length > 0) ? problem.testCases : problem.examples)?.[selectedTestCaseIndex]?.input)}
+                                  </div>
+                                )}
+                              </div>
                             </div>
-                          ))
-                        ) : (
-                          <div className="text-muted-foreground text-xs">No sample testcases provided.</div>
+                            <div>
+                              <div className="text-muted-foreground text-[11px] mb-1 font-semibold">Expected Output:</div>
+                              <div className="p-3 rounded-lg bg-surface border border-border text-emerald-400 font-semibold">
+                                {typeof (((problem.testCases && problem.testCases.length > 0) ? problem.testCases : problem.examples)?.[selectedTestCaseIndex] as any)?.expected === 'string'
+                                  ? (((problem.testCases && problem.testCases.length > 0) ? problem.testCases : problem.examples)?.[selectedTestCaseIndex] as any)?.expected
+                                  : typeof (((problem.testCases && problem.testCases.length > 0) ? problem.testCases : problem.examples)?.[selectedTestCaseIndex] as any)?.output === 'string'
+                                  ? (((problem.testCases && problem.testCases.length > 0) ? problem.testCases : problem.examples)?.[selectedTestCaseIndex] as any)?.output
+                                  : JSON.stringify((((problem.testCases && problem.testCases.length > 0) ? problem.testCases : problem.examples)?.[selectedTestCaseIndex] as any)?.expected ?? (((problem.testCases && problem.testCases.length > 0) ? problem.testCases : problem.examples)?.[selectedTestCaseIndex] as any)?.output)}
+                              </div>
+                            </div>
+                          </div>
                         )}
                       </div>
                     ) : (
+                      /* Execution Results View */
                       <div>
                         {isRunning || isSubmitting ? (
-                          <div className="flex flex-col items-center justify-center py-6 gap-2 text-muted-foreground">
+                          <div className="flex flex-col items-center justify-center py-8 gap-2 text-muted-foreground">
                             <Loader2 className="w-6 h-6 animate-spin text-primary" />
-                            <p className="text-xs">Processing solution through judge engine...</p>
+                            <p className="text-xs">Running test cases against judge engine...</p>
                           </div>
                         ) : !executionResult ? (
-                          <div className="text-center py-6 text-muted-foreground text-xs">
-                            Click "Run Code" or "SUBMIT SOLUTION" to test your implementation.
+                          <div className="text-center py-8 text-muted-foreground text-xs">
+                            Click "Run Code" or "SUBMIT SOLUTION" to execute your solution.
                           </div>
                         ) : (
-                          <div className="space-y-3">
+                          <div className="space-y-4">
+                            {/* Verdict Header Banner */}
                             <div className="flex items-center justify-between p-3 rounded-lg bg-surface border border-border">
                               <div className="flex items-center gap-3">
                                 {getVerdictBadge(executionResult.verdict)}
                                 <span className="text-xs text-muted-foreground">
-                                  Testcases Passed: {executionResult.passedTestCases} / {executionResult.totalTestCases}
+                                  Passed {executionResult.passedTestCases} / {executionResult.totalTestCases} Testcases
                                 </span>
                               </div>
                               {executionResult.runtimeMs !== undefined && (
@@ -1365,12 +1386,114 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
                               )}
                             </div>
 
+                            {/* Stderr or Compilation Error Log */}
                             {executionResult.stderr && (
                               <div className="space-y-1">
-                                <div className="text-rose-400 font-semibold text-[11px]">Execution Error Output:</div>
+                                <div className="text-rose-400 font-semibold text-[11px]">Error Output:</div>
                                 <pre className="p-3 rounded-lg bg-rose-950/40 text-rose-300 border border-rose-900/50 overflow-x-auto">
                                   {executionResult.stderr}
                                 </pre>
+                              </div>
+                            )}
+
+                            {/* TestCase Results Tabs */}
+                            {executionResult.testCaseResults && executionResult.testCaseResults.length > 0 && (
+                              <div className="space-y-3">
+                                <div className="flex items-center gap-2">
+                                  {executionResult.testCaseResults.map((tcRes: any, idx: number) => (
+                                    <button
+                                      key={idx}
+                                      onClick={() => setSelectedTestCaseIndex(idx)}
+                                      className={`px-3 py-1 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-colors ${
+                                        selectedTestCaseIndex === idx
+                                          ? 'bg-surface text-foreground border border-border'
+                                          : 'text-muted-foreground hover:text-foreground'
+                                      }`}
+                                    >
+                                      <span>Case {idx + 1}</span>
+                                      {tcRes.passed ? (
+                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                                      ) : (
+                                        <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                                      )}
+                                    </button>
+                                  ))}
+                                </div>
+
+                                {executionResult.testCaseResults[selectedTestCaseIndex] && (
+                                  <div className="space-y-2">
+                                    <div>
+                                      <div className="text-muted-foreground text-[11px] mb-1 font-semibold">Input:</div>
+                                      <div className="p-2.5 rounded-lg bg-surface border border-border">
+                                        {Array.isArray(executionResult.testCaseResults[selectedTestCaseIndex].input) &&
+                                        problem?.signature?.params &&
+                                        Array.isArray(problem.signature.params) ? (
+                                          <div className="space-y-1">
+                                            {(problem.signature.params as any[]).map((param: any, idx: number) => (
+                                              <div key={param.name || idx} className="flex items-center gap-2">
+                                                <span className="text-muted-foreground">{param.name} =</span>
+                                                <span className="text-foreground font-semibold">
+                                                  {JSON.stringify(
+                                                    executionResult.testCaseResults![selectedTestCaseIndex].input[idx]
+                                                  )}
+                                                </span>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        ) : (
+                                          <div className="text-foreground">
+                                            {typeof executionResult.testCaseResults[selectedTestCaseIndex].input === 'string'
+                                              ? executionResult.testCaseResults[selectedTestCaseIndex].input
+                                              : JSON.stringify(executionResult.testCaseResults[selectedTestCaseIndex].input)}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                      <div>
+                                        <div className="text-muted-foreground text-[11px] mb-1 font-semibold">Your Output:</div>
+                                        <div className={`p-2.5 rounded-lg border font-semibold ${
+                                          executionResult.testCaseResults[selectedTestCaseIndex].passed
+                                            ? 'bg-emerald-950/20 border-emerald-500/30 text-emerald-400'
+                                            : 'bg-rose-950/20 border-rose-500/30 text-rose-400'
+                                        }`}>
+                                          {(() => {
+                                            const tcRes = executionResult.testCaseResults[selectedTestCaseIndex]
+                                            const rawStr = tcRes.actualOutput ?? (tcRes.actual !== undefined ? String(tcRes.actual) : undefined)
+                                            const expectedVal = tcRes.expected
+
+                                            if (rawStr === undefined || rawStr === null) {
+                                              return <span className="opacity-60 italic">(no output)</span>
+                                            }
+
+                                            const trimmed = String(rawStr).trim()
+                                            if (trimmed === '') {
+                                              if (Array.isArray(expectedVal)) {
+                                                return '[]'
+                                              }
+                                              return <span className="opacity-60 italic">(empty output)</span>
+                                            }
+
+                                            if (Array.isArray(expectedVal) && /^-?\d+(\s+-?\d+)*$/.test(trimmed)) {
+                                              const parsed = trimmed.split(/\s+/).map((x) => Number(x))
+                                              return JSON.stringify(parsed)
+                                            }
+
+                                            return trimmed
+                                          })()}
+                                        </div>
+                                      </div>
+                                      <div>
+                                        <div className="text-muted-foreground text-[11px] mb-1 font-semibold">Expected Output:</div>
+                                        <div className="p-2.5 rounded-lg bg-surface border border-border text-emerald-400 font-semibold">
+                                          {typeof executionResult.testCaseResults[selectedTestCaseIndex].expected === 'string'
+                                            ? executionResult.testCaseResults[selectedTestCaseIndex].expected
+                                            : JSON.stringify(executionResult.testCaseResults[selectedTestCaseIndex].expected)}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             )}
                           </div>
@@ -1449,13 +1572,13 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
                       onClick={() => { setIsBottomOpen(true); setActiveBottomTab('testcase'); }}
                       className="flex items-center gap-1.5 px-3 py-0.5 text-xs font-semibold rounded-md text-muted-foreground hover:text-foreground transition-colors"
                     >
-                      <Terminal className="w-3.5 h-3.5" /> Sample Inputs
+                      <Terminal className="w-3.5 h-3.5" /> Testcase
                     </button>
                     <button
                       onClick={() => { setIsBottomOpen(true); setActiveBottomTab('result'); }}
                       className="flex items-center gap-1.5 px-3 py-0.5 text-xs font-semibold rounded-md text-muted-foreground hover:text-foreground transition-colors"
                     >
-                      <Code2 className="w-3.5 h-3.5" /> Output & Verdict
+                      <Code2 className="w-3.5 h-3.5" /> Test Result
                       {executionResult && (
                         <span className={`w-2 h-2 rounded-full ${
                           executionResult.verdict === 'AC' ? 'bg-emerald-400' : 'bg-rose-500'

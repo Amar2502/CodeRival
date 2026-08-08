@@ -67,8 +67,18 @@ export const processQueueMatches = async (io: Server): Promise<void> => {
       const player1 = waitingPlayers[i];
       if (matchedUserIds.has(player1.userId)) continue;
 
+      if (getUserActiveMatch(player1.userId)) {
+        await removePlayerFromQueue(player1.userId);
+        continue;
+      }
+
       const opponent = await getOpponentFromQueue(player1);
       if (opponent && !matchedUserIds.has(opponent.userId)) {
+        if (getUserActiveMatch(opponent.userId)) {
+          await removePlayerFromQueue(opponent.userId);
+          continue;
+        }
+
         matchedUserIds.add(player1.userId);
         matchedUserIds.add(opponent.userId);
 

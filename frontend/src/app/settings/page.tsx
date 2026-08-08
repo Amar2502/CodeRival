@@ -588,7 +588,7 @@ export default function SettingsPage() {
                   {/* Item 1: Leaderboard */}
                   <div className="p-4 sm:p-5 flex items-center justify-between">
                     <span className="text-sm font-semibold text-foreground flex items-center gap-2">
-                      <Trophy className="w-4 h-4 text-muted-foreground" /> Appear on the Study Plan Leaderboard
+                      <Trophy className="w-4 h-4 text-muted-foreground" /> Appear on the Global Leaderboard
                     </span>
                     <Switch
                       checked={appearOnLeaderboard}

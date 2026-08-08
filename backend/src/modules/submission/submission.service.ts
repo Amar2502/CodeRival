@@ -172,6 +172,7 @@ export class SubmissionService {
       where: {
         userId,
         problemId: problem.id,
+        submissionType: SubmissionType.SUBMIT,
       },
       orderBy: { submittedAt: "desc" },
       select: {

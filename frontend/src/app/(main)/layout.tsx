@@ -22,7 +22,6 @@ export default function MainAppLayout({
 
           {/* ────────────── RIGHT SIDEBAR (4 Cols) ────────────── */}
           <RightSidebar />
-
         </div>
       </main>
     </div>

@@ -1,8 +1,10 @@
 import { Request, Response } from "express";
 import bcrypt from "bcrypt";
 import { db } from "../../config/db";
+import { redis } from "../../config/redis";
 import { Verdict } from "../../generated/prisma/client";
 import { uploadAvatarToImageKit, deleteAvatarFromImageKit } from "../../utils/imagekitUpload";
+import { updateUserRatingInLeaderboard } from "../leaderboard/leaderboard.service";
 
 export const calculateUserProblemsSolved = async (userId: string): Promise<number> => {
   if (!userId) return 0;
@@ -10,6 +12,7 @@ export const calculateUserProblemsSolved = async (userId: string): Promise<numbe
     where: {
       userId,
       verdict: Verdict.AC,
+      submissionType: "SUBMIT",
     },
     select: {
       problemId: true,
@@ -17,6 +20,16 @@ export const calculateUserProblemsSolved = async (userId: string): Promise<numbe
     distinct: ["problemId"],
   });
   return distinctSolved.length;
+};
+
+export const calculateUserMatchesPlayed = async (userId: string): Promise<number> => {
+  if (!userId) return 0;
+  return await db.match.count({
+    where: {
+      OR: [{ player1Id: userId }, { player2Id: userId }],
+      status: "FINISHED",
+    },
+  });
 };
 
 export const checkUsername = async (req: Request, res: Response) => {
@@ -43,6 +56,7 @@ export const getMe = async (req: Request, res: Response) => {
   try {
     const userId = req.user.userId;
     const actualSolved = await calculateUserProblemsSolved(userId);
+    const actualMatches = await calculateUserMatchesPlayed(userId);
 
     const user = await db.user.findUnique({
       where: { id: userId },
@@ -84,12 +98,16 @@ export const getMe = async (req: Request, res: Response) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    if (user.problemsSolved !== actualSolved) {
+    if (user.problemsSolved !== actualSolved || user.matchesPlayed !== actualMatches) {
       await db.user.update({
         where: { id: userId },
-        data: { problemsSolved: actualSolved },
+        data: {
+          problemsSolved: actualSolved,
+          matchesPlayed: actualMatches,
+        },
       });
       user.problemsSolved = actualSolved;
+      user.matchesPlayed = actualMatches;
     }
 
     const { passwordHash, ...userWithoutPassword } = user;
@@ -120,6 +138,7 @@ export const getUserProfile = async (req: Request, res: Response) => {
     }
 
     const actualSolved = await calculateUserProblemsSolved(targetUserId);
+    const actualMatches = await calculateUserMatchesPlayed(targetUserId);
 
     const user = await db.user.findUnique({
       where: {
@@ -158,6 +177,9 @@ export const getUserProfile = async (req: Request, res: Response) => {
         createdAt: true,
 
         submissions: {
+          where: {
+            submissionType: "SUBMIT",
+          },
           orderBy: {
             submittedAt: "desc",
           },
@@ -183,21 +205,30 @@ export const getUserProfile = async (req: Request, res: Response) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    if (user.problemsSolved !== actualSolved) {
+    if (user.problemsSolved !== actualSolved || user.matchesPlayed !== actualMatches) {
       await db.user.update({
         where: { id: targetUserId },
-        data: { problemsSolved: actualSolved },
+        data: {
+          problemsSolved: actualSolved,
+          matchesPlayed: actualMatches,
+        },
       });
       user.problemsSolved = actualSolved;
+      user.matchesPlayed = actualMatches;
     }
 
     // Compute global rank
     let globalRank: number | null = null;
     try {
-      const higherCount = await db.user.count({
-        where: { rating: { gt: user.rating } },
-      });
-      globalRank = higherCount + 1;
+      if (user.appearOnLeaderboard) {
+        const higherCount = await db.user.count({
+          where: {
+            rating: { gt: user.rating },
+            appearOnLeaderboard: true,
+          },
+        });
+        globalRank = higherCount + 1;
+      }
     } catch (e) {
       globalRank = null;
     }
@@ -267,19 +298,31 @@ export const getUserProfile = async (req: Request, res: Response) => {
       },
     });
 
-    // If no rating history records exist yet, construct an initial entry based on baseline rating
-    const formattedRatingHistory =
-      ratingHistory.length > 0
-        ? ratingHistory
-        : [
-            {
-              id: "initial",
-              rating: user.rating || 1200,
-              delta: 0,
-              createdAt: user.createdAt,
-              matchId: null,
-            },
-          ];
+    let formattedRatingHistory: any[] = ratingHistory;
+
+    if (ratingHistory.length === 0) {
+      formattedRatingHistory = [
+        {
+          id: "initial",
+          rating: user.rating || 1200,
+          delta: 0,
+          createdAt: user.createdAt,
+          matchId: null,
+        },
+      ];
+    } else if (ratingHistory[0].matchId && ratingHistory[0].delta !== null) {
+      const initialRating = ratingHistory[0].rating - ratingHistory[0].delta;
+      formattedRatingHistory = [
+        {
+          id: "initial",
+          rating: initialRating,
+          delta: 0,
+          createdAt: user.createdAt,
+          matchId: null,
+        },
+        ...ratingHistory,
+      ];
+    }
 
     const { passwordHash, ...userWithoutPassword } = user;
     const userResponse = {
@@ -481,6 +524,12 @@ export const updateUserProfile = async (req: Request, res: Response) => {
         passwordHash: true,
       },
     });
+
+    if (updatedUser.appearOnLeaderboard) {
+      await updateUserRatingInLeaderboard(userId, updatedUser.rating);
+    } else {
+      await redis.zrem("leaderboard:global", userId);
+    }
 
     const { passwordHash, ...userWithoutPassword } = updatedUser;
     const userResponse = {

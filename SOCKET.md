@@ -183,8 +183,6 @@ To maintain consistency across backend and frontend, all socket events must stri
 "match:start"                     // Server -> Client { matchId, roomId, problem, player1, player2 }
 "match:found"                     // Server -> Client { matchId, roomId, problem, player1, player2 }
 "match:sync_state"                // Server -> Client { matchId, problem, player1, player2 }
-"match:code_sync"                 // Client -> Server { matchId, code, language }
-"match:opponent_code_sync"        // Server -> Client { userId, code, language }
 "match:submit"                    // Client -> Server { matchId, problemId, code, language }
 "match:submission_queued"         // Server -> Client { submissionId, status, matchId }
 "match:opponent_submitted"        // Server -> Client { userId }

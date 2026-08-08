@@ -5,6 +5,7 @@ import { SubmissionService } from "../submission/submission.service";
 import {
   endMatch,
   handlePlayerMatchReconnect,
+  handleMatchTimeout,
 } from "./match.service";
 
 export const initializeMatchSocket = (
@@ -43,18 +44,6 @@ export const initializeMatchSocket = (
   socket.on("match:reconnect", async ({ matchId }: { matchId: string }) => {
     if (!matchId) return;
     await handlePlayerMatchReconnect(socket, io, matchId);
-  });
-
-  socket.on("match:code_sync", async ({ matchId, code, language }: { matchId: string; code: string; language: string }) => {
-    if (!matchId) return;
-    const match = await db.match.findUnique({ where: { id: matchId } });
-    if (!match || (match.player1Id !== userId && match.player2Id !== userId)) return;
-  
-    socket.to(`match:${matchId}`).emit("match:opponent_code_sync", {
-      userId,
-      code,
-      language,
-    });
   });
 
   socket.on("match:submit", async (data: { matchId: string; problemId: string; code: string; language: Language }) => {
@@ -138,6 +127,21 @@ export const initializeMatchSocket = (
       }
     } catch (error) {
       console.error("Match cheat disqualify error:", error);
+    }
+  });
+
+  socket.on("match:timeout", async ({ matchId }: { matchId: string }) => {
+    if (!matchId) return;
+    try {
+      const match = await db.match.findUnique({ where: { id: matchId } });
+      if (match && match.status === MatchStatus.ACTIVE) {
+        const elapsed = match.startedAt ? Date.now() - match.startedAt.getTime() : 0;
+        if (elapsed >= 14 * 60 * 1000 + 30 * 1000) {
+          await handleMatchTimeout(io, matchId);
+        }
+      }
+    } catch (error) {
+      console.error("Match timeout socket error:", error);
     }
   });
 

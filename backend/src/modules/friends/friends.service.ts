@@ -209,12 +209,14 @@ export const acceptFriendRequest = async (receiverId: string, identifier: string
   return updated;
 };
 
-export const declineFriendRequest = async (receiverId: string, identifier: string) => {
+export const declineFriendRequest = async (userId: string, identifier: string) => {
   const friendship = await db.friendship.findFirst({
     where: {
       OR: [
-        { id: identifier, receiverId },
-        { senderId: identifier, receiverId },
+        { id: identifier, senderId: userId },
+        { id: identifier, receiverId: userId },
+        { senderId: identifier, receiverId: userId },
+        { receiverId: identifier, senderId: userId },
       ],
     },
   });

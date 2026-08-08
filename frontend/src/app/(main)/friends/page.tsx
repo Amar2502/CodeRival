@@ -246,8 +246,8 @@ export default function FriendsPage() {
   const userRating = currentUser?.rating || 1215;
   const wins = currentUser?.wins || 0;
   const losses = currentUser?.losses || 0;
-  const totalMatches = currentUser?.matchesPlayed || (wins + losses > 0 ? wins + losses : 6);
-  const winRate = totalMatches > 0 ? Math.round((wins / totalMatches) * 100) : 50;
+  const totalMatches = currentUser?.matchesPlayed ?? (wins + losses);
+  const winRate = totalMatches > 0 ? Math.round((wins / totalMatches) * 100) : 0;
 
   // SVG Rating Chart points generator
   const chartPoints = useMemo(() => {

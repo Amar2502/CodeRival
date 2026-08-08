@@ -44,6 +44,7 @@ interface RatingPoint {
   rating: number
   createdAt: string
   matchId?: string | null
+  delta?: number
 }
 
 import { useSidebarStore } from '@/lib/sidebarStore'
@@ -90,7 +91,22 @@ export function RightSidebar() {
 
   // SVG Chart points generator
   const chartPoints = useMemo(() => {
-    const data = ratingHistory.length >= 2 ? ratingHistory : []
+    let data: RatingPoint[] = [...ratingHistory]
+
+    if (data.length === 1 && data[0].matchId && data[0].delta !== undefined) {
+      const startingRating = data[0].rating - data[0].delta
+      data = [
+        { id: 'initial', rating: startingRating, createdAt: data[0].createdAt, delta: 0 },
+        ...data,
+      ]
+    } else if (data.length > 0 && data[0].matchId && data[0].delta !== undefined) {
+      const startingRating = data[0].rating - data[0].delta
+      data = [
+        { id: 'initial', rating: startingRating, createdAt: data[0].createdAt, delta: 0 },
+        ...data,
+      ]
+    }
+
     if (data.length < 2) {
       return { path: '', areaPath: '', pts: [], width: 240, height: 110, yMin: 1200, yMax: 1200 }
     }
