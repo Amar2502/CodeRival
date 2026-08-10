@@ -34,7 +34,7 @@ export class MatchController {
     }
   }
 
-  static async getUserMatchHistory(req: Request, res: Response, next: NextFunction) {
+  static async getUserMatchHistory(req: Request, res: Response, NextFunction: NextFunction) {
     try {
       const userId = (req as any).user?.id || (req as any).user?.userId;
 
@@ -42,6 +42,16 @@ export class MatchController {
         res.status(401).json({ success: false, message: "Unauthorized" });
         return;
       }
+
+      const page = req.query.page ? Math.max(1, parseInt(String(req.query.page), 10)) : 1;
+      const limit = req.query.limit ? Math.max(1, parseInt(String(req.query.limit), 10)) : 20;
+      const skip = (page - 1) * limit;
+
+      const totalMatches = await db.match.count({
+        where: {
+          OR: [{ player1Id: userId }, { player2Id: userId }],
+        },
+      });
 
       const matches = await db.match.findMany({
         where: {
@@ -54,14 +64,23 @@ export class MatchController {
           problem: { select: { id: true, title: true, slug: true, difficulty: true } },
           winner: { select: { id: true, username: true } },
         },
-        take: 20,
+        skip,
+        take: limit,
       });
+
       res.status(200).json({
         success: true,
         data: matches,
+        hasMore: skip + matches.length < totalMatches,
+        pagination: {
+          page,
+          limit,
+          total: totalMatches,
+          hasMore: skip + matches.length < totalMatches,
+        },
       });
     } catch (error) {
-      next(error);
+      NextFunction(error);
     }
   }
 

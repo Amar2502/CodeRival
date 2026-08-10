@@ -11,6 +11,7 @@ import {
   removeAvatarController,
   changePassword,
   deleteAccountController,
+  sendContactForm,
 } from "../user/user.controller";
 import { authenticate } from "../../middleware/auth.middleware";
 import { validate } from "../../middleware/validate.middleware";
@@ -34,5 +35,6 @@ router.post("/upload_avatar", authenticate, upload.single("avatar"), uploadAvata
 router.delete("/remove_avatar", authenticate, removeAvatarController);
 router.post("/change_password", authenticate, changePassword);
 router.delete("/delete_account", authenticate, deleteAccountController);
+router.post("/contact", sendContactForm);
 
 export default router;

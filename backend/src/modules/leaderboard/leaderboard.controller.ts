@@ -8,9 +8,10 @@ import {
 export const getGlobalLeaderboardController = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.userId;
-    const limit = req.query.limit ? parseInt(String(req.query.limit), 10) : 50;
+    const page = req.query.page ? Math.max(1, parseInt(String(req.query.page), 10)) : 1;
+    const limit = req.query.limit ? Math.max(1, parseInt(String(req.query.limit), 10)) : 20;
 
-    const data = await getGlobalLeaderboard(userId, limit);
+    const data = await getGlobalLeaderboard(userId, page, limit);
     return res.status(200).json(data);
   } catch (error: any) {
     console.error("getGlobalLeaderboardController error:", error);
@@ -25,7 +26,10 @@ export const getFriendsLeaderboardController = async (req: Request, res: Respons
       return res.status(401).json({ message: "Unauthorized" });
     }
 
-    const data = await getFriendsLeaderboard(userId);
+    const page = req.query.page ? Math.max(1, parseInt(String(req.query.page), 10)) : 1;
+    const limit = req.query.limit ? Math.max(1, parseInt(String(req.query.limit), 10)) : 20;
+
+    const data = await getFriendsLeaderboard(userId, page, limit);
     return res.status(200).json(data);
   } catch (error: any) {
     console.error("getFriendsLeaderboardController error:", error);

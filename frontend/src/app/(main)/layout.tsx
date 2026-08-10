@@ -2,6 +2,7 @@
 
 import { Header } from "@/components/header";
 import { RightSidebar } from "@/components/RightSidebar";
+import { Footer } from "@/components/footer";
 
 export default function MainAppLayout({
   children,
@@ -24,6 +25,8 @@ export default function MainAppLayout({
           <RightSidebar />
         </div>
       </main>
+
+      <Footer />
     </div>
   );
 }

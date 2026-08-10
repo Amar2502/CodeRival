@@ -4,7 +4,8 @@ import { db } from "../../config/db";
 import { redis } from "../../config/redis";
 import { Verdict } from "../../generated/prisma/client";
 import { uploadAvatarToImageKit, deleteAvatarFromImageKit } from "../../utils/imagekitUpload";
-import { updateUserRatingInLeaderboard } from "../leaderboard/leaderboard.service";
+import { updateUserRatingInLeaderboard, syncGlobalLeaderboard } from "../leaderboard/leaderboard.service";
+import { emailService } from "../../services/emails/emails.service";
 
 export const calculateUserProblemsSolved = async (userId: string): Promise<number> => {
   if (!userId) return 0;
@@ -126,16 +127,29 @@ export const getMe = async (req: Request, res: Response) => {
 export const getUserProfile = async (req: Request, res: Response) => {
   try {
     const requestedId = req.params.userId;
-    const targetUserId =
-      (typeof requestedId === "string" && requestedId !== "me"
-        ? requestedId
-        : req.user?.userId) as string;
+    const currentUserId = req.user?.userId;
+    const isMeQuery = !requestedId || requestedId === "me" || requestedId === currentUserId;
+
+    let targetUserId = currentUserId;
+    if (!isMeQuery && typeof requestedId === "string") {
+      const foundUser = await db.user.findFirst({
+        where: { OR: [{ id: requestedId }, { username: requestedId }] },
+        select: { id: true },
+      });
+      if (foundUser) {
+        targetUserId = foundUser.id;
+      } else {
+        return res.status(404).json({ message: "User not found" });
+      }
+    }
 
     if (!targetUserId) {
       return res.status(401).json({
         message: "Unauthorized",
       });
     }
+
+    const isSelf = targetUserId === currentUserId;
 
     const actualSolved = await calculateUserProblemsSolved(targetUserId);
     const actualMatches = await calculateUserMatchesPlayed(targetUserId);
@@ -205,6 +219,24 @@ export const getUserProfile = async (req: Request, res: Response) => {
       return res.status(404).json({ message: "User not found" });
     }
 
+    // Check if public profile is restricted for other users
+    if (!isSelf && !user.allowPublicProfile) {
+      return res.status(200).json({
+        isPrivate: true,
+        user: {
+          id: user.id,
+          username: user.username,
+          name: user.name,
+          avatar_url: user.avatar_url,
+          avatar_id: user.avatar_id,
+          rating: user.rating,
+          allowPublicProfile: false,
+          isPrivate: true,
+        },
+        message: "This user has set their profile to private.",
+      });
+    }
+
     if (user.problemsSolved !== actualSolved || user.matchesPlayed !== actualMatches) {
       await db.user.update({
         where: { id: targetUserId },
@@ -217,19 +249,26 @@ export const getUserProfile = async (req: Request, res: Response) => {
       user.matchesPlayed = actualMatches;
     }
 
-    // Compute global rank
+    // Compute global rank using Redis ZSET (100% consistent with Global Leaderboard)
     let globalRank: number | null = null;
     try {
       if (user.appearOnLeaderboard) {
-        const higherCount = await db.user.count({
-          where: {
-            rating: { gt: user.rating },
-            appearOnLeaderboard: true,
-          },
-        });
-        globalRank = higherCount + 1;
+        let revRank = await redis.zrevrank("leaderboard:global", targetUserId);
+        if (revRank === null) {
+          const card = await redis.zcard("leaderboard:global");
+          if (card === 0) {
+            await syncGlobalLeaderboard();
+          } else {
+            await updateUserRatingInLeaderboard(targetUserId, user.rating);
+          }
+          revRank = await redis.zrevrank("leaderboard:global", targetUserId);
+        }
+        if (revRank !== null) {
+          globalRank = revRank + 1;
+        }
       }
     } catch (e) {
+      console.error("getUserProfile rank error:", e);
       globalRank = null;
     }
 
@@ -807,6 +846,59 @@ export const deleteAccountController = async (req: Request, res: Response) => {
     return res.status(200).json({ message: "Account deleted successfully." });
   } catch (error) {
     console.error("deleteAccount error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+export const sendContactForm = async (req: Request, res: Response) => {
+  try {
+    const { name, email, subject, message } = req.body;
+
+    if (!name || !email || !subject || !message) {
+      return res.status(400).json({ message: "All fields are required." });
+    }
+
+    const adminSupportEmail = process.env.SUPPORT_EMAIL || process.env.ADMIN_EMAIL || "support@coderival.com";
+
+    // 1. Send support ticket notification to admin / support email
+    try {
+      const adminEmailHtml = `
+        <div style="font-family: sans-serif; padding: 20px; color: #111; line-height: 1.6;">
+          <h2 style="color: #e11d48;">New Support Request received on CodeRival</h2>
+          <p><strong>Sender Name:</strong> ${name}</p>
+          <p><strong>Sender Email:</strong> <a href="mailto:${email}">${email}</a></p>
+          <p><strong>Subject:</strong> ${subject}</p>
+          <hr style="border: 0; border-top: 1px solid #ddd; margin: 20px 0;" />
+          <p style="white-space: pre-wrap; background: #f4f4f5; padding: 15px; rounded: 8px;">${message}</p>
+        </div>
+      `;
+      await emailService.sendEmail(adminSupportEmail, adminEmailHtml, `[CodeRival Support] ${subject}`);
+    } catch (e) {
+      console.warn("Support notification email dispatch error:", e);
+    }
+
+    // 2. Send confirmation receipt email to the user
+    try {
+      const userConfirmationHtml = `
+        <div style="font-family: sans-serif; padding: 20px; color: #111; line-height: 1.6;">
+          <h2>We received your message, ${name}!</h2>
+          <p>Thank you for reaching out to CodeRival Support. Our team has received your message and will review it shortly.</p>
+          <hr style="border: 0; border-top: 1px solid #ddd; margin: 20px 0;" />
+          <p><strong>Subject:</strong> ${subject}</p>
+          <p style="white-space: pre-wrap; background: #f4f4f5; padding: 15px; rounded: 8px;">${message}</p>
+        </div>
+      `;
+      await emailService.sendEmail(email, userConfirmationHtml, `CodeRival Support Request Received: ${subject}`);
+    } catch (e) {
+      console.warn("User confirmation email dispatch error:", e);
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Your message has been sent successfully! We will get back to you shortly.",
+    });
+  } catch (error) {
+    console.error("sendContactForm error:", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 };

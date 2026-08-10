@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -88,34 +88,75 @@ export default function LeaderboardPage() {
   const [totalPlayers, setTotalPlayers] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(true);
 
+  // Pagination & Infinite Scroll state
+  const [page, setPage] = useState<number>(1);
+  const [hasMore, setHasMore] = useState<boolean>(true);
+  const [loadingMore, setLoadingMore] = useState<boolean>(false);
+  const observerTarget = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
-    fetchLeaderboard();
+    setPage(1);
+    setHasMore(true);
+    fetchLeaderboard(1, true);
   }, [activeTab]);
 
-  const fetchLeaderboard = async () => {
-    setLoading(true);
+  const fetchLeaderboard = async (targetPage: number = 1, isReset: boolean = false) => {
+    if (isReset) {
+      setLoading(true);
+    } else {
+      setLoadingMore(true);
+    }
     try {
+      const endpoint = activeTab === "global" 
+        ? `/leaderboard/global?page=${targetPage}&limit=20` 
+        : `/leaderboard/friends?page=${targetPage}&limit=20`;
+      const res = await api.get(endpoint);
+      const newItems: LeaderboardUser[] = res.data.leaderboard || [];
+
       if (activeTab === "global") {
-        const res = await api.get("/leaderboard/global");
-        setGlobalLeaderboard(res.data.leaderboard || []);
+        setGlobalLeaderboard((prev) => (isReset ? newItems : [...prev, ...newItems]));
         if (res.data.currentUserRank) {
-          const r = res.data.currentUserRank;
-          if (r === 1) setUserRank("1st");
-          else if (r === 2) setUserRank("2nd");
-          else if (r === 3) setUserRank("3rd");
-          else setUserRank(`${r}th`);
+          const r = typeof res.data.currentUserRank === "object" ? res.data.currentUserRank.rank : res.data.currentUserRank;
+          const s = ["th", "st", "nd", "rd"];
+          const v = r % 100;
+          setUserRank(`${r}${s[(v - 20) % 10] || s[v] || s[0]}`);
         }
         setTotalPlayers(res.data.totalPlayers || 0);
+        setHasMore(Boolean(res.data.hasMore));
       } else {
-        const res = await api.get("/leaderboard/friends");
-        setFriendsLeaderboard(res.data.leaderboard || []);
+        setFriendsLeaderboard((prev) => (isReset ? newItems : [...prev, ...newItems]));
+        setHasMore(Boolean(res.data.hasMore));
       }
+      setPage(targetPage);
     } catch (err) {
       console.error("Failed to load leaderboard:", err);
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
   };
+
+  const loadMoreLeaderboard = useCallback(() => {
+    if (loading || loadingMore || !hasMore) return;
+    fetchLeaderboard(page + 1, false);
+  }, [loading, loadingMore, hasMore, page, activeTab]);
+
+  useEffect(() => {
+    const target = observerTarget.current;
+    if (!target) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !loadingMore && !loading) {
+          loadMoreLeaderboard();
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    observer.observe(target);
+    return () => observer.unobserve(target);
+  }, [loadMoreLeaderboard, hasMore, loadingMore, loading]);
 
   const handleChallenge = (targetUserId: string) => {
     socket.emit("friend:challenge_send", { targetUserId });
@@ -320,7 +361,7 @@ export default function LeaderboardPage() {
                     }`}
                   >
                     {/* Rank & User Details */}
-                    <div className="flex items-center gap-3.5 min-w-0">
+                    <Link href={`/${player.username}`} className="flex items-center gap-3.5 min-w-0 group hover:opacity-80 transition-opacity">
                       <div className="w-7 text-center font-mono font-extrabold text-xs text-muted-foreground shrink-0">
                         {player.rank === 1 ? (
                           <span className="text-amber-400">#1</span>
@@ -348,7 +389,7 @@ export default function LeaderboardPage() {
                       </div>
 
                       <div className="truncate">
-                        <div className="font-bold text-xs sm:text-sm text-foreground flex items-center gap-2 truncate">
+                        <div className="font-bold text-xs sm:text-sm text-foreground flex items-center gap-2 truncate group-hover:underline">
                           <span className="truncate">{player.name || player.username}</span>
                           {isMe && (
                             <span className="px-1.5 py-0.2 rounded bg-primary/20 text-primary text-[10px] font-mono font-extrabold uppercase">
@@ -360,7 +401,7 @@ export default function LeaderboardPage() {
                           @{player.username}
                         </div>
                       </div>
-                    </div>
+                    </Link>
 
                     {/* Stats & Actions */}
                     <div className="flex items-center gap-4 shrink-0 ml-2">
@@ -389,6 +430,19 @@ export default function LeaderboardPage() {
                 );
               })}
             </div>
+
+            {hasMore && !loading && (
+              <div ref={observerTarget} className="py-4 text-center text-xs text-muted-foreground font-mono flex items-center justify-center gap-2">
+                {loadingMore ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                    <span>Loading more contenders...</span>
+                  </>
+                ) : (
+                  <span>Scroll down to load more contenders</span>
+                )}
+              </div>
+            )}
           </div>
         </>
       )}

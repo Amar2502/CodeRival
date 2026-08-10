@@ -26,8 +26,8 @@ export const getProblemByDifficulty = asyncHandler(async (req: Request, res: Res
 });
 
 export const getAllProblems = asyncHandler(async (req: Request, res: Response) => {
-  const page = parseInt(req.query.page as string) || 1;
-  const limit = parseInt(req.query.limit as string) || 50;
+  const page = parseInt(req.params.page as string) || parseInt(req.query.page as string) || 1;
+  const limit = parseInt(req.params.limit as string) || parseInt(req.query.limit as string) || 50;
   const { problems, totalCount } = await ProblemService.getAllProblems(page, limit, req.user?.userId);
   return res.status(200).json({ problems, totalCount, page, limit });
 });

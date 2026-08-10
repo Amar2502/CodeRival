@@ -40,7 +40,7 @@ export function Header() {
 
   const handleUserMenuAction = (value: string) => {
     if (value === 'profile') {
-      router.push('/profile')
+      router.push(`/${user?.username || 'me'}`)
     } else if (value === 'settings') {
       router.push('/settings')
     } else if (value === 'logout') {
@@ -335,7 +335,7 @@ export function Header() {
                 </Button>
               </Link>
               <div className="pt-3 border-t border-border flex items-center justify-between">
-                <Link href="/profile" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-2">
+                <Link href={`/${user.username}`} onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-2">
                   <UserAvatar src={user.avatar_url || user.avatar} username={user.username} name={user.name} size="sm" />
                   <div>
                     <p className="text-sm font-semibold text-foreground">@{user.username}</p>

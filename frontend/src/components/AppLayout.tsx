@@ -3,6 +3,7 @@
 import React from 'react'
 import { Header } from '@/components/header'
 import { RightSidebar } from '@/components/RightSidebar'
+import { Footer } from '@/components/footer'
 
 interface AppLayoutProps {
   children: React.ReactNode
@@ -31,6 +32,8 @@ export function AppLayout({ children, showSidebar = true }: AppLayoutProps) {
           </div>
         )}
       </main>
+
+      <Footer />
     </div>
   )
 }

@@ -8,7 +8,7 @@ import {
 
 const router = Router();
 
-router.get("/global", getGlobalLeaderboardController);
+router.get("/global", authenticate, getGlobalLeaderboardController);
 router.get("/friends", authenticate, getFriendsLeaderboardController);
 router.post("/sync", authenticate, syncLeaderboardController);
 

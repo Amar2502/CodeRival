@@ -88,11 +88,10 @@ export const useSidebarStore = create<SidebarState>((set, get) => ({
         const rankRes = await api.get('/leaderboard/global?limit=50')
         if (rankRes.data?.currentUserRank?.rank) {
           const r = rankRes.data.currentUserRank.rank
-          let rankStr = `${r}th`
-          if (r === 1) rankStr = '1st'
-          else if (r === 2) rankStr = '2nd'
-          else if (r === 3) rankStr = '3rd'
-          set({ userRank: rankStr })
+          const s = ['th', 'st', 'nd', 'rd']
+          const v = r % 100
+          const ordinalSuffix = s[(v - 20) % 10] || s[v] || s[0]
+          set({ userRank: `${r}${ordinalSuffix}` })
         } else {
           set({ userRank: '-' })
         }

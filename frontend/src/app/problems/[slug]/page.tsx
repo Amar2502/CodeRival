@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useState, use, useCallback } from 'react'
+import { useEffect, useState, use, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
+import { getSavedCode, removeSavedCode } from '@/lib/indexedDB'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -180,12 +181,6 @@ export default function ProblemWorkspacePage({ params }: { params: Promise<{ slu
   // Notifications State (Kite Button)
   const [pendingFriendsCount, setPendingFriendsCount] = useState<number>(0)
 
-  // Problem List Drawer State
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false)
-  const [drawerProblems, setDrawerProblems] = useState<Array<{ problemNumber: number; title: string; slug: string; difficulty: string }>>([])
-  const [drawerSearch, setDrawerSearch] = useState('')
-  const [isDrawerLoading, setIsDrawerLoading] = useState(false)
-
   // Timer State
   const [secondsElapsed, setSecondsElapsed] = useState(0)
   const [isTimerRunning, setIsTimerRunning] = useState(false)
@@ -221,17 +216,86 @@ export default function ProblemWorkspacePage({ params }: { params: Promise<{ slu
     }
   }, [user, fetchPendingCount])
 
+  // Problem List Drawer State
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false)
+  const [drawerProblems, setDrawerProblems] = useState<Array<{ problemNumber: number; title: string; slug: string; difficulty: string }>>([])
+  const [drawerSearch, setDrawerSearch] = useState('')
+  const [isDrawerLoading, setIsDrawerLoading] = useState(false)
+  const [drawerPage, setDrawerPage] = useState(1)
+  const [drawerHasMore, setDrawerHasMore] = useState(true)
+  const [isDrawerLoadingMore, setIsDrawerLoadingMore] = useState(false)
+  const drawerObserverRef = useRef<HTMLDivElement>(null)
+
   const fetchDrawerProblems = async () => {
     setIsDrawerLoading(true)
+    setDrawerPage(1)
+    setDrawerHasMore(true)
     try {
-      const res = await api.get('/problem/get/get-all/1/100')
-      setDrawerProblems(res.data?.problems || [])
+      const res = await api.get('/problem/get/get-all/1/50')
+      const fetched = res.data?.problems || []
+      setDrawerProblems(fetched)
+      if (res.data?.totalCount && fetched.length >= res.data.totalCount) {
+        setDrawerHasMore(false)
+      } else if (fetched.length < 50) {
+        setDrawerHasMore(false)
+      }
     } catch (err) {
       console.error('Failed to fetch drawer problems:', err)
     } finally {
       setIsDrawerLoading(false)
     }
   }
+
+  const fetchMoreDrawerProblems = async () => {
+    if (isDrawerLoadingMore || !drawerHasMore) return
+    setIsDrawerLoadingMore(true)
+    try {
+      const nextPage = drawerPage + 1
+      const res = await api.get(`/problem/get/get-all/${nextPage}/50`)
+      const newFetched = res.data?.problems || []
+      const totalCount = res.data?.totalCount
+
+      if (newFetched.length === 0) {
+        setDrawerHasMore(false)
+      } else {
+        setDrawerProblems((prev) => {
+          const existingSlugs = new Set(prev.map((p) => p.slug))
+          const uniqueNew = newFetched.filter((p: { slug: string; problemNumber: number; title: string; difficulty: string }) => !existingSlugs.has(p.slug))
+          const updated = [...prev, ...uniqueNew]
+          if (newFetched.length < 50 || (totalCount && updated.length >= totalCount)) {
+            setDrawerHasMore(false)
+          }
+          return updated
+        })
+        setDrawerPage(nextPage)
+      }
+    } catch (err) {
+      console.error('Failed to fetch more drawer problems:', err)
+    } finally {
+      setIsDrawerLoadingMore(false)
+    }
+  }
+
+  // IntersectionObserver for drawer infinite scrolling
+  useEffect(() => {
+    if (!drawerObserverRef.current || !drawerHasMore || isDrawerLoadingMore || isDrawerLoading || drawerSearch.trim()) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && drawerHasMore && !isDrawerLoadingMore) {
+          fetchMoreDrawerProblems()
+        }
+      },
+      { threshold: 0.1, rootMargin: '150px' }
+    )
+
+    const currentTarget = drawerObserverRef.current
+    observer.observe(currentTarget)
+
+    return () => {
+      if (currentTarget) observer.unobserve(currentTarget)
+    }
+  }, [drawerPage, drawerHasMore, isDrawerLoadingMore, isDrawerLoading, drawerSearch])
 
   const filteredDrawerProblems = drawerProblems.filter((p) => {
     const query = drawerSearch.toLowerCase()
@@ -302,7 +366,7 @@ export default function ProblemWorkspacePage({ params }: { params: Promise<{ slu
       setSelectedLanguage(defaultLang)
 
       const storageKey = `coderival_code_prob_${data.id}_${defaultLang}`
-      const saved = typeof window !== 'undefined' ? localStorage.getItem(storageKey) : null
+      const saved = await getSavedCode(storageKey)
       if (saved && saved.trim()) {
         setCode(saved)
       } else {
@@ -330,14 +394,14 @@ export default function ProblemWorkspacePage({ params }: { params: Promise<{ slu
     }
   }
 
-  const handleLanguageChange = (lang: 'CPP' | 'JAVA' | 'PYTHON') => {
+  const handleLanguageChange = async (lang: 'CPP' | 'JAVA' | 'PYTHON') => {
     setSelectedLanguage(lang)
     if (typeof window !== 'undefined') {
       localStorage.setItem('coderival_preferred_language', lang)
     }
     if (!problem) return
     const storageKey = `coderival_code_prob_${problem.id}_${lang}`
-    const saved = typeof window !== 'undefined' ? localStorage.getItem(storageKey) : null
+    const saved = await getSavedCode(storageKey)
     if (saved && saved.trim()) {
       setCode(saved)
     } else {
@@ -350,12 +414,10 @@ export default function ProblemWorkspacePage({ params }: { params: Promise<{ slu
     }
   }
 
-  const handleResetCode = () => {
+  const handleResetCode = async () => {
     if (!problem) return
     const storageKey = `coderival_code_prob_${problem.id}_${selectedLanguage}`
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem(storageKey)
-    }
+    await removeSavedCode(storageKey)
     const starter = problem.starterCodes?.find((sc) => sc.language === selectedLanguage)
     if (starter) {
       setCode(starter.code)
@@ -633,43 +695,56 @@ export default function ProblemWorkspacePage({ params }: { params: Promise<{ slu
                       No problems found
                     </div>
                   ) : (
-                    filteredDrawerProblems.map((p) => {
-                      const isCurrent = p.slug === slug
-                      return (
-                        <div
-                          key={p.slug}
-                          onClick={() => {
-                            setIsDrawerOpen(false)
-                            if (!isCurrent) {
-                              router.push(`/problems/${p.slug}`)
-                            }
-                          }}
-                          className={`flex items-center justify-between p-2.5 rounded-lg border text-xs cursor-pointer transition-colors ${
-                            isCurrent
-                              ? 'bg-primary/10 border-primary/40 text-primary font-semibold'
-                              : 'bg-surface/30 border-border/50 hover:bg-surface text-foreground'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2.5 min-w-0 pr-2">
-                            <span className="font-mono text-muted-foreground text-[11px] shrink-0">
-                              #{p.problemNumber}
-                            </span>
-                            <span className="truncate">{p.title}</span>
-                          </div>
-                          <span
-                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
-                              p.difficulty === 'EASY'
-                                ? 'bg-easy-subtle text-easy'
-                                : p.difficulty === 'MEDIUM'
-                                ? 'bg-medium-subtle text-medium'
-                                : 'bg-hard-subtle text-hard'
+                    <>
+                      {filteredDrawerProblems.map((p) => {
+                        const isCurrent = p.slug === slug
+                        return (
+                          <div
+                            key={p.slug}
+                            onClick={() => {
+                              setIsDrawerOpen(false)
+                              if (!isCurrent) {
+                                router.push(`/problems/${p.slug}`)
+                              }
+                            }}
+                            className={`flex items-center justify-between p-2.5 rounded-lg border text-xs cursor-pointer transition-colors ${
+                              isCurrent
+                                ? 'bg-primary/10 border-primary/40 text-primary font-semibold'
+                                : 'bg-surface/30 border-border/50 hover:bg-surface text-foreground'
                             }`}
                           >
-                            {p.difficulty.charAt(0) + p.difficulty.slice(1).toLowerCase()}
-                          </span>
+                            <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                              <span className="font-mono text-muted-foreground text-[11px] shrink-0">
+                                #{p.problemNumber}
+                              </span>
+                              <span className="truncate">{p.title}</span>
+                            </div>
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
+                                p.difficulty === 'EASY'
+                                  ? 'bg-easy-subtle text-easy'
+                                  : p.difficulty === 'MEDIUM'
+                                  ? 'bg-medium-subtle text-medium'
+                                  : 'bg-hard-subtle text-hard'
+                              }`}
+                            >
+                              {p.difficulty.charAt(0) + p.difficulty.slice(1).toLowerCase()}
+                            </span>
+                          </div>
+                        )
+                      })}
+
+                      {/* Infinite Loading Indicator & Observer Sentinel */}
+                      {!isDrawerLoading && drawerHasMore && !drawerSearch.trim() && (
+                        <div
+                          ref={drawerObserverRef}
+                          className="flex items-center justify-center py-4 gap-2 text-xs font-mono text-muted-foreground select-none"
+                        >
+                          <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
+                          <span>Loading more problems...</span>
                         </div>
-                      )
-                    })
+                      )}
+                    </>
                   )}
                 </div>
               </DrawerContent>
@@ -766,7 +841,7 @@ export default function ProblemWorkspacePage({ params }: { params: Promise<{ slu
             {/* Avatar Circle Dropdown (Matching Header style) */}
             {user ? (
               <Select onValueChange={(val) => {
-                if (val === 'profile') router.push('/profile')
+                if (val === 'profile') router.push(`/${user?.username || ''}`)
                 if (val === 'settings') router.push('/settings')
                 if (val === 'logout') {
                   api.post('/auth/logout').catch(() => {})

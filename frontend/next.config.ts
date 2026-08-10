@@ -8,6 +8,7 @@ const nextConfig: NextConfig = {
       { protocol: 'https', hostname: 'avatars.githubusercontent.com' },
     ],
   },
+  allowedDevOrigins: ['10.144.166.189'],
   poweredByHeader: false,
   reactStrictMode: true,
 };

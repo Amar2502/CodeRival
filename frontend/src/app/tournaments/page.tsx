@@ -152,71 +152,33 @@ export default function TournamentsLobbyPage() {
       <div className="min-h-screen bg-background text-foreground flex flex-col">
         <Header />
 
-        <main className="flex-1 max-w-5xl mx-auto px-4 py-16 w-full flex flex-col items-center justify-center text-center space-y-8">
+        <main className="flex-1 max-w-3xl mx-auto px-4 py-24 w-full flex flex-col items-center justify-center text-center space-y-6">
           <div className="relative">
             <div className="absolute inset-0 bg-primary/20 rounded-full blur-2xl animate-pulse" />
-            <div className="relative w-24 h-24 rounded-3xl bg-linear-to-br from-primary/20 via-surface to-accent/20 border border-primary/30 flex items-center justify-center shadow-2xl">
-              <Trophy className="w-12 h-12 text-amber-400 animate-bounce" />
+            <div className="relative w-20 h-20 rounded-2xl bg-linear-to-br from-primary/20 via-surface to-accent/20 border border-primary/30 flex items-center justify-center shadow-2xl">
+              <Trophy className="w-10 h-10 text-amber-400" />
             </div>
           </div>
 
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-400 text-xs font-bold uppercase tracking-wider">
-            <Sparkles className="w-4 h-4 animate-pulse" />
-            Upcoming Feature • Season 1
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-400 text-xs font-bold uppercase tracking-wider">
+            <Sparkles className="w-3.5 h-3.5 animate-pulse" />
+            Upcoming Feature
           </div>
 
-          <div className="space-y-3 max-w-2xl">
-            <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight text-foreground">
+          <div className="space-y-2">
+            <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-foreground">
               Tournament Arena
             </h1>
-            <p className="text-base md:text-lg text-muted-foreground leading-relaxed">
-              Bracket-style single-elimination championships with real-time duel spectating, custom friend invitations, and competitive tournament ratings are currently under active development.
+            <p className="text-xs sm:text-sm text-muted-foreground max-w-md mx-auto leading-relaxed">
+              Bracket-style single-elimination championships and tournament coding duels are coming soon.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 w-full pt-4">
-            <Card className="border-border bg-card/60 backdrop-blur-xs text-left p-5 space-y-2">
-              <div className="p-2 rounded-lg bg-primary/10 w-fit text-primary">
-                <Trophy className="w-5 h-5" />
-              </div>
-              <h3 className="font-bold text-foreground text-sm">Bracket Championships</h3>
-              <p className="text-xs text-muted-foreground leading-normal">
-                4 and 8-player single elimination tournaments with live seed progression.
-              </p>
-            </Card>
-
-            <Card className="border-border bg-card/60 backdrop-blur-xs text-left p-5 space-y-2">
-              <div className="p-2 rounded-lg bg-emerald-500/10 w-fit text-emerald-400">
-                <Swords className="w-5 h-5" />
-              </div>
-              <h3 className="font-bold text-foreground text-sm">Real-Time Duels</h3>
-              <p className="text-xs text-muted-foreground leading-normal">
-                Head-to-head coding battles with instant match assignment & bracket tree updates.
-              </p>
-            </Card>
-
-            <Card className="border-border bg-card/60 backdrop-blur-xs text-left p-5 space-y-2">
-              <div className="p-2 rounded-lg bg-accent/10 w-fit text-accent">
-                <Users className="w-5 h-5" />
-              </div>
-              <h3 className="font-bold text-foreground text-sm">Friend Invitations</h3>
-              <p className="text-xs text-muted-foreground leading-normal">
-                Create custom private tournaments and invite your friends to compete.
-              </p>
-            </Card>
-          </div>
-
-          <div className="flex flex-col sm:flex-row items-center gap-4 pt-4">
+          <div className="pt-2">
             <Link href="/battles">
-              <Button size="lg" className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold shadow-lg shadow-primary/25 rounded-xl gap-2 px-6 h-12 cursor-pointer">
-                <Swords className="w-5 h-5" />
-                Play 1v1 Battles Now
-              </Button>
-            </Link>
-            <Link href="/problems">
-              <Button size="lg" variant="outline" className="border-border hover:bg-surface text-foreground font-semibold rounded-xl gap-2 px-6 h-12">
-                <ArrowRight className="w-4 h-4" />
-                Practice Coding Problems
+              <Button size="lg" className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold shadow-md rounded-xl gap-2 px-6 h-11 text-xs cursor-pointer">
+                <Swords className="w-4 h-4" />
+                <span>Go to 1v1 Battles</span>
               </Button>
             </Link>
           </div>

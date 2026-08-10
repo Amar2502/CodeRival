@@ -27,6 +27,8 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 
+import { saveCode } from '@/lib/indexedDB'
+
 export interface SecureMonacoEditorProps {
   language: 'CPP' | 'JAVA' | 'PYTHON' | string
   onLanguageChange?: (lang: 'CPP' | 'JAVA' | 'PYTHON') => void
@@ -66,7 +68,7 @@ export function SecureMonacoEditor({
     return 'javascript'
   }
 
-  // Handle LocalStorage Auto-save & status indicator
+  // Handle IndexedDB Auto-save & status indicator
   useEffect(() => {
     if (!storageKey || !value) return
     setSaveStatus('saving')
@@ -75,14 +77,14 @@ export function SecureMonacoEditor({
       clearTimeout(saveTimeoutRef.current)
     }
 
-    saveTimeoutRef.current = setTimeout(() => {
+    saveTimeoutRef.current = setTimeout(async () => {
       try {
-        localStorage.setItem(storageKey, value)
+        await saveCode(storageKey, value)
         setSaveStatus('saved')
       } catch (err) {
         console.error('Auto-save error:', err)
       }
-    }, 400)
+    }, 750)
 
     return () => {
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current)
@@ -159,11 +161,6 @@ export function SecureMonacoEditor({
         col: e.position.column,
       })
     })
-
-    // If DEVELOPMENT mode, completely disable anti-cheat functionality & event listeners
-    if (isDevelopment) {
-      return
-    }
 
     // 1. Override Monaco Clipboard Paste Command
     try {
@@ -243,15 +240,13 @@ export function SecureMonacoEditor({
 
           <div className="flex items-center gap-1 px-2 py-0.5 rounded bg-[#282828] text-[11px] font-medium text-emerald-400">
             <ShieldCheck className="w-3 h-3 text-emerald-400" />
-            <span>{isDevelopment ? 'Anti-Cheat Disabled (DEV)' : 'Anti-Cheat'}</span>
+            <span>Anti-Cheat Active</span>
           </div>
 
-          {!isDevelopment && (
-            <div className="hidden sm:flex items-center gap-1 text-[10px] text-amber-400/90 font-mono">
-              <Lock className="w-3 h-3" />
-              <span>Paste Blocked</span>
-            </div>
-          )}
+          <div className="hidden sm:flex items-center gap-1 text-[10px] text-amber-400/90 font-mono">
+            <Lock className="w-3 h-3" />
+            <span>Paste Blocked</span>
+          </div>
         </div>
 
         {/* Right: Actions toolbar */}
@@ -332,7 +327,7 @@ export function SecureMonacoEditor({
             smoothScrolling: true,
             folding: true,
             wordWrap: 'on',
-            contextmenu: isDevelopment ? true : false,
+            contextmenu: false,
           }}
           loading={
             <div className="flex items-center justify-center h-full gap-2 text-sm text-muted-foreground bg-[#0d1117]">

@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, use } from 'react'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
+import { getSavedCode, removeSavedCode } from '@/lib/indexedDB'
 import { toast } from 'sonner'
 import { isDevelopment } from '@/lib/config'
 import { Button } from '@/components/ui/button'
@@ -199,19 +200,59 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
   const [remainingMs, setRemainingMs] = useState<number>(15 * 60 * 1000)
 
   // Anti-Cheat State
-  const [antiCheatWarnings, setAntiCheatWarnings] = useState<number>(0)
+  const [antiCheatDisqualified, setAntiCheatDisqualified] = useState(false)
+  const isMatchFinishedRef = useRef(false)
   const [antiCheatBanner, setAntiCheatBanner] = useState<{
     show: boolean
     message: string
-    type: 'TAB_SWITCH' | 'PASTE_ATTEMPT' | 'WINDOW_RESIZE'
+    type: 'FULLSCREEN_EXIT' | 'PASTE_ATTEMPT'
   } | null>(null)
-  const [showTabSwitchDialog, setShowTabSwitchDialog] = useState(false)
-  const [showResizeDialog, setShowResizeDialog] = useState(false)
-  const [resizeCountdown, setResizeCountdown] = useState(10)
+  const [showFullscreenExitDialog, setShowFullscreenExitDialog] = useState(false)
   const lastAntiCheatTimeRef = useRef<number>(0)
 
   const isParticipant = !!(user?.id && (player1?.id === user.id || player2?.id === user.id))
   const isSpectator = !isParticipant && isTournamentMatch
+
+  // Pre-Battle Rules Acceptance Modal State
+  const [showPreBattleRulesModal, setShowPreBattleRulesModal] = useState(false)
+  const [showDeclineConfirmModal, setShowDeclineConfirmModal] = useState(false)
+
+  // Always show rules modal — user MUST click "Accept & Enter Fullscreen" (requestFullscreen requires a user gesture)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (isParticipant && matchStatus !== 'FINISHED') {
+      setShowPreBattleRulesModal(true)
+    }
+  }, [isParticipant, matchStatus, matchId])
+
+  const handleAcceptRules = () => {
+    if (typeof window !== 'undefined') {
+      try {
+        if (document.documentElement.requestFullscreen) {
+          document.documentElement.requestFullscreen().catch(() => {})
+        }
+      } catch {}
+    }
+    setShowPreBattleRulesModal(false)
+    toast.success('Battle guidelines accepted. Entering fullscreen!')
+  }
+
+  const handleDeclineRules = () => {
+    setShowDeclineConfirmModal(true)
+  }
+
+  const handleConfirmLeaveMatch = () => {
+    setShowDeclineConfirmModal(false)
+    setShowPreBattleRulesModal(false)
+    if (matchStatus === 'ACTIVE') {
+      socket.emit('match:surrender', { matchId })
+    }
+    router.push('/battles')
+  }
+
+  const handleCancelLeaveMatch = () => {
+    setShowDeclineConfirmModal(false)
+  }
 
   const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -305,29 +346,39 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
 
     const onOpponentAntiCheatWarning = (data: {
       userId: string
-      type: 'TAB_SWITCH' | 'PASTE_ATTEMPT' | 'WINDOW_RESIZE'
+      type: 'TAB_SWITCH' | 'PASTE_ATTEMPT' | 'WINDOW_RESIZE' | 'FULLSCREEN_EXIT'
       details?: string
       warningCount?: number
     }) => {
       const typeLabel =
-        data.type === 'TAB_SWITCH'
+        data.type === 'FULLSCREEN_EXIT'
+          ? 'Exited Fullscreen (DISQUALIFIED)'
+          : data.type === 'TAB_SWITCH'
           ? 'Tab Switch / Background Focus'
           : data.type === 'PASTE_ATTEMPT'
           ? `Paste Attempt (${data.details || ''})`
           : 'Window Resized Below Threshold'
       addActivityLog(
-        `⚠️ Rival received Anti-Cheat Warning: ${typeLabel} (Warning ${data.warningCount || 1}/3)`,
+        `⚠️ Rival Anti-Cheat Violation: ${typeLabel}`,
         'warning'
       )
-      toast.warning(`⚠️ Rival received Anti-Cheat warning: ${typeLabel}`)
+      toast.warning(`⚠️ Rival Anti-Cheat Violation: ${typeLabel}`)
     }
 
     const onMatchEnded = async (payload: MatchEndedPayload) => {
+      isMatchFinishedRef.current = true
       setMatchStatus('FINISHED')
       setMatchEndedData(payload)
       if (payload.tournamentId) {
         setTournamentId(payload.tournamentId)
       }
+
+      // Exit fullscreen automatically when match ends
+      try {
+        if (typeof document !== 'undefined' && document.fullscreenElement) {
+          document.exitFullscreen().catch(() => {})
+        }
+      } catch {}
 
       const isWinner = payload.winnerId === user?.id
       if (isWinner) {
@@ -401,24 +452,25 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
       }
     }
 
-    // Set initial starter code if not set (checking localStorage first)
+    // Set initial starter code if not set (checking IndexedDB first)
     if (data.problem?.starterCodes && !code) {
       const savedPref = (typeof window !== 'undefined' ? localStorage.getItem('coderival_preferred_language') : null) as 'CPP' | 'JAVA' | 'PYTHON' | null
       const defaultLang: 'CPP' | 'JAVA' | 'PYTHON' = (savedPref && ['CPP', 'JAVA', 'PYTHON'].includes(savedPref)) ? savedPref : 'PYTHON'
       setSelectedLanguage(defaultLang)
 
       const storageKey = `coderival_code_battle_${matchId}_${defaultLang}`
-      const saved = typeof window !== 'undefined' ? localStorage.getItem(storageKey) : null
-      if (saved && saved.trim()) {
-        setCode(saved)
-      } else {
-        const defaultStarter = data.problem.starterCodes.find((sc: StarterCode) => sc.language === defaultLang)
-        if (defaultStarter) {
-          setCode(defaultStarter.code)
+      getSavedCode(storageKey).then((saved) => {
+        if (saved && saved.trim()) {
+          setCode(saved)
         } else {
-          setCode(getFallbackCode(defaultLang, data.problem))
+          const defaultStarter = data.problem.starterCodes.find((sc: StarterCode) => sc.language === defaultLang)
+          if (defaultStarter) {
+            setCode(defaultStarter.code)
+          } else {
+            setCode(getFallbackCode(defaultLang, data.problem))
+          }
         }
-      }
+      })
     }
   }
 
@@ -439,6 +491,7 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
           }
         }
         if (m.status === 'FINISHED') {
+          isMatchFinishedRef.current = true
           setMatchStatus('FINISHED')
         } else {
           setMatchStatus('ACTIVE')
@@ -452,6 +505,18 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
       }
     }
   }
+
+  // Auto-exit fullscreen when matchStatus transitions to FINISHED
+  useEffect(() => {
+    if (matchStatus === 'FINISHED') {
+      isMatchFinishedRef.current = true
+      try {
+        if (typeof document !== 'undefined' && document.fullscreenElement) {
+          document.exitFullscreen().catch(() => {})
+        }
+      } catch {}
+    }
+  }, [matchStatus])
 
   // Check authorization for non-participants (redirect if regular 1v1)
   useEffect(() => {
@@ -495,146 +560,87 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
     return () => clearInterval(interval)
   }, [opponentDisconnected, disconnectTimer])
 
-  // 4. Anti-Cheat Event Listeners (Tab Switch, Focus Loss, Window Resize)
+  // 4. Anti-Cheat: Fullscreen Exit / Window Blur = Instant Disqualification
   useEffect(() => {
-    if (isDevelopment || isSpectator) return
-    if (matchStatus !== 'ACTIVE') return
+    if (isSpectator) return
+    if (matchStatus !== 'ACTIVE' || isMatchFinishedRef.current) return
 
-    const triggerAntiCheatWarning = (
-      type: 'TAB_SWITCH' | 'WINDOW_RESIZE',
-      msg: string
+    // Shared disqualification logic — called by both fullscreen exit & blur
+    const triggerInstantDisqualification = (
+      reason: 'FULLSCREEN_EXIT' | 'WINDOW_BLUR',
+      displayMsg: string
     ) => {
-      const now = Date.now()
-      if (now - lastAntiCheatTimeRef.current < 2500) return
-      lastAntiCheatTimeRef.current = now
+      if (isMatchFinishedRef.current) return
 
-      setAntiCheatWarnings((prev) => {
-        const nextCount = prev + 1
+      // Prevent duplicate DQ if already disqualified
+      setAntiCheatDisqualified((already) => {
+        if (already) return true
 
-        if (nextCount === 1) {
-          // 1st Violation: Warning 1/1 (Final Warning)
-          const warningMsg = `⚠️ Anti-Cheat Warning (1/1): ${msg} NEXT SWITCH WILL RESULT IN IMMEDIATE MATCH DISQUALIFICATION!`
-          addActivityLog(warningMsg, 'warning')
+        const disqMsg = `💀 DISQUALIFIED: ${displayMsg}`
+        addActivityLog(disqMsg, 'warning')
 
-          setAntiCheatBanner({
-            show: true,
-            message: `⚠️ WARNING (1/1): ${msg} Next switch = INSTANT DISQUALIFICATION & LOSS!`,
-            type,
-          })
+        setAntiCheatBanner({
+          show: true,
+          message: `💀 DISQUALIFIED! ${displayMsg}`,
+          type: 'FULLSCREEN_EXIT',
+        })
+        setShowFullscreenExitDialog(true)
 
-          socket.emit('match:anti_cheat_warning', {
-            matchId,
-            type,
-            warningCount: 1,
-            details: 'FINAL WARNING',
-          })
+        socket.emit('match:anti_cheat_warning', {
+          matchId,
+          type: reason,
+          warningCount: 1,
+          details: `DISQUALIFIED — ${displayMsg}`,
+        })
 
-          return 1
-        } else {
-          // 2nd Violation: INSTANT DISQUALIFICATION & MATCH LOSS
-          const disqMsg = `💀 DISQUALIFIED: Repeated tab switch / focus loss! Match forfeited.`
-          addActivityLog(disqMsg, 'warning')
+        socket.emit('match:cheat_disqualify', { matchId, type: reason, details: displayMsg })
 
-          setAntiCheatBanner({
-            show: true,
-            message: `💀 DISQUALIFIED! Match forfeited due to anti-cheat violation.`,
-            type,
-          })
-
-          socket.emit('match:anti_cheat_warning', {
-            matchId,
-            type,
-            warningCount: 2,
-            details: 'DISQUALIFIED',
-          })
-
-          // Disqualify for cheating immediately
-          socket.emit('match:cheat_disqualify', { matchId, type, details: 'DISQUALIFIED' })
-
-          return 2
-        }
+        return true
       })
     }
 
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') {
-        setShowTabSwitchDialog(true)
-        triggerAntiCheatWarning(
-          'TAB_SWITCH',
-          'Tab switch / background app detected!'
-        )
+    const handleFullscreenChange = () => {
+      if (isMatchFinishedRef.current || matchStatus !== 'ACTIVE') return
+      if (!document.fullscreenElement) {
+        triggerInstantDisqualification('FULLSCREEN_EXIT', 'Exited fullscreen mode! Match forfeited.')
       }
     }
 
     const handleWindowBlur = () => {
-      setShowTabSwitchDialog(true)
-      triggerAntiCheatWarning(
-        'TAB_SWITCH',
-        'Window lost focus / application switched!'
-      )
+      if (isMatchFinishedRef.current || matchStatus !== 'ACTIVE') return
+      // Catches Linux desktop switching, Alt+Tab on some WMs, etc.
+      // where fullscreen stays active but the window loses focus
+      triggerInstantDisqualification('WINDOW_BLUR', 'Window lost focus (desktop switch detected)! Match forfeited.')
     }
 
-    const handleWindowResize = () => {
-      setShowResizeDialog(true)
-      triggerAntiCheatWarning(
-        'WINDOW_RESIZE',
-        'Window dimension change / resize detected!'
-      )
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      const message = '⚠️ WARNING: Leaving or closing this tab will disqualify you from the active match!'
+      e.preventDefault()
+      e.returnValue = message
+      return message
     }
 
-    document.addEventListener('visibilitychange', handleVisibilityChange)
+    const handlePageHide = () => {
+      socket.emit('match:cheat_disqualify', { matchId, type: 'TAB_SWITCH', details: 'TAB_CLOSED_OR_UNLOADED' })
+    }
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
     window.addEventListener('blur', handleWindowBlur)
-    window.addEventListener('resize', handleWindowResize)
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    window.addEventListener('pagehide', handlePageHide)
 
     return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      document.removeEventListener('fullscreenchange', handleFullscreenChange)
       window.removeEventListener('blur', handleWindowBlur)
-      window.removeEventListener('resize', handleWindowResize)
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+      window.removeEventListener('pagehide', handlePageHide)
     }
   }, [matchStatus, matchId, isSpectator])
 
-  // 10-Second Resize Disqualification Countdown Effect
-  useEffect(() => {
-    let timer: NodeJS.Timeout | null = null
-
-    if (showResizeDialog) {
-      timer = setInterval(() => {
-        setResizeCountdown((prev) => {
-          if (prev <= 1) {
-            if (timer) clearInterval(timer)
-            setShowResizeDialog(false)
-            // Trigger automatic disqualification after 10s countdown
-            socket.emit('match:cheat_disqualify', {
-              matchId,
-              type: 'WINDOW_RESIZE',
-              details: '10s Resize Timer Expired',
-            })
-            addActivityLog(
-              '💀 DISQUALIFIED: Window resized for > 10 seconds. Match forfeited.',
-              'warning'
-            )
-            setAntiCheatBanner({
-              show: true,
-              message: '💀 DISQUALIFIED! Match forfeited due to window resize violation.',
-              type: 'WINDOW_RESIZE',
-            })
-            return 0
-          }
-          return prev - 1
-        })
-      }, 1000)
-    } else {
-      setResizeCountdown(10)
-    }
-
-    return () => {
-      if (timer) clearInterval(timer)
-    }
-  }, [showResizeDialog, matchId])
 
   // Handle Code Editor Paste Interception
   const handlePasteAttempt = (pastedLength: number) => {
-    if (isDevelopment || isSpectator) return
+    if (isSpectator) return
     if (matchStatus !== 'ACTIVE') return
     const now = Date.now()
     if (now - lastAntiCheatTimeRef.current < 2000) return
@@ -674,10 +680,10 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
   }
 
   // Handle Language Switch
-  const handleLanguageChange = (lang: 'CPP' | 'JAVA' | 'PYTHON') => {
+  const handleLanguageChange = async (lang: 'CPP' | 'JAVA' | 'PYTHON') => {
     setSelectedLanguage(lang)
     const storageKey = `coderival_code_battle_${matchId}_${lang}`
-    const saved = typeof window !== 'undefined' ? localStorage.getItem(storageKey) : null
+    const saved = await getSavedCode(storageKey)
     if (saved && saved.trim()) {
       setCode(saved)
     } else {
@@ -700,11 +706,9 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
     return `class Solution {\n    public void solve() {\n        // Write Java solution here\n    }\n}`
   }
 
-  const handleResetCode = () => {
+  const handleResetCode = async () => {
     const storageKey = `coderival_code_battle_${matchId}_${selectedLanguage}`
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem(storageKey)
-    }
+    await removeSavedCode(storageKey)
     const starter = problem?.starterCodes?.find((sc) => sc.language === selectedLanguage)
     if (starter) {
       setCode(starter.code)
@@ -970,31 +974,29 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
               <TooltipTrigger asChild>
                 <div
                   className={`hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-mono border cursor-help ${
-                    antiCheatWarnings > 0
-                      ? 'bg-amber-500/10 border-amber-500/30 text-amber-400 animate-pulse'
+                    antiCheatDisqualified
+                      ? 'bg-rose-500/10 border-rose-500/30 text-rose-400 animate-pulse'
                       : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
                   }`}
                 >
-                  {antiCheatWarnings > 0 ? (
+                  {antiCheatDisqualified ? (
                     <ShieldAlert className="w-3.5 h-3.5" />
                   ) : (
                     <ShieldCheck className="w-3.5 h-3.5" />
                   )}
                   <span>
-                    {antiCheatWarnings >= 2
+                    {antiCheatDisqualified
                       ? '💀 Disqualified'
-                      : antiCheatWarnings === 1
-                      ? '⚠️ Warning 1/1 (Final)'
                       : isDevelopment
                       ? 'Anti-Cheat Disabled (DEV)'
-                      : 'Anti-Cheat Active'}
+                      : 'Fullscreen Enforced'}
                   </span>
                 </div>
               </TooltipTrigger>
               <TooltipContent side="bottom" className="text-xs max-w-xs">
                 {isDevelopment
                   ? 'Anti-Cheat Disabled: NEXT_PUBLIC_APP_ENV is set to DEVELOPMENT'
-                  : 'Anti-Cheat Active: Tab focus, paste control, and window dimensions are monitored'}
+                  : 'Fullscreen mode is enforced — exiting fullscreen will result in instant disqualification'}
               </TooltipContent>
             </Tooltip>
 
@@ -1696,7 +1698,7 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
                   } else if (isDraw) {
                     return '🤝 Draw: Match ended with equal score at timeout.'
                   } else {
-                    if (reason === 'OPPONENT_CHEATED' || antiCheatWarnings >= 2) return '💀 Lost: You were disqualified for anti-cheat violation.'
+                    if (reason === 'OPPONENT_CHEATED' || antiCheatDisqualified) return '💀 Lost: You were disqualified for exiting fullscreen.'
                     if (reason === 'OPPONENT_SURRENDERED') return '💀 Lost: You surrendered the duel.'
                     if (reason === 'OPPONENT_DISCONNECTED') return '💀 Lost: You disconnected from the match.'
                     if (reason === 'TIMEOUT') return '💀 Lost: Opponent had higher score at match timeout.'
@@ -1784,9 +1786,9 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
         </div>
       )}
 
-      {/* ─── TAB SWITCH DISQUALIFICATION ALERT DIALOG ─── */}
-      <AlertDialog open={showTabSwitchDialog} onOpenChange={setShowTabSwitchDialog}>
-        <AlertDialogContent className="bg-[#141416] border border-rose-500/40 text-white max-w-md shadow-2xl">
+      {/* ─── FULLSCREEN EXIT DISQUALIFICATION ALERT DIALOG ─── */}
+      <AlertDialog open={showFullscreenExitDialog}>
+        <AlertDialogContent className="bg-[#141416] border border-rose-500/50 text-white max-w-md shadow-2xl">
           <AlertDialogHeader className="sm:text-left">
             <div className="flex items-center gap-3 mb-2">
               <div className="p-3 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/40 shrink-0">
@@ -1794,73 +1796,163 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
               </div>
               <div>
                 <AlertDialogTitle className="text-lg font-bold text-rose-400">
-                  ⚠️ Anti-Cheat Warning: Tab Switch Detected
+                  💀 Disqualified — Exited Fullscreen
                 </AlertDialogTitle>
-                <span className="text-[11px] font-mono text-rose-300/80">PROHIBITED ACTION IN PRODUCTION</span>
+                <span className="text-[11px] font-mono text-rose-300/80">MATCH FORFEITED</span>
               </div>
             </div>
-            <AlertDialogDescription className="text-slate-300 text-sm leading-relaxed space-y-2 pt-2">
-              <p>
-                You attempted to switch tabs or change windows during an active battle.
-              </p>
-              <p className="text-rose-300 font-semibold bg-rose-950/50 p-2.5 rounded border border-rose-500/30 text-xs">
-                ⚠️ If you change tabs or switch applications, you will be disqualified from this match!
-              </p>
+            <AlertDialogDescription asChild>
+              <div className="text-slate-300 text-sm leading-relaxed space-y-3 pt-2">
+                <p>
+                  You exited fullscreen mode during an active battle. This is a direct violation of the anti-cheat policy.
+                </p>
+                <div className="bg-rose-950/60 border border-rose-500/40 rounded-lg p-3 text-xs text-rose-200 space-y-1.5">
+                  <p className="font-bold text-rose-300">💀 You have been immediately disqualified.</p>
+                  <p>The match has been forfeited and recorded as a loss. Your opponent has been awarded the victory.</p>
+                </div>
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="mt-4 sm:justify-end">
             <AlertDialogAction
-              onClick={() => setShowTabSwitchDialog(false)}
+              onClick={() => setShowFullscreenExitDialog(false)}
               className="bg-rose-600 hover:bg-rose-700 text-white font-semibold shadow-lg shadow-rose-900/40 cursor-pointer"
             >
-              I Understand & Resume Battle
+              I Understand
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* ─── WINDOW RESIZE DISQUALIFICATION TIMER ALERT DIALOG ─── */}
-      <AlertDialog open={showResizeDialog} onOpenChange={setShowResizeDialog}>
-        <AlertDialogContent className="bg-[#141416] border border-amber-500/40 text-white max-w-md shadow-2xl">
-          <AlertDialogHeader className="sm:text-left">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="p-3 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/40 shrink-0">
-                <AlertTriangle className="w-6 h-6 animate-bounce" />
+      {/* ─── PRE-BATTLE RULES & ANTI-CHEAT GUIDELINES MODAL ─── */}
+      <AlertDialog open={showPreBattleRulesModal && !showDeclineConfirmModal}>
+        <AlertDialogContent size="3xl" className="bg-[#121214] border border-[#2a2a30] text-white w-[92vw] shadow-2xl p-0 rounded-2xl overflow-hidden">
+          {/* Header */}
+          <div className="py-4 px-6 border-b border-[#2a2a30] text-center">
+            <h2 className="text-xl font-bold text-white tracking-wide">
+              Rules & Regulations
+            </h2>
+          </div>
+
+          {/* Body with full-width stacked rows */}
+          <AlertDialogDescription asChild>
+            <div className="divide-y divide-[#2a2a30] text-slate-200">
+              {/* Row 1: Fullscreen Mode */}
+              <div className="px-6 py-4 space-y-1">
+                <div className="flex items-center justify-between text-sm sm:text-base font-bold">
+                  <span className="text-white flex items-center gap-2">
+                    <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0" />
+                    1. Fullscreen Mode (Mandatory)
+                  </span>
+                  <span className="text-xs font-mono font-bold text-rose-400 bg-rose-500/10 px-2.5 py-0.5 rounded border border-rose-500/20">
+                    Instant Disqualification
+                  </span>
+                </div>
+                <p className="text-xs sm:text-sm text-slate-400 leading-relaxed pl-6">
+                  The battle runs in fullscreen mode. Exiting fullscreen (Esc, F11, or any method) or switching desktops / Alt+Tab will result in <strong className="text-rose-300">instant disqualification with no warnings or second chances</strong>.
+                </p>
               </div>
-              <div>
-                <AlertDialogTitle className="text-lg font-bold text-amber-400">
-                  ⚠️ Anti-Cheat Warning: Window Resize Detected
-                </AlertDialogTitle>
-                <span className="text-[11px] font-mono text-amber-300/80">AUTOMATED DISQUALIFICATION TIMER</span>
+
+              {/* Row 2: Paste Blocking */}
+              <div className="px-6 py-4 space-y-1">
+                <div className="flex items-center justify-between text-sm sm:text-base font-bold">
+                  <span className="text-white flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                    2. Paste Blocking
+                  </span>
+                  <span className="text-xs font-mono font-bold text-amber-400 bg-amber-500/10 px-2.5 py-0.5 rounded border border-amber-500/20">
+                    Blocked
+                  </span>
+                </div>
+                <p className="text-xs sm:text-sm text-slate-400 leading-relaxed pl-6">
+                  Pasting code from the clipboard is strictly blocked during competitive duels. All solutions must be typed manually.
+                </p>
+              </div>
+
+              {/* Row 3: Internet Drop */}
+              <div className="px-6 py-4 space-y-1">
+                <div className="flex items-center justify-between text-sm sm:text-base font-bold">
+                  <span className="text-white flex items-center gap-2">
+                    <WifiOff className="w-4 h-4 text-sky-400 shrink-0" />
+                    3. Internet Disconnection
+                  </span>
+                  <span className="text-xs font-mono font-bold text-sky-400 bg-sky-500/10 px-2.5 py-0.5 rounded border border-sky-500/20">
+                    30s Grace Period
+                  </span>
+                </div>
+                <p className="text-xs sm:text-sm text-slate-400 leading-relaxed pl-6">
+                  If your internet connection drops, you are granted a 30-second window to reconnect before the match is forfeited.
+                </p>
+              </div>
+
+              {/* Row 4: Page Refresh */}
+              <div className="px-6 py-4 space-y-1">
+                <div className="flex items-center justify-between text-sm sm:text-base font-bold">
+                  <span className="text-white flex items-center gap-2">
+                    <RotateCcw className="w-4 h-4 text-emerald-400 shrink-0" />
+                    4. Page Refresh
+                  </span>
+                  <span className="text-xs font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded border border-emerald-500/20">
+                    Safe (Allowed)
+                  </span>
+                </div>
+                <p className="text-xs sm:text-sm text-slate-400 leading-relaxed pl-6">
+                  You can safely refresh the page if an error occurs — refreshing does NOT disqualify you from the match.
+                </p>
               </div>
             </div>
-            <AlertDialogDescription className="text-slate-300 text-sm leading-relaxed space-y-3 pt-2">
-              <p>
-                Resizing or un-maximizing the battle window is prohibited during competitive duels in PRODUCTION.
-              </p>
-              <div className="bg-rose-950/70 border border-rose-500/50 rounded-xl p-4 flex items-center justify-between gap-3 text-rose-200">
-                <div className="flex items-center gap-2.5">
-                  <TimerIcon className="w-5 h-5 text-rose-400 animate-spin" />
-                  <div className="text-xs font-semibold">
-                    <div>Disqualification Timer:</div>
-                    <div className="text-[10px] text-rose-300/70 font-normal">In {resizeCountdown} seconds, you will be automatically disqualified.</div>
-                  </div>
-                </div>
-                <div className="text-2xl font-black font-mono text-rose-400 bg-rose-900/60 px-3.5 py-1.5 rounded-lg border border-rose-500/60 min-w-[4rem] text-center shadow-inner">
-                  {resizeCountdown}s
-                </div>
+          </AlertDialogDescription>
+
+          {/* Footer */}
+          <div className="px-6 py-4 bg-[#16161a] border-t border-[#2a2a30] flex items-center justify-end gap-3">
+              <Button
+                variant="outline"
+                onClick={handleDeclineRules}
+                className="border-[#3a3a42] text-slate-300 hover:bg-[#222228] hover:text-white text-xs sm:text-sm font-semibold h-10 px-4 rounded-xl cursor-pointer"
+              >
+                Decline & Leave
+              </Button>
+              <AlertDialogAction
+                onClick={handleAcceptRules}
+                className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm h-10 px-5 rounded-xl shadow-lg cursor-pointer border-0"
+              >
+                Accept & Enter Fullscreen
+              </AlertDialogAction>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* ─── DECLINE CONFIRMATION ALERT DIALOG ─── */}
+      <AlertDialog open={showDeclineConfirmModal}>
+        <AlertDialogContent className="bg-[#141416] border border-rose-500/50 text-white max-w-md shadow-2xl p-6 rounded-xl">
+          <AlertDialogHeader className="sm:text-left">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="p-2.5 rounded-full bg-rose-500/20 text-rose-400 shrink-0 border border-rose-500/30">
+                <AlertTriangle className="w-6 h-6" />
               </div>
-              <p className="text-rose-300 font-bold text-xs text-center">
-                In {resizeCountdown} seconds, you will be automatically disqualified.
-              </p>
+              <AlertDialogTitle className="text-lg font-bold text-rose-400">
+                Sure you want to leave?
+              </AlertDialogTitle>
+            </div>
+            <AlertDialogDescription asChild>
+              <div className="text-slate-300 text-xs leading-relaxed pt-1">
+                If you leave now, your match will be forfeited and recorded as a loss. Are you sure?
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter className="mt-4 sm:justify-end">
-            <AlertDialogAction
-              onClick={() => setShowResizeDialog(false)}
-              className="bg-amber-600 hover:bg-amber-700 text-white font-semibold shadow-lg shadow-amber-900/40 cursor-pointer"
+          <AlertDialogFooter className="mt-5 flex-row justify-end gap-3">
+            <Button
+              variant="outline"
+              onClick={handleCancelLeaveMatch}
+              className="bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700 text-xs font-semibold h-10 px-4 cursor-pointer"
             >
-              Acknowledge & Restore Window
+              No, I don't want to leave
+            </Button>
+            <AlertDialogAction
+              onClick={handleConfirmLeaveMatch}
+              className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs h-10 px-4 shadow-lg shadow-rose-950/50 cursor-pointer border-0"
+            >
+              OK, Leave Match
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

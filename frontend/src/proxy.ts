@@ -8,7 +8,6 @@ export function proxy(request: NextRequest) {
     "/problems",
     "/battles",
     "/leaderboard",
-    "/profile",
     "/settings",
   ];
 
@@ -29,7 +28,6 @@ export const config = {
     "/problems/:path*",
     "/battles/:path*",
     "/leaderboard/:path*",
-    "/profile/:path*",
     "/settings/:path*",
   ],
 };

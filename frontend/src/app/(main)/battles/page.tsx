@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useRef, useCallback } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
@@ -105,7 +105,7 @@ const getMatchReasonInfo = (match: MatchHistoryRecord, currentUserId?: string) =
     return {
       title: isWinner ? 'Rival Disqualified' : 'Disqualified',
       badgeClass: isWinner ? 'bg-amber-500/15 text-amber-400 border-amber-500/30' : 'bg-rose-500/15 text-rose-400 border-rose-500/30',
-      description: isWinner ? 'Rival was disqualified for anti-cheat violation / tab switching.' : 'Disqualified due to tab switching / anti-cheat violation.',
+      description: isWinner ? 'Rival was disqualified for anti-cheat violation (exited fullscreen).' : 'Disqualified for exiting fullscreen during the match.',
       icon: ShieldAlert,
     }
   }
@@ -182,9 +182,13 @@ export default function BattlesPage() {
   const [matchFoundData, setMatchFoundData] = useState<MatchFoundPayload | null>(null)
   const [matchCountdown, setMatchCountdown] = useState(3)
 
-  // Matches List State
+  // Matches List State & Infinite Scroll Pagination
   const [matchHistory, setMatchHistory] = useState<MatchHistoryRecord[]>([])
   const [isLoadingHistory, setIsLoadingHistory] = useState(true)
+  const [historyPage, setHistoryPage] = useState<number>(1)
+  const [hasMoreHistory, setHasMoreHistory] = useState<boolean>(true)
+  const [isLoadingMoreHistory, setIsLoadingMoreHistory] = useState<boolean>(false)
+  const observerTarget = useRef<HTMLDivElement>(null)
   const [selectedHistoryMatch, setSelectedHistoryMatch] = useState<MatchHistoryRecord | null>(null)
 
   // Filter & Search State
@@ -286,10 +290,12 @@ export default function BattlesPage() {
         console.error('Failed to fetch friends:', e)
       }
 
-      // 3. Match History
+      // 3. Match History (Page 1, 20 per page)
       try {
-        const historyRes = await api.get('/match/history/me')
+        const historyRes = await api.get('/match/history/me?page=1&limit=20')
         setMatchHistory(historyRes.data?.data || [])
+        setHistoryPage(1)
+        setHasMoreHistory(Boolean(historyRes.data?.hasMore))
       } catch (e) {
         console.error('Failed to fetch match history:', e)
       }
@@ -324,6 +330,40 @@ export default function BattlesPage() {
       setIsLoadingHistory(false)
     }
   }
+
+  const loadMoreMatches = useCallback(async () => {
+    if (isLoadingMoreHistory || !hasMoreHistory || isLoadingHistory) return
+    setIsLoadingMoreHistory(true)
+    const nextPage = historyPage + 1
+    try {
+      const res = await api.get(`/match/history/me?page=${nextPage}&limit=20`)
+      const newMatches = res.data?.data || []
+      setMatchHistory((prev) => [...prev, ...newMatches])
+      setHistoryPage(nextPage)
+      setHasMoreHistory(Boolean(res.data?.hasMore))
+    } catch (e) {
+      console.error('Failed to load more matches:', e)
+    } finally {
+      setIsLoadingMoreHistory(false)
+    }
+  }, [historyPage, hasMoreHistory, isLoadingMoreHistory, isLoadingHistory])
+
+  useEffect(() => {
+    const target = observerTarget.current
+    if (!target) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMoreHistory && !isLoadingMoreHistory && !isLoadingHistory) {
+          loadMoreMatches()
+        }
+      },
+      { threshold: 0.1 }
+    )
+
+    observer.observe(target)
+    return () => observer.unobserve(target)
+  }, [loadMoreMatches, hasMoreHistory, isLoadingMoreHistory, isLoadingHistory])
 
   const toggleSearch = () => {
     setQueueError(null)
@@ -681,6 +721,19 @@ export default function BattlesPage() {
                 </div>
               )
             })
+          )}
+
+          {hasMoreHistory && !isLoadingHistory && (
+            <div ref={observerTarget} className="py-4 text-center text-xs text-muted-foreground font-mono flex items-center justify-center gap-2">
+              {isLoadingMoreHistory ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                  <span>Loading more matches...</span>
+                </>
+              ) : (
+                <span>Scroll down to load more matches</span>
+              )}
+            </div>
           )}
         </div>
       </div>

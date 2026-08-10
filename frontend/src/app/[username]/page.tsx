@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState, useMemo, useRef } from 'react'
+import { useEffect, useState, useMemo, useRef, Suspense } from 'react'
 import Link from 'next/link'
+import { useParams } from 'next/navigation'
 import { Header } from '@/components/header'
 import { Footer } from '@/components/footer'
 import { Button } from '@/components/ui/button'
@@ -28,11 +29,14 @@ import {
   Check,
   Edit3,
   ExternalLink,
+  Lock,
 } from 'lucide-react'
 import { useAuthStore } from '@/lib/authStore'
 import { getRatingInfo } from '@/lib/rating'
 import { api } from '@/lib/axios'
+import { socket } from '@/lib/socket'
 import { RatingChart } from '@/components/RatingChart'
+import { FriendButton } from '@/components/friends/FriendButton'
 
 import { FcGoogle } from 'react-icons/fc'
 import { FaGithub, FaXTwitter, FaLinkedin } from 'react-icons/fa6'
@@ -74,8 +78,14 @@ interface RecentMatchItem {
   }
 }
 
-export default function ProfilePage() {
+function ProfileContent() {
   const { user, setUser } = useAuthStore()
+  const params = useParams()
+  const rawUsername = params?.username as string
+
+  const [profileUser, setProfileUser] = useState<any>(null)
+  const [isSelfProfile, setIsSelfProfile] = useState<boolean>(true)
+  const [isPrivateProfile, setIsPrivateProfile] = useState<boolean>(false)
 
   // Profile Form States
   const [name, setName] = useState('')
@@ -118,30 +128,50 @@ export default function ProfilePage() {
   const [isCheckingOtp, setIsCheckingOtp] = useState(false)
   const [otpError, setOtpError] = useState('')
 
-  // Fetch complete profile on mount
+  // Fetch complete profile on mount or rawUsername change
   useEffect(() => {
     fetchProfileData()
-  }, [])
+  }, [rawUsername])
 
   const fetchProfileData = async () => {
     setIsLoadingProfile(true)
     try {
-      const res = await api.get('/user/profile/me')
-      if (res.data?.user) {
-        const u = res.data.user
-        setUser(u)
-        setName(u.name || '')
-        setUsername(u.username || '')
-        setCountry(u.country || '')
-        setWebsite(u.website || '')
-        setGithubHandle(u.githubHandle || '')
-        setTwitterHandle(u.twitterHandle || '')
-        setLinkedinHandle(u.linkedinHandle || '')
-        if (u.rank) setUserRank(u.rank)
+      const targetHandle = rawUsername || 'me'
+      const endpoint = targetHandle && targetHandle !== 'me' && targetHandle !== user?.username && targetHandle !== user?.id
+        ? `/user/profile/${encodeURIComponent(targetHandle)}`
+        : '/user/profile/me'
+      
+      const res = await api.get(endpoint)
+      
+      if (res.data?.isPrivate) {
+        setIsPrivateProfile(true)
+        setIsSelfProfile(false)
+        setProfileUser(res.data.user)
+      } else {
+        setIsPrivateProfile(false)
+        const u = res.data?.user
+        setProfileUser(u)
+
+        const selfCheck = !targetHandle || targetHandle === 'me' || targetHandle === user?.username || targetHandle === user?.id || u?.id === user?.id
+        setIsSelfProfile(selfCheck)
+
+        if (selfCheck) {
+          setUser(u)
+          setName(u.name || '')
+          setUsername(u.username || '')
+          setCountry(u.country || '')
+          setWebsite(u.website || '')
+          setGithubHandle(u.githubHandle || '')
+          setTwitterHandle(u.twitterHandle || '')
+          setLinkedinHandle(u.linkedinHandle || '')
+        }
+
+        if (u?.rank || res.data?.rank) setUserRank(u?.rank || res.data?.rank)
+
+        setRatingHistory(res.data?.ratingHistory || [])
+        setRecentMatches(res.data?.formattedRecentMatches || [])
+        setRecentSubmissions(res.data?.user?.submissions || [])
       }
-      setRatingHistory(res.data?.ratingHistory || [])
-      setRecentMatches(res.data?.formattedRecentMatches || [])
-      setRecentSubmissions(res.data?.user?.submissions || [])
     } catch (err) {
       console.error('Failed to load profile data:', err)
     } finally {
@@ -317,16 +347,17 @@ export default function ProfilePage() {
     window.location.href = `${API_URL}/auth/${provider}`
   }
 
-  // Exact real stats without fake hardcoded defaults
-  const userRating = user?.rating ?? 1200
+  // Display user object (either fetched profile user or logged-in auth user)
+  const displayUser = profileUser || user
+  const userRating = displayUser?.rating ?? 1200
   const ratingInfo = getRatingInfo(userRating)
 
-  const wins = user?.wins ?? 0
-  const losses = user?.losses ?? 0
-  const draws = user?.draws ?? 0
-  const matchesPlayed = user?.matchesPlayed ?? (wins + losses + draws)
+  const wins = displayUser?.wins ?? 0
+  const losses = displayUser?.losses ?? 0
+  const draws = displayUser?.draws ?? 0
+  const matchesPlayed = displayUser?.matchesPlayed ?? (wins + losses + draws)
   const winRate = matchesPlayed > 0 ? Math.round((wins / matchesPlayed) * 100) : 0
-  const problemsSolved = user?.problemsSolved ?? 0
+  const problemsSolved = displayUser?.problemsSolved ?? 0
 
   // Format match result reasons
   const formatMatchReason = (reason: string | null, win: boolean) => {
@@ -347,6 +378,15 @@ export default function ProfilePage() {
       default:
         return reason.replace(/_/g, ' ')
     }
+  }
+
+  // Format ordinal rank (e.g., 1st, 2nd, 3rd, 11th, 21st)
+  const formatOrdinalRank = (r: number | null | undefined) => {
+    if (!r) return '-'
+    const s = ['th', 'st', 'nd', 'rd']
+    const v = r % 100
+    const suffix = s[(v - 20) % 10] || s[v] || s[0]
+    return `${r}${suffix}`
   }
 
   // Format date as M/D/YY (e.g., 8/6/26)
@@ -376,14 +416,14 @@ export default function ProfilePage() {
             {/* Avatar & Basic Identity Side-by-Side */}
             <div className="flex flex-row items-center gap-4 sm:gap-5 w-full">
               <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full border-2 border-border bg-surface flex items-center justify-center text-foreground font-extrabold text-3xl sm:text-4xl overflow-hidden shadow-xl shrink-0">
-                {user?.avatar_url || user?.avatar ? (
+                {displayUser?.avatar_url || displayUser?.avatar ? (
                   <img
-                    src={user.avatar_url || user.avatar}
-                    alt={user.username}
+                    src={displayUser.avatar_url || displayUser.avatar}
+                    alt={displayUser.username}
                     className="w-full h-full object-cover"
                   />
                 ) : (
-                  <span>{user?.name?.charAt(0) || user?.username?.charAt(0) || 'U'}</span>
+                  <span>{displayUser?.name?.charAt(0) || displayUser?.username?.charAt(0) || 'U'}</span>
                 )}
               </div>
 
@@ -391,9 +431,9 @@ export default function ProfilePage() {
               <div className="space-y-1 text-left min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground truncate">
-                    {user?.name || user?.username || 'User'}
+                    {displayUser?.name || displayUser?.username || 'User'}
                   </h1>
-                  {user?.emailVerified && (
+                  {displayUser?.emailVerified && (
                     <span title="Verified Coder">
                       <BadgeCheck className="w-5 h-5 fill-blue-500 text-background shrink-0" />
                     </span>
@@ -401,43 +441,60 @@ export default function ProfilePage() {
                 </div>
 
                 <p className="text-sm font-mono text-muted-foreground truncate">
-                  @{user?.username || 'username'}
+                  @{displayUser?.username || 'username'}
                 </p>
                 <p className="text-sm font-semibold text-foreground/90 pt-0.5">
-                  Rank {userRank ? `#${userRank}` : user?.rank ? `#${user.rank}` : '-'}
+                  Rank {formatOrdinalRank(userRank || displayUser?.rank)}
                 </p>
               </div>
             </div>
 
-            {/* Edit Profile Button */}
-            <Link
-              href="/settings/profile"
-              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 px-6 rounded-xl shadow-md transition-all cursor-pointer text-sm font-sans tracking-wide text-center block"
-            >
-              Edit Profile
-            </Link>
+            {/* Action Buttons: Edit Profile for self, Friend/Challenge for others */}
+            {isSelfProfile ? (
+              <Link
+                href="/settings/profile"
+                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 px-6 rounded-xl shadow-md transition-all cursor-pointer text-sm font-sans tracking-wide text-center block"
+              >
+                Edit Profile
+              </Link>
+            ) : displayUser?.id ? (
+              <div className="flex items-center gap-2.5 w-full">
+                <FriendButton
+                  targetUserId={displayUser.id}
+                  targetUsername={displayUser.username}
+                  className="flex-1 h-10 text-xs font-bold rounded-xl"
+                />
+                <Button
+                  onClick={() => socket.emit('friend:challenge_send', { targetUserId: displayUser.id })}
+                  className="flex-1 h-10 text-xs font-bold rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground gap-1.5 shadow-md btn-interactive"
+                >
+                  <Swords className="w-4 h-4" />
+                  <span>Challenge</span>
+                </Button>
+              </div>
+            ) : null}
 
             {/* Profile Info Details List */}
             <div className="w-full space-y-3 text-sm font-sans text-foreground/90 pt-1 text-left">
               {/* 1. Location Pin: Country */}
               <div className="flex items-center gap-2.5">
                 <MapPin className="w-4 h-4 text-muted-foreground shrink-0" />
-                <span className={user?.country ? 'text-foreground' : 'text-muted-foreground italic text-xs'}>
-                  {user?.country || 'No location set'}
+                <span className={displayUser?.country ? 'text-foreground' : 'text-muted-foreground italic text-xs'}>
+                  {displayUser?.country || 'No location set'}
                 </span>
               </div>
 
               {/* 2. Website Globe: Website */}
               <div className="flex items-center gap-2.5 font-mono text-accent">
                 <Globe className="w-4 h-4 text-muted-foreground shrink-0" />
-                {user?.website ? (
+                {displayUser?.website ? (
                   <a
-                    href={user.website.startsWith('http') ? user.website : `https://${user.website}`}
+                    href={displayUser.website.startsWith('http') ? displayUser.website : `https://${displayUser.website}`}
                     target="_blank"
                     rel="noreferrer"
                     className="hover:underline hover:text-accent/90 truncate"
                   >
-                    {user.website.replace(/^https?:\/\//, '')}
+                    {displayUser.website.replace(/^https?:\/\//, '')}
                   </a>
                 ) : (
                   <span className="text-muted-foreground italic text-xs font-sans">No website set</span>
@@ -447,14 +504,14 @@ export default function ProfilePage() {
               {/* 3. GitHub */}
               <div className="flex items-center gap-2.5 font-mono text-foreground/90">
                 <FaGithub className="w-4 h-4 text-muted-foreground shrink-0" />
-                {user?.githubHandle ? (
+                {displayUser?.githubHandle ? (
                   <a
-                    href={`https://github.com/${user.githubHandle}`}
+                    href={`https://github.com/${displayUser.githubHandle}`}
                     target="_blank"
                     rel="noreferrer"
                     className="hover:underline hover:text-accent truncate"
                   >
-                    {user.githubHandle}
+                    {displayUser.githubHandle}
                   </a>
                 ) : (
                   <span className="text-muted-foreground italic text-xs font-sans">No GitHub handle</span>
@@ -464,14 +521,14 @@ export default function ProfilePage() {
               {/* 4. Twitter / X */}
               <div className="flex items-center gap-2.5 font-mono text-foreground/90">
                 <FaXTwitter className="w-4 h-4 text-muted-foreground shrink-0" />
-                {user?.twitterHandle ? (
+                {displayUser?.twitterHandle ? (
                   <a
-                    href={`https://x.com/${user.twitterHandle}`}
+                    href={`https://x.com/${displayUser.twitterHandle}`}
                     target="_blank"
                     rel="noreferrer"
                     className="hover:underline hover:text-accent truncate"
                   >
-                    {user.twitterHandle}
+                    {displayUser.twitterHandle}
                   </a>
                 ) : (
                   <span className="text-muted-foreground italic text-xs font-sans">No Twitter handle</span>
@@ -481,14 +538,14 @@ export default function ProfilePage() {
               {/* 5. LinkedIn */}
               <div className="flex items-center gap-2.5 font-mono text-foreground/90">
                 <FaLinkedin className="w-4 h-4 text-muted-foreground shrink-0" />
-                {user?.linkedinHandle ? (
+                {displayUser?.linkedinHandle ? (
                   <a
-                    href={`https://linkedin.com/in/${user.linkedinHandle}`}
+                    href={`https://linkedin.com/in/${displayUser.linkedinHandle}`}
                     target="_blank"
                     rel="noreferrer"
                     className="hover:underline hover:text-accent truncate"
                   >
-                    {user.linkedinHandle}
+                    {displayUser.linkedinHandle}
                   </a>
                 ) : (
                   <span className="text-muted-foreground italic text-xs font-sans">No LinkedIn handle</span>
@@ -497,8 +554,21 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          {/* ─── RIGHT MAIN COLUMN: STAT CARDS, CHART & TABS ─── */}
-          <div className="lg:col-span-8 space-y-6">
+          {/* ─── RIGHT MAIN COLUMN: STAT CARDS, CHART & TABS OR PRIVATE CARD ─── */}
+          {isPrivateProfile ? (
+            <div className="lg:col-span-8 p-8 sm:p-12 rounded-2xl bg-card border border-border text-center space-y-4 my-auto">
+              <div className="w-16 h-16 rounded-full bg-surface border border-border flex items-center justify-center mx-auto text-primary">
+                <Lock className="w-8 h-8" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-xl font-extrabold text-foreground">This Profile is Private</h3>
+                <p className="text-xs sm:text-sm text-muted-foreground font-mono max-w-md mx-auto leading-relaxed">
+                  @{displayUser?.username || 'user'} has disabled public profile visibility in their privacy settings.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="lg:col-span-8 space-y-6">
 
             {/* 4 Stat Cards Row */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -666,6 +736,7 @@ export default function ProfilePage() {
             </div>
 
           </div>
+          )}
 
         </div>
       </main>
@@ -742,7 +813,7 @@ export default function ProfilePage() {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-medium text-foreground">Country / Region</label>
+                <label className="text-xs font-medium text-foreground">Country / Location</label>
                 <Input
                   type="text"
                   value={country}
@@ -752,48 +823,48 @@ export default function ProfilePage() {
                 />
               </div>
 
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-foreground">Website URL</label>
-                <Input
-                  type="text"
-                  value={website}
-                  onChange={(e) => setWebsite(e.target.value)}
-                  placeholder="e.g. amarpandey.in"
-                  className="bg-surface border-border text-foreground font-mono"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-foreground">GitHub Handle</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Website</label>
+                  <Input
+                    type="text"
+                    value={website}
+                    onChange={(e) => setWebsite(e.target.value)}
+                    placeholder="https://example.com"
+                    className="bg-surface border-border text-foreground font-mono text-xs"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">GitHub Handle</label>
                   <Input
                     type="text"
                     value={githubHandle}
                     onChange={(e) => setGithubHandle(e.target.value)}
-                    placeholder="e.g. mayur420"
-                    className="bg-surface border-border text-foreground font-mono"
+                    placeholder="e.g. octocat"
+                    className="bg-surface border-border text-foreground font-mono text-xs"
                   />
                 </div>
+              </div>
 
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-foreground">Twitter Handle</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Twitter / X Handle</label>
                   <Input
                     type="text"
                     value={twitterHandle}
                     onChange={(e) => setTwitterHandle(e.target.value)}
-                    placeholder="e.g. amarpandey2502"
-                    className="bg-surface border-border text-foreground font-mono"
+                    placeholder="e.g. amar"
+                    className="bg-surface border-border text-foreground font-mono text-xs"
                   />
                 </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-foreground">LinkedIn Handle</label>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">LinkedIn Handle</label>
                   <Input
                     type="text"
                     value={linkedinHandle}
                     onChange={(e) => setLinkedinHandle(e.target.value)}
                     placeholder="e.g. amar"
-                    className="bg-surface border-border text-foreground font-mono"
+                    className="bg-surface border-border text-foreground font-mono text-xs"
                   />
                 </div>
               </div>
@@ -809,13 +880,17 @@ export default function ProfilePage() {
                   ) : (
                     <Button
                       size="sm"
-                      variant="outline"
                       type="button"
+                      variant="outline"
                       onClick={() => handleLinkOAuth('google')}
                       disabled={linkingProvider === 'google'}
-                      className="border-border bg-surface hover:bg-surface-2 text-foreground text-xs gap-1.5"
+                      className="text-xs gap-1.5 rounded-xl border-border hover:bg-surface"
                     >
-                      {linkingProvider === 'google' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FcGoogle className="w-4 h-4" />}
+                      {linkingProvider === 'google' ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <FcGoogle className="w-4 h-4" />
+                      )}
                       <span>Link Google</span>
                     </Button>
                   )}
@@ -827,32 +902,36 @@ export default function ProfilePage() {
                   ) : (
                     <Button
                       size="sm"
-                      variant="outline"
                       type="button"
+                      variant="outline"
                       onClick={() => handleLinkOAuth('github')}
                       disabled={linkingProvider === 'github'}
-                      className="border-border bg-surface hover:bg-surface-2 text-foreground text-xs gap-1.5"
+                      className="text-xs gap-1.5 rounded-xl border-border hover:bg-surface"
                     >
-                      {linkingProvider === 'github' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FaGithub className="w-4 h-4" />}
+                      {linkingProvider === 'github' ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <FaGithub className="w-4 h-4" />
+                      )}
                       <span>Link GitHub</span>
                     </Button>
                   )}
                 </div>
               </div>
 
-              <div className="pt-4 flex justify-end gap-2">
+              <div className="pt-4 border-t border-border flex items-center justify-end gap-3">
                 <Button
                   type="button"
                   variant="outline"
                   onClick={() => setIsEditModalOpen(false)}
-                  className="border-border text-muted-foreground hover:bg-surface-2"
+                  className="border-border text-xs rounded-xl"
                 >
                   Cancel
                 </Button>
                 <Button
                   type="submit"
                   disabled={isSaving || isUsernameAvailable === false}
-                  className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold gap-2 px-6"
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl gap-2 shadow-md"
                 >
                   {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                   <span>Save Changes</span>
@@ -866,94 +945,104 @@ export default function ProfilePage() {
       {/* ─── EMAIL VERIFICATION OTP MODAL ─── */}
       {isOtpModalOpen && (
         <div className="fixed inset-0 bg-background/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="rounded-2xl bg-card border border-border p-6 max-w-md w-full shadow-2xl relative space-y-4">
+          <div className="bg-card border border-border rounded-2xl p-6 max-w-md w-full shadow-2xl relative space-y-4 animate-in fade-in zoom-in-95">
             <button
               onClick={() => {
                 setIsOtpModalOpen(false)
                 setOtp('')
                 setOtpError('')
               }}
-              className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors"
+              className="absolute top-4 right-4 text-muted-foreground hover:text-foreground"
             >
               <X className="w-5 h-5" />
             </button>
 
-            <div className="flex flex-col items-center text-center space-y-3">
-              <div className="w-12 h-12 rounded-xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-blue-400">
+            <div className="text-center space-y-1.5">
+              <div className="w-12 h-12 rounded-full bg-blue-500/10 border border-blue-500/30 flex items-center justify-center mx-auto text-blue-400">
                 <Mail className="w-6 h-6" />
               </div>
-
-              <div>
-                <h3 className="text-xl font-bold tracking-tight text-foreground">Verify Your Email</h3>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Enter 6-digit code sent to <span className="font-mono text-foreground font-semibold">{user?.email}</span>
-                </p>
-              </div>
-
-              <form onSubmit={handleVerifyOtpSubmit} className="w-full space-y-4 pt-2">
-                <Input
-                  type="text"
-                  maxLength={6}
-                  value={otp}
-                  onChange={(e) => {
-                    const value = e.target.value.replace(/\D/g, '').slice(0, 6)
-                    setOtp(value)
-                    if (otpError) setOtpError('')
-                  }}
-                  placeholder="000000"
-                  className="bg-surface border-border text-center font-mono text-2xl tracking-[0.5em] h-12 text-foreground font-bold"
-                  autoFocus
-                />
-
-                {otpError && (
-                  <p className="text-xs text-rose-400 flex items-center justify-center gap-1 font-medium">
-                    <AlertCircle className="w-3.5 h-3.5" /> {otpError}
-                  </p>
-                )}
-
-                <div className="space-y-2 pt-2">
-                  <Button
-                    type="submit"
-                    disabled={isCheckingOtp || otp.length < 6}
-                    className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold gap-2 shadow-md h-11"
-                  >
-                    {isCheckingOtp ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <BadgeCheck className="w-4 h-4 fill-white text-blue-600" />
-                    )}
-                    <span>Verify Code</span>
-                  </Button>
-
-                  <div className="flex items-center justify-between text-xs pt-1">
-                    <button
-                      type="button"
-                      onClick={handleResendOtp}
-                      disabled={isSendingOtp}
-                      className="text-accent hover:underline font-medium disabled:opacity-50"
-                    >
-                      {isSendingOtp ? 'Sending...' : "Didn't receive code? Resend"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsOtpModalOpen(false)
-                        setOtp('')
-                        setOtpError('')
-                      }}
-                      className="text-muted-foreground hover:text-foreground"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              </form>
+              <h3 className="text-lg font-bold text-foreground">Verify Your Email</h3>
+              <p className="text-xs text-muted-foreground">
+                We sent a 6-digit verification code to <span className="font-mono text-foreground">{user?.email}</span>.
+              </p>
             </div>
+
+            <form onSubmit={handleVerifyOtpSubmit} className="space-y-4">
+              <Input
+                type="text"
+                maxLength={6}
+                value={otp}
+                onChange={(e) => {
+                  setOtp(e.target.value.replace(/\D/g, ''))
+                  setOtpError('')
+                }}
+                placeholder="000000"
+                className="bg-surface border-border text-center font-mono text-2xl tracking-[0.5em] h-12 text-foreground font-bold"
+                autoFocus
+              />
+
+              {otpError && (
+                <p className="text-xs text-rose-400 flex items-center justify-center gap-1 font-medium">
+                  <AlertCircle className="w-3.5 h-3.5" /> {otpError}
+                </p>
+              )}
+
+              <div className="space-y-2 pt-2">
+                <Button
+                  type="submit"
+                  disabled={isCheckingOtp || otp.length < 6}
+                  className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold gap-2 shadow-md h-11"
+                >
+                  {isCheckingOtp ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <BadgeCheck className="w-4 h-4 fill-white text-blue-600" />
+                  )}
+                  <span>Verify Code</span>
+                </Button>
+
+                <div className="flex items-center justify-between text-xs pt-1">
+                  <button
+                    type="button"
+                    onClick={handleResendOtp}
+                    disabled={isSendingOtp}
+                    className="text-accent hover:underline font-medium disabled:opacity-50"
+                  >
+                    {isSendingOtp ? 'Sending...' : "Didn't receive code? Resend"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsOtpModalOpen(false)
+                      setOtp('')
+                      setOtpError('')
+                    }}
+                    className="text-muted-foreground hover:text-foreground"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </form>
           </div>
         </div>
       )}
 
       <Footer />
     </div>
+  )
+}
+
+export default function ProfilePage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-background flex flex-col items-center justify-center">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      }
+    >
+      <ProfileContent />
+    </Suspense>
   )
 }

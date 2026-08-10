@@ -55,7 +55,7 @@ export const syncGlobalLeaderboard = async () => {
 /**
  * Fetches the Global Leaderboard from Redis ZSET
  */
-export const getGlobalLeaderboard = async (currentUserId?: string, limit: number = 50) => {
+export const getGlobalLeaderboard = async (currentUserId?: string, page: number = 1, limit: number = 20) => {
   try {
     let card = await redis.zcard(GLOBAL_LEADERBOARD_KEY);
 
@@ -65,8 +65,11 @@ export const getGlobalLeaderboard = async (currentUserId?: string, limit: number
       card = await redis.zcard(GLOBAL_LEADERBOARD_KEY);
     }
 
-    // Fetch top user IDs with scores in descending order (highest rating first)
-    const rawList = await redis.zrevrange(GLOBAL_LEADERBOARD_KEY, 0, limit - 1, "WITHSCORES");
+    const start = (page - 1) * limit;
+    const end = start + limit - 1;
+
+    // Fetch user IDs with scores in descending order for current page
+    const rawList = await redis.zrevrange(GLOBAL_LEADERBOARD_KEY, start, end, "WITHSCORES");
 
     const userIds: string[] = [];
     const ratingMap = new Map<string, number>();
@@ -78,8 +81,19 @@ export const getGlobalLeaderboard = async (currentUserId?: string, limit: number
       ratingMap.set(uId, score);
     }
 
+    const totalPlayersCount = await db.user.count({
+      where: { appearOnLeaderboard: true },
+    });
+
     if (userIds.length === 0) {
-      return { leaderboard: [], currentUserRank: null };
+      return {
+        leaderboard: [],
+        currentUserRank: null,
+        totalPlayers: totalPlayersCount,
+        hasMore: false,
+        page,
+        limit,
+      };
     }
 
     // Fetch rich user profiles from DB preserving rank order, filtering appearOnLeaderboard
@@ -119,7 +133,7 @@ export const getGlobalLeaderboard = async (currentUserId?: string, limit: number
         const u = userMap.get(id);
         if (!u) return null;
         return {
-          rank: index + 1,
+          rank: start + index + 1,
           ...u,
           rating: ratingMap.get(id) ?? u.rating,
           isOnline: isUserConnected(id),
@@ -132,12 +146,18 @@ export const getGlobalLeaderboard = async (currentUserId?: string, limit: number
     if (currentUserId) {
       const currentUser = await db.user.findUnique({
         where: { id: currentUserId },
-        select: { appearOnLeaderboard: true },
+        select: { appearOnLeaderboard: true, rating: true },
       });
 
       if (currentUser?.appearOnLeaderboard) {
-        const revRank = await redis.zrevrank(GLOBAL_LEADERBOARD_KEY, currentUserId);
-        const score = await redis.zscore(GLOBAL_LEADERBOARD_KEY, currentUserId);
+        let revRank = await redis.zrevrank(GLOBAL_LEADERBOARD_KEY, currentUserId);
+        let score = await redis.zscore(GLOBAL_LEADERBOARD_KEY, currentUserId);
+
+        if (revRank === null || score === null) {
+          await redis.zadd(GLOBAL_LEADERBOARD_KEY, currentUser.rating, currentUserId);
+          revRank = await redis.zrevrank(GLOBAL_LEADERBOARD_KEY, currentUserId);
+          score = await redis.zscore(GLOBAL_LEADERBOARD_KEY, currentUserId);
+        }
 
         if (revRank !== null && score !== null) {
           currentUserRankInfo = {
@@ -148,14 +168,13 @@ export const getGlobalLeaderboard = async (currentUserId?: string, limit: number
       }
     }
 
-    const totalPlayersCount = await db.user.count({
-      where: { appearOnLeaderboard: true },
-    });
-
     return {
       leaderboard,
       currentUserRank: currentUserRankInfo,
       totalPlayers: totalPlayersCount,
+      hasMore: start + userIds.length < totalPlayersCount,
+      page,
+      limit,
     };
   } catch (error) {
     console.error("Error getting global leaderboard:", error);
@@ -166,7 +185,7 @@ export const getGlobalLeaderboard = async (currentUserId?: string, limit: number
 /**
  * Fetches Friends Leaderboard using Redis ratings + PostgreSQL Friendships
  */
-export const getFriendsLeaderboard = async (currentUserId: string) => {
+export const getFriendsLeaderboard = async (currentUserId: string, page: number = 1, limit: number = 20) => {
   try {
     // 1. Fetch user's accepted friendships
     const friendships = await db.friendship.findMany({
@@ -227,7 +246,7 @@ export const getFriendsLeaderboard = async (currentUserId: string) => {
     );
 
     // 5. Merge Redis rating and sort descending
-    const leaderboard = users
+    const fullLeaderboard = users
       .map((u) => ({
         ...u,
         rating: redisRatingMap.get(u.id) ?? u.rating,
@@ -240,12 +259,18 @@ export const getFriendsLeaderboard = async (currentUserId: string) => {
         ...user,
       }));
 
-    const currentUserRankItem = leaderboard.find((u) => u.isCurrentUser);
+    const currentUserRankItem = fullLeaderboard.find((u) => u.isCurrentUser);
+
+    const start = (page - 1) * limit;
+    const pagedLeaderboard = fullLeaderboard.slice(start, start + limit);
 
     return {
-      leaderboard,
+      leaderboard: pagedLeaderboard,
       currentUserRank: currentUserRankItem ? currentUserRankItem.rank : null,
-      totalFriends: leaderboard.length - 1,
+      totalFriends: fullLeaderboard.length - 1,
+      hasMore: start + pagedLeaderboard.length < fullLeaderboard.length,
+      page,
+      limit,
     };
   } catch (error) {
     console.error("Error getting friends leaderboard:", error);

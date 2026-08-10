@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -105,22 +105,28 @@ export default function DashboardPage() {
     return () => clearInterval(timer)
   }, [])
 
-  // Window scroll listener for infinite loading when user reaches bottom
-  useEffect(() => {
-    const handleScroll = () => {
-      if (isLoadingMore || !hasMore || isLoading || searchQuery.trim() || selectedTopic) return
-      
-      const scrollHeight = document.documentElement.scrollHeight
-      const currentScroll = window.innerHeight + window.scrollY
-      
-      if (currentScroll >= scrollHeight - 300) {
-        fetchMoreProblems()
-      }
-    }
+  const observerTargetRef = useRef<HTMLDivElement>(null)
 
-    window.addEventListener('scroll', handleScroll)
-    return () => window.removeEventListener('scroll', handleScroll)
-  }, [page, hasMore, isLoadingMore, isLoading, searchQuery, selectedTopic, problems])
+  // IntersectionObserver for automatic infinite loading when user scrolls to bottom
+  useEffect(() => {
+    if (!observerTargetRef.current || !hasMore || isLoadingMore || isLoading || searchQuery.trim() || selectedTopic) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !isLoadingMore) {
+          fetchMoreProblems()
+        }
+      },
+      { threshold: 0.1, rootMargin: '200px' }
+    )
+
+    const currentTarget = observerTargetRef.current
+    observer.observe(currentTarget)
+
+    return () => {
+      if (currentTarget) observer.unobserve(currentTarget)
+    }
+  }, [page, hasMore, isLoadingMore, isLoading, searchQuery, selectedTopic])
 
   const fetchDashboardData = async () => {
     setIsLoading(true)
@@ -188,6 +194,7 @@ export default function DashboardPage() {
       const nextPage = page + 1
       const res = await api.get(`/problem/get/get-all/${nextPage}/50`)
       const newFetched = res.data?.problems || []
+      const totalCount = res.data?.totalCount
       
       if (newFetched.length === 0) {
         setHasMore(false)
@@ -195,12 +202,13 @@ export default function DashboardPage() {
         setProblems(prev => {
           const existingSlugs = new Set(prev.map(p => p.slug))
           const uniqueNew = newFetched.filter((p: ProblemItem) => !existingSlugs.has(p.slug))
-          return [...prev, ...uniqueNew]
+          const updated = [...prev, ...uniqueNew]
+          if (newFetched.length < 50 || (totalCount && updated.length >= totalCount)) {
+            setHasMore(false)
+          }
+          return updated
         })
         setPage(nextPage)
-        if (newFetched.length < 50 || (res.data?.totalCount && problems.length + newFetched.length >= res.data.totalCount)) {
-          setHasMore(false)
-        }
       }
     } catch (err) {
       console.error('Failed to fetch next problems:', err)
@@ -496,24 +504,16 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* Infinite Loading Indicator */}
-        {isLoadingMore && (
-          <div className="flex items-center justify-center py-6 gap-2 text-xs font-mono text-muted-foreground animate-pulse">
-            <Loader2 className="w-4 h-4 animate-spin text-accent" />
-            <span>Loading next 50 problems...</span>
-          </div>
-        )}
-
-        {!isLoadingMore && hasMore && !searchQuery && !selectedTopic && problems.length >= 50 && (
-          <div className="text-center pt-3">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={fetchMoreProblems}
-              className="text-xs font-mono text-muted-foreground hover:text-foreground"
-            >
-              Load next 50 problems...
-            </Button>
+        {/* Infinite Loading Indicator & Observer Sentinel */}
+        {hasMore && !searchQuery && !selectedTopic && (
+          <div
+            ref={observerTargetRef}
+            className="flex flex-col items-center justify-center py-8 gap-2.5 text-xs font-mono text-muted-foreground select-none"
+          >
+            <div className="flex items-center gap-2.5 px-4 py-2 rounded-full bg-card border border-border/60 shadow-xs animate-pulse">
+              <Loader2 className="w-4 h-4 animate-spin text-primary" />
+              <span className="text-muted-foreground font-medium text-xs">Loading next 50 problems...</span>
+            </div>
           </div>
         )}
       </div>

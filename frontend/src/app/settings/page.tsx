@@ -648,7 +648,7 @@ export default function SettingsPage() {
                       />
                     </div>
 
-                    {/* Item 3: Match & Tournament Updates */}
+                    {/* Item 3: Match & Tournament Updates
                     <div className="p-4 sm:p-5 flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <Trophy className="w-4 h-4 text-amber-400 shrink-0" />
@@ -658,7 +658,7 @@ export default function SettingsPage() {
                         checked={notifySiteMatchTournament}
                         onCheckedChange={(val) => handleToggleNotifyField('notifySiteMatchTournament', val)}
                       />
-                    </div>
+                    </div> */}
                   </div>
                 </div>
 

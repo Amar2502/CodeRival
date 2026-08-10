@@ -91,15 +91,9 @@ export function RightSidebar() {
 
   // SVG Chart points generator
   const chartPoints = useMemo(() => {
-    let data: RatingPoint[] = [...ratingHistory]
+    let data: RatingPoint[] = ratingHistory.slice(-6)
 
     if (data.length === 1 && data[0].matchId && data[0].delta !== undefined) {
-      const startingRating = data[0].rating - data[0].delta
-      data = [
-        { id: 'initial', rating: startingRating, createdAt: data[0].createdAt, delta: 0 },
-        ...data,
-      ]
-    } else if (data.length > 0 && data[0].matchId && data[0].delta !== undefined) {
       const startingRating = data[0].rating - data[0].delta
       data = [
         { id: 'initial', rating: startingRating, createdAt: data[0].createdAt, delta: 0 },
@@ -121,10 +115,23 @@ export function RightSidebar() {
     const width = 240
     const height = 110
 
+    const startIndex = Math.max(0, ratingHistory.length - data.length)
+
     const pts = data.map((d, idx) => {
       const x = (idx / (data.length - 1)) * width
       const y = height - ((d.rating - yMin) / range) * (height - 20) - 10
-      return { x, y, rating: d.rating }
+
+      const globalIdx = startIndex + idx
+      const isInitial = d.id === 'initial' || !d.matchId
+      const hasInitialPrefix = ratingHistory[0]?.id === 'initial' || ratingHistory[0]?.matchId === null
+
+      let label = 'Start'
+      if (!isInitial) {
+        const matchNum = hasInitialPrefix ? globalIdx : globalIdx + 1
+        label = `M${matchNum}`
+      }
+
+      return { x, y, rating: d.rating, label }
     })
 
     let path = `M ${pts[0].x} ${pts[0].y}`
@@ -202,7 +209,7 @@ export function RightSidebar() {
                     key={friendshipId}
                     className="flex items-center justify-between gap-3 p-2.5 rounded-xl bg-surface/50 border border-border/50 hover:border-border transition-colors"
                   >
-                    <div className="flex items-center gap-2.5 min-w-0">
+                    <Link href={`/${friendUser.username}`} className="flex items-center gap-2.5 min-w-0 group hover:opacity-80 transition-opacity">
                       <div className="relative shrink-0">
                         <UserAvatar
                           src={friendUser.avatar_url || friendUser.avatar}
@@ -216,10 +223,10 @@ export function RightSidebar() {
                           }`}
                         />
                       </div>
-                      <span className="text-xs font-bold text-foreground truncate">
+                      <span className="text-xs font-bold text-foreground truncate group-hover:underline">
                         {friendUser.name || friendUser.username}
                       </span>
-                    </div>
+                    </Link>
 
                     <Button
                       size="sm"
@@ -337,9 +344,9 @@ export function RightSidebar() {
               </svg>
 
               <div className="absolute bottom-0 left-3 right-3 flex justify-between text-[10px] font-mono text-muted-foreground select-none">
-                {chartPoints.pts.map((_, idx) => (
+                {chartPoints.pts.map((pt, idx) => (
                   <span key={idx}>
-                    {idx === 0 ? 'Start' : idx === chartPoints.pts.length - 1 ? 'Now' : `M${idx}`}
+                    {pt.label}
                   </span>
                 ))}
               </div>

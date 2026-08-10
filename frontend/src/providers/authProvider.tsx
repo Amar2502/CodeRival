@@ -13,7 +13,6 @@ const PROTECTED_ROUTES = [
   "/battles",
   "/problems",
   "/leaderboard",
-  "/profile",
   "/friends",
   "/tournaments",
 ];

@@ -25,6 +25,8 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 
+import { saveCode } from '@/lib/indexedDB'
+
 export interface NormalMonacoEditorProps {
   language: 'CPP' | 'JAVA' | 'PYTHON' | string
   onLanguageChange?: (lang: 'CPP' | 'JAVA' | 'PYTHON') => void
@@ -62,7 +64,7 @@ export function NormalMonacoEditor({
     return 'javascript'
   }
 
-  // Handle LocalStorage Auto-save & status indicator
+  // Handle IndexedDB Auto-save & status indicator
   useEffect(() => {
     if (!storageKey || !value) return
     setSaveStatus('saving')
@@ -71,14 +73,14 @@ export function NormalMonacoEditor({
       clearTimeout(saveTimeoutRef.current)
     }
 
-    saveTimeoutRef.current = setTimeout(() => {
+    saveTimeoutRef.current = setTimeout(async () => {
       try {
-        localStorage.setItem(storageKey, value)
+        await saveCode(storageKey, value)
         setSaveStatus('saved')
       } catch (err) {
         console.error('Auto-save error:', err)
       }
-    }, 400)
+    }, 750)
 
     return () => {
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current)

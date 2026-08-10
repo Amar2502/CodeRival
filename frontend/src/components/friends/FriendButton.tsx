@@ -98,7 +98,7 @@ export function FriendButton({
 
   if (status === "ACCEPTED") {
     return (
-      <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold ${className}`}>
+      <div className={`inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold ${className}`}>
         <UserCheck className="w-3.5 h-3.5" />
         <span>Friends</span>
       </div>
