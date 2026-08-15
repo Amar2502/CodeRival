@@ -244,68 +244,106 @@ export default function ProblemWorkspacePage({ params }: { params: Promise<{ slu
   const [drawerHasMore, setDrawerHasMore] = useState(true)
   const [isDrawerLoadingMore, setIsDrawerLoadingMore] = useState(false)
   const drawerObserverRef = useRef<HTMLDivElement>(null)
+  const drawerScrollRef = useRef<HTMLDivElement>(null)
 
-  const fetchDrawerProblems = async () => {
+  // Refs to avoid stale closures in IntersectionObserver callback
+  const drawerPageRef = useRef(1)
+  const drawerHasMoreRef = useRef(true)
+  const drawerLoadingMoreRef = useRef(false)
+
+  const fetchDrawerProblems = useCallback(async () => {
     setIsDrawerLoading(true)
     setDrawerPage(1)
+    drawerPageRef.current = 1
     setDrawerHasMore(true)
+    drawerHasMoreRef.current = true
     try {
       const res = await api.get('/problem/get/get-all/1/50')
       const fetched = res.data?.problems || []
+      const totalCount = res.data?.totalCount
       setDrawerProblems(fetched)
-      if (res.data?.totalCount && fetched.length >= res.data.totalCount) {
+      if (fetched.length === 0 || fetched.length < 50 || (totalCount && fetched.length >= totalCount)) {
         setDrawerHasMore(false)
-      } else if (fetched.length < 50) {
-        setDrawerHasMore(false)
+        drawerHasMoreRef.current = false
       }
     } catch (err) {
       console.error('Failed to fetch drawer problems:', err)
     } finally {
       setIsDrawerLoading(false)
     }
-  }
+  }, [])
 
-  const fetchMoreDrawerProblems = async () => {
-    if (isDrawerLoadingMore || !drawerHasMore) return
+  const fetchMoreDrawerProblems = useCallback(async () => {
+    if (drawerLoadingMoreRef.current || !drawerHasMoreRef.current) return []
+    drawerLoadingMoreRef.current = true
     setIsDrawerLoadingMore(true)
     try {
-      const nextPage = drawerPage + 1
+      const nextPage = drawerPageRef.current + 1
       const res = await api.get(`/problem/get/get-all/${nextPage}/50`)
       const newFetched = res.data?.problems || []
       const totalCount = res.data?.totalCount
 
       if (newFetched.length === 0) {
         setDrawerHasMore(false)
+        drawerHasMoreRef.current = false
       } else {
         setDrawerProblems((prev) => {
           const existingSlugs = new Set(prev.map((p) => p.slug))
-          const uniqueNew = newFetched.filter((p: { slug: string; problemNumber: number; title: string; difficulty: string }) => !existingSlugs.has(p.slug))
+          const uniqueNew = newFetched.filter(
+            (p: { slug: string; problemNumber: number; title: string; difficulty: string }) => !existingSlugs.has(p.slug)
+          )
           const updated = [...prev, ...uniqueNew]
           if (newFetched.length < 50 || (totalCount && updated.length >= totalCount)) {
             setDrawerHasMore(false)
+            drawerHasMoreRef.current = false
           }
           return updated
         })
         setDrawerPage(nextPage)
+        drawerPageRef.current = nextPage
       }
+      return newFetched
     } catch (err) {
       console.error('Failed to fetch more drawer problems:', err)
+      return []
     } finally {
       setIsDrawerLoadingMore(false)
+      drawerLoadingMoreRef.current = false
+    }
+  }, [])
+
+  const handleDrawerScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    if (drawerLoadingMoreRef.current || !drawerHasMoreRef.current || drawerSearch.trim()) return
+    const { scrollTop, clientHeight, scrollHeight } = e.currentTarget
+    if (scrollTop + clientHeight >= scrollHeight - 250) {
+      fetchMoreDrawerProblems()
     }
   }
 
   // IntersectionObserver for drawer infinite scrolling
   useEffect(() => {
-    if (!drawerObserverRef.current || !drawerHasMore || isDrawerLoadingMore || isDrawerLoading || drawerSearch.trim()) return
+    if (
+      !isDrawerOpen ||
+      !drawerObserverRef.current ||
+      !drawerHasMore ||
+      isDrawerLoadingMore ||
+      isDrawerLoading ||
+      drawerSearch.trim()
+    ) {
+      return
+    }
 
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting && drawerHasMore && !isDrawerLoadingMore) {
+        if (entries[0].isIntersecting && drawerHasMoreRef.current && !drawerLoadingMoreRef.current) {
           fetchMoreDrawerProblems()
         }
       },
-      { threshold: 0.1, rootMargin: '150px' }
+      {
+        root: drawerScrollRef.current || null,
+        threshold: 0.01,
+        rootMargin: '200px',
+      }
     )
 
     const currentTarget = drawerObserverRef.current
@@ -314,7 +352,7 @@ export default function ProblemWorkspacePage({ params }: { params: Promise<{ slu
     return () => {
       if (currentTarget) observer.unobserve(currentTarget)
     }
-  }, [drawerPage, drawerHasMore, isDrawerLoadingMore, isDrawerLoading, drawerSearch])
+  }, [isDrawerOpen, drawerPage, drawerHasMore, isDrawerLoadingMore, isDrawerLoading, drawerSearch, fetchMoreDrawerProblems])
 
   const filteredDrawerProblems = drawerProblems.filter((p) => {
     const query = drawerSearch.toLowerCase()
@@ -362,10 +400,12 @@ export default function ProblemWorkspacePage({ params }: { params: Promise<{ slu
       router.push(`/problems/${drawerProblems[currentIdx + 1].slug}`)
     } else if (currentIdx === drawerProblems.length - 1) {
       if (drawerHasMore) {
-        await fetchMoreDrawerProblems()
-        router.push(
-          `/problems/${drawerProblems[currentIdx + 1]?.slug || drawerProblems[0].slug}`
-        )
+        const newFetched = await fetchMoreDrawerProblems()
+        if (newFetched && newFetched.length > 0) {
+          router.push(`/problems/${newFetched[0].slug}`)
+        } else {
+          router.push(`/problems/${drawerProblems[0].slug}`)
+        }
       } else {
         router.push(`/problems/${drawerProblems[0].slug}`)
       }
@@ -935,7 +975,7 @@ export default function ProblemWorkspacePage({ params }: { params: Promise<{ slu
                 </DrawerHeader>
 
                 {/* Scrollable Problem List */}
-                <div className="flex-1 overflow-y-auto p-3 space-y-1">
+                <div ref={drawerScrollRef} onScroll={handleDrawerScroll} className="flex-1 overflow-y-auto p-3 space-y-1">
                   {isDrawerLoading ? (
                     <div className="flex items-center justify-center py-12 gap-2 text-xs text-muted-foreground font-mono">
                       <Loader2 className="w-4 h-4 animate-spin text-primary" />

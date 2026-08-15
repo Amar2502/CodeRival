@@ -325,7 +325,7 @@ export const handleOAuthSuccess = async (req: Request, res: Response) => {
       maxAge: 30 * 24 * 60 * 60 * 1000,
     });
 
-    let redirectPath = "/profile";
+    let redirectPath = "/dashboard";
     if (req.query.state) {
       try {
         const stateObj = JSON.parse(req.query.state as string);

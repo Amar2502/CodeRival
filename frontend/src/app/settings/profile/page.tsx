@@ -14,6 +14,13 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
   ArrowRight,
   Camera,
   Loader2,
@@ -30,6 +37,57 @@ import { useAuthStore } from '@/lib/authStore'
 import { api } from '@/lib/axios'
 import { toast } from 'sonner'
 import { FaGithub, FaXTwitter, FaLinkedin } from 'react-icons/fa6'
+
+const COUNTRIES_LIST = [
+  'United States',
+  'India',
+  'United Kingdom',
+  'Canada',
+  'Australia',
+  'Germany',
+  'France',
+  'Japan',
+  'China',
+  'Brazil',
+  'Singapore',
+  'South Korea',
+  'Netherlands',
+  'Indonesia',
+  'Vietnam',
+  'Spain',
+  'Italy',
+  'Russia',
+  'Mexico',
+  'Poland',
+  'Nigeria',
+  'Egypt',
+  'United Arab Emirates',
+  'Pakistan',
+  'Bangladesh',
+  'Philippines',
+  'Turkey',
+  'Argentina',
+  'Colombia',
+  'South Africa',
+  'New Zealand',
+  'Sweden',
+  'Switzerland',
+  'Austria',
+  'Belgium',
+  'Denmark',
+  'Finland',
+  'Hong Kong',
+  'Ireland',
+  'Israel',
+  'Malaysia',
+  'Norway',
+  'Portugal',
+  'Saudi Arabia',
+  'Taiwan',
+  'Thailand',
+  'Ukraine',
+  'Other / Prefer not to say',
+]
 
 export default function SettingsProfilePage() {
   const { user, setUser } = useAuthStore()
@@ -396,10 +454,10 @@ export default function SettingsProfilePage() {
         <DialogContent showCloseButton className="bg-card border border-border sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="text-lg font-bold text-foreground flex items-center gap-2">
-              <MapPin className="w-5 h-5 text-accent" /> Change Location
+              <MapPin className="w-5 h-5 text-accent" /> Select Location
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground">
-              Enter your country, state, or city
+              Choose your country or region from the dropdown
             </DialogDescription>
           </DialogHeader>
 
@@ -410,14 +468,23 @@ export default function SettingsProfilePage() {
             }}
             className="space-y-4 py-2"
           >
-            <Input
-              type="text"
-              value={country}
-              onChange={(e) => setCountry(e.target.value)}
-              placeholder="e.g. India, Maharashtra, Mumbai"
-              className="bg-surface border-border text-foreground"
-              autoFocus
-            />
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Country / Region</label>
+              <Select value={country} onValueChange={(val) => setCountry(val)}>
+                <SelectTrigger className="w-full bg-surface border-border text-foreground h-10 px-3 flex justify-between items-center text-sm rounded-xl">
+                  <SelectValue placeholder="Select location / country..." />
+                </SelectTrigger>
+                <SelectContent position="popper" sideOffset={6} className="bg-card border border-border text-foreground max-h-60 overflow-y-auto z-[100] rounded-xl">
+                  {Array.from(
+                    new Set([...(country && !COUNTRIES_LIST.includes(country) ? [country] : []), ...COUNTRIES_LIST])
+                  ).map((c) => (
+                    <SelectItem key={c} value={c} className="cursor-pointer text-xs focus:bg-surface-2 focus:text-foreground">
+                      {c}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
             <DialogFooter showCloseButton={false}>
               <Button
