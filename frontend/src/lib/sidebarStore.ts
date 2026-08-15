@@ -58,7 +58,7 @@ export const useSidebarStore = create<SidebarState>((set, get) => ({
   isInitialized: false,
   isLoading: false,
 
-  fetchSidebarData: async (forceRefresh = false) => {
+  fetchSidebarData: async (forceRefresh = true) => {
     // If already initialized and not forcing refresh, skip fetching to use cache
     if (get().isInitialized && !forceRefresh) return
 

@@ -132,11 +132,27 @@ export default function TournamentBracketPage({ params }: { params: Promise<{ id
       toast.error('Tournament was cancelled by creator.')
     }
 
+    const onInviteAccepted = (data: { tournamentId?: string; user?: { username: string } }) => {
+      fetchTournament()
+      if (data.user?.username) {
+        toast.success(`🎉 @${data.user.username} accepted the invite and joined the bracket!`)
+      }
+    }
+
+    const onInviteDeclined = (data: { tournamentId?: string; user?: { username: string } }) => {
+      fetchTournament()
+      if (data.user?.username) {
+        toast.error(`❌ @${data.user.username} declined the tournament invite.`)
+      }
+    }
+
     socket.on('tournament:updated', onUpdate)
     socket.on('tournament:started', onStarted)
     socket.on('tournament:bracket_updated', onUpdate)
     socket.on('tournament:finished', onFinished)
     socket.on('tournament:cancelled', onCancelled)
+    socket.on('tournament:invite_accepted', onInviteAccepted)
+    socket.on('tournament:invite_declined', onInviteDeclined)
 
     const onMatchReady = (data: { tournamentId: string; matchId?: string }) => {
       if (data.tournamentId === tournamentId) {
@@ -154,6 +170,8 @@ export default function TournamentBracketPage({ params }: { params: Promise<{ id
       socket.off('tournament:bracket_updated', onUpdate)
       socket.off('tournament:finished', onFinished)
       socket.off('tournament:cancelled', onCancelled)
+      socket.off('tournament:invite_accepted', onInviteAccepted)
+      socket.off('tournament:invite_declined', onInviteDeclined)
       socket.off('tournament:match_ready', onMatchReady)
     }
   }, [tournamentId])

@@ -5,6 +5,7 @@ import {
   getTournamentDetailsController,
   inviteFriendsController,
   acceptInviteController,
+  declineInviteController,
   getUserTournamentsController,
   getUserInvitesController,
   cancelTournamentController,
@@ -20,6 +21,7 @@ router.get("/invites", getUserInvitesController);
 router.get("/:id", getTournamentDetailsController);
 router.post("/:id/invite", inviteFriendsController);
 router.post("/:id/accept", acceptInviteController);
+router.post("/:id/decline", declineInviteController);
 router.post("/:id/cancel", cancelTournamentController);
 
 export default router;

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef, use } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 import { getSavedCode, removeSavedCode } from '@/lib/indexedDB'
@@ -182,7 +183,7 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([])
 
   // UI Tabs & Panels State
-  const [activeLeftTab, setActiveLeftTab] = useState<'problem' | 'feed'>('problem')
+  const [activeLeftTab, setActiveLeftTab] = useState<'problem' | 'feed' | 'submissions'>('problem')
   const [activeBottomTab, setActiveBottomTab] = useState<'testcase' | 'result'>('testcase')
   const [isBottomOpen, setIsBottomOpen] = useState(true)
   const [selectedTestCaseIndex, setSelectedTestCaseIndex] = useState(0)
@@ -191,6 +192,7 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
   const [isRunning, setIsRunning] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [executionResult, setExecutionResult] = useState<any | null>(null)
+  const [submissionResult, setSubmissionResult] = useState<SubmissionResult | null>(null)
 
   // Match Ended Modal State
   const [matchEndedData, setMatchEndedData] = useState<MatchEndedPayload | null>(null)
@@ -207,7 +209,6 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
     message: string
     type: 'FULLSCREEN_EXIT' | 'PASTE_ATTEMPT'
   } | null>(null)
-  const [showFullscreenExitDialog, setShowFullscreenExitDialog] = useState(false)
   const lastAntiCheatTimeRef = useRef<number>(0)
 
   const isParticipant = !!(user?.id && (player1?.id === user.id || player2?.id === user.id))
@@ -220,7 +221,10 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
   // Always show rules modal — user MUST click "Accept & Enter Fullscreen" (requestFullscreen requires a user gesture)
   useEffect(() => {
     if (typeof window === 'undefined') return
-    if (isParticipant && matchStatus !== 'FINISHED') {
+    if (matchStatus === 'FINISHED') {
+      setShowPreBattleRulesModal(false)
+      setShowDeclineConfirmModal(false)
+    } else if (isParticipant) {
       setShowPreBattleRulesModal(true)
     }
   }, [isParticipant, matchStatus, matchId])
@@ -300,15 +304,8 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
       )
 
       if (isMe) {
-        setExecutionResult({
-          verdict: result.verdict,
-          passedTestCases: result.passedTestCases,
-          totalTestCases: result.totalTestCases,
-          runtimeMs: result.runtimeMs,
-        })
+        setSubmissionResult(result)
         setIsSubmitting(false)
-        setIsBottomOpen(true)
-        setActiveBottomTab('result')
 
         if (result.verdict === 'AC') {
           toast.success('🎉 Accepted! All test cases passed!')
@@ -369,6 +366,8 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
       isMatchFinishedRef.current = true
       setMatchStatus('FINISHED')
       setMatchEndedData(payload)
+      setShowPreBattleRulesModal(false)
+      setShowDeclineConfirmModal(false)
       if (payload.tournamentId) {
         setTournamentId(payload.tournamentId)
       }
@@ -563,14 +562,14 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
   // 4. Anti-Cheat: Fullscreen Exit / Window Blur = Instant Disqualification
   useEffect(() => {
     if (isSpectator) return
-    if (matchStatus !== 'ACTIVE' || isMatchFinishedRef.current) return
+    if (matchStatus !== 'ACTIVE' || isMatchFinishedRef.current || showPreBattleRulesModal) return
 
     // Shared disqualification logic — called by both fullscreen exit & blur
     const triggerInstantDisqualification = (
       reason: 'FULLSCREEN_EXIT' | 'WINDOW_BLUR',
       displayMsg: string
     ) => {
-      if (isMatchFinishedRef.current) return
+      if (isMatchFinishedRef.current || showPreBattleRulesModal) return
 
       // Prevent duplicate DQ if already disqualified
       setAntiCheatDisqualified((already) => {
@@ -584,7 +583,6 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
           message: `💀 DISQUALIFIED! ${displayMsg}`,
           type: 'FULLSCREEN_EXIT',
         })
-        setShowFullscreenExitDialog(true)
 
         socket.emit('match:anti_cheat_warning', {
           matchId,
@@ -600,14 +598,14 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
     }
 
     const handleFullscreenChange = () => {
-      if (isMatchFinishedRef.current || matchStatus !== 'ACTIVE') return
+      if (isMatchFinishedRef.current || matchStatus !== 'ACTIVE' || showPreBattleRulesModal) return
       if (!document.fullscreenElement) {
         triggerInstantDisqualification('FULLSCREEN_EXIT', 'Exited fullscreen mode! Match forfeited.')
       }
     }
 
     const handleWindowBlur = () => {
-      if (isMatchFinishedRef.current || matchStatus !== 'ACTIVE') return
+      if (isMatchFinishedRef.current || matchStatus !== 'ACTIVE' || showPreBattleRulesModal) return
       // Catches Linux desktop switching, Alt+Tab on some WMs, etc.
       // where fullscreen stays active but the window loses focus
       triggerInstantDisqualification('WINDOW_BLUR', 'Window lost focus (desktop switch detected)! Match forfeited.')
@@ -635,7 +633,7 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
       window.removeEventListener('beforeunload', handleBeforeUnload)
       window.removeEventListener('pagehide', handlePageHide)
     }
-  }, [matchStatus, matchId, isSpectator])
+  }, [matchStatus, matchId, isSpectator, showPreBattleRulesModal])
 
 
   // Handle Code Editor Paste Interception
@@ -807,9 +805,8 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
   const handleSubmitCode = () => {
     if (!problem || isRunning || isSubmitting || matchStatus !== 'ACTIVE' || isSpectator) return
     setIsSubmitting(true)
-    setIsBottomOpen(true)
-    setActiveBottomTab('result')
-    setExecutionResult(null)
+    setActiveLeftTab('submissions')
+    setSubmissionResult(null)
 
     addActivityLog('⚡ Submitting solution to competitive judge engine...', 'you')
     toast.info('⚡ Submitting solution to competitive judge engine...')
@@ -868,7 +865,22 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
       <header className="h-14 border-b border-border bg-card px-4 flex items-center justify-between shrink-0 z-30 shadow-md">
         <TooltipProvider>
           {/* Left: Exit & Problem Info */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
+            {/* Logo Home Link */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Link
+                  href={user ? "/dashboard" : "/"}
+                  className="w-8 h-8 rounded-lg border border-border/80 bg-surface/30 hover:bg-surface/80 flex items-center justify-center transition-all shadow-xs shrink-0 overflow-hidden"
+                >
+                  <Image src="/logo.png" alt="CodeRival Home" width={24} height={24} className="w-6 h-6 object-contain" />
+                </Link>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="text-xs">
+                CodeRival Home
+              </TooltipContent>
+            </Tooltip>
+
             <Tooltip>
               <TooltipTrigger asChild>
                 <Link
@@ -1083,6 +1095,17 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
                   </span>
                 )}
               </button>
+
+              <button
+                onClick={() => setActiveLeftTab('submissions')}
+                className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors ${
+                  activeLeftTab === 'submissions'
+                    ? 'border-accent text-accent bg-surface/60'
+                    : 'border-transparent text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <History className="w-3.5 h-3.5" /> Submissions
+              </button>
             </div>
 
             {/* Tab Content */}
@@ -1143,7 +1166,7 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
                     </div>
                   )}
                 </>
-              ) : (
+              ) : activeLeftTab === 'feed' ? (
                 /* Battle Activity Feed Tab */
                 <div className="space-y-3 font-mono text-xs">
                   <div className="text-xs text-muted-foreground font-semibold flex items-center justify-between border-b border-border pb-2">
@@ -1176,6 +1199,57 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
                           <div className="leading-relaxed">{log.text}</div>
                         </div>
                       ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* Battle Submissions Tab */
+                <div className="space-y-6">
+                  {/* Pending / Judging Loading State */}
+                  {isSubmitting && (
+                    <div className="p-5 rounded-xl border border-accent/30 bg-accent/5 flex flex-col items-center justify-center text-center gap-3 animate-pulse">
+                      <Loader2 className="w-8 h-8 text-accent animate-spin" />
+                      <div>
+                        <h4 className="text-sm font-bold text-foreground">Judging in Progress...</h4>
+                        <p className="text-xs text-muted-foreground mt-1 font-mono">
+                          Evaluating your solution against competitive test suite
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Latest Submission Result Card */}
+                  {!isSubmitting && submissionResult && (
+                    <div className="p-4 rounded-xl border border-border bg-surface space-y-4 shadow-xs">
+                      <div className="flex items-center justify-between border-b border-border pb-3">
+                        <div className="flex items-center gap-2.5">
+                          {getVerdictBadge(submissionResult.verdict)}
+                          <span className="text-xs font-mono text-muted-foreground font-bold">
+                            {selectedLanguage}
+                          </span>
+                        </div>
+                        <span className="text-xs text-muted-foreground font-mono">Latest Duel Submission</span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3 text-xs font-mono">
+                        <div className="p-3 rounded-lg bg-card border border-border flex flex-col gap-1">
+                          <span className="text-muted-foreground text-[10px] uppercase tracking-wider font-semibold">Runtime</span>
+                          <span className="text-foreground font-bold text-sm">{submissionResult.runtimeMs} ms</span>
+                        </div>
+                        <div className="p-3 rounded-lg bg-card border border-border flex flex-col gap-1">
+                          <span className="text-muted-foreground text-[10px] uppercase tracking-wider font-semibold">Testcases Passed</span>
+                          <span className="text-foreground font-bold text-sm">
+                            {submissionResult.passedTestCases} / {submissionResult.totalTestCases}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {!isSubmitting && !submissionResult && (
+                    <div className="py-12 text-center text-muted-foreground text-xs font-mono">
+                      <History className="w-8 h-8 mx-auto mb-2 opacity-40" />
+                      No submission attempts made yet in this duel. Click "SUBMIT SOLUTION" to evaluate your code!
                     </div>
                   )}
                 </div>
@@ -1786,46 +1860,8 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
         </div>
       )}
 
-      {/* ─── FULLSCREEN EXIT DISQUALIFICATION ALERT DIALOG ─── */}
-      <AlertDialog open={showFullscreenExitDialog}>
-        <AlertDialogContent className="bg-[#141416] border border-rose-500/50 text-white max-w-md shadow-2xl">
-          <AlertDialogHeader className="sm:text-left">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="p-3 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/40 shrink-0">
-                <ShieldAlert className="w-6 h-6" />
-              </div>
-              <div>
-                <AlertDialogTitle className="text-lg font-bold text-rose-400">
-                  💀 Disqualified — Exited Fullscreen
-                </AlertDialogTitle>
-                <span className="text-[11px] font-mono text-rose-300/80">MATCH FORFEITED</span>
-              </div>
-            </div>
-            <AlertDialogDescription asChild>
-              <div className="text-slate-300 text-sm leading-relaxed space-y-3 pt-2">
-                <p>
-                  You exited fullscreen mode during an active battle. This is a direct violation of the anti-cheat policy.
-                </p>
-                <div className="bg-rose-950/60 border border-rose-500/40 rounded-lg p-3 text-xs text-rose-200 space-y-1.5">
-                  <p className="font-bold text-rose-300">💀 You have been immediately disqualified.</p>
-                  <p>The match has been forfeited and recorded as a loss. Your opponent has been awarded the victory.</p>
-                </div>
-              </div>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter className="mt-4 sm:justify-end">
-            <AlertDialogAction
-              onClick={() => setShowFullscreenExitDialog(false)}
-              className="bg-rose-600 hover:bg-rose-700 text-white font-semibold shadow-lg shadow-rose-900/40 cursor-pointer"
-            >
-              I Understand
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
       {/* ─── PRE-BATTLE RULES & ANTI-CHEAT GUIDELINES MODAL ─── */}
-      <AlertDialog open={showPreBattleRulesModal && !showDeclineConfirmModal}>
+      <AlertDialog open={showPreBattleRulesModal && !showDeclineConfirmModal && matchStatus !== 'FINISHED' && !matchEndedData}>
         <AlertDialogContent size="3xl" className="bg-[#121214] border border-[#2a2a30] text-white w-[92vw] shadow-2xl p-0 rounded-2xl overflow-hidden">
           {/* Header */}
           <div className="py-4 px-6 border-b border-[#2a2a30] text-center">
@@ -1923,7 +1959,7 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
       </AlertDialog>
 
       {/* ─── DECLINE CONFIRMATION ALERT DIALOG ─── */}
-      <AlertDialog open={showDeclineConfirmModal}>
+      <AlertDialog open={showDeclineConfirmModal && matchStatus !== 'FINISHED' && !matchEndedData}>
         <AlertDialogContent className="bg-[#141416] border border-rose-500/50 text-white max-w-md shadow-2xl p-6 rounded-xl">
           <AlertDialogHeader className="sm:text-left">
             <div className="flex items-center gap-3 mb-2">

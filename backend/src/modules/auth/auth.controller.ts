@@ -55,6 +55,11 @@ export const register = async (req: Request, res: Response) => {
         email: user.email,
       }
     });
+
+    // Send Welcome Email asynchronously
+    emailService.sendWelcomeEmail(user.email, user.username).catch((e) => {
+      console.error("Failed to send welcome email on register:", e);
+    });
   } catch (err) {
     console.log(err);
     return res.status(500).json({ message: "Internal server error" });
@@ -142,7 +147,7 @@ export const requestPasswordReset = async (req: Request, res: Response) => {
     
     const otp = await otpService.saveOTP(email, "forgot-password");
 
-    await emailService.sendEmail(email, otp);
+    await emailService.sendResetPasswordOTP(email, otp, user.username);
 
     res.status(200).json({
       message: "OTP sent successfully",
@@ -239,7 +244,7 @@ export const getVerifyEmailOTP = async (req: Request, res: Response) => {
     
     const otp = await otpService.saveOTP(email, "verify-email");
 
-    await emailService.sendEmail(email, otp);
+    await emailService.sendVerifyEmailOTP(email, otp, user.username);
 
     res.status(200).json({
       message: "OTP sent successfully",

@@ -57,48 +57,20 @@ export const syncGlobalLeaderboard = async () => {
  */
 export const getGlobalLeaderboard = async (currentUserId?: string, page: number = 1, limit: number = 20) => {
   try {
-    let card = await redis.zcard(GLOBAL_LEADERBOARD_KEY);
-
-    // Auto-sync if Redis leaderboard set is empty
-    if (card === 0) {
-      await syncGlobalLeaderboard();
-      card = await redis.zcard(GLOBAL_LEADERBOARD_KEY);
-    }
-
-    const start = (page - 1) * limit;
-    const end = start + limit - 1;
-
-    // Fetch user IDs with scores in descending order for current page
-    const rawList = await redis.zrevrange(GLOBAL_LEADERBOARD_KEY, start, end, "WITHSCORES");
-
-    const userIds: string[] = [];
-    const ratingMap = new Map<string, number>();
-
-    for (let i = 0; i < rawList.length; i += 2) {
-      const uId = rawList[i];
-      const score = parseInt(rawList[i + 1], 10);
-      userIds.push(uId);
-      ratingMap.set(uId, score);
-    }
-
+    // 1. Fetch total count of active leaderboard participants
     const totalPlayersCount = await db.user.count({
       where: { appearOnLeaderboard: true },
     });
 
-    if (userIds.length === 0) {
-      return {
-        leaderboard: [],
-        currentUserRank: null,
-        totalPlayers: totalPlayersCount,
-        hasMore: false,
-        page,
-        limit,
-      };
-    }
+    const skip = (page - 1) * limit;
 
-    // Fetch rich user profiles from DB preserving rank order, filtering appearOnLeaderboard
+    // 2. Fetch users ordered by rating desc, then createdAt asc
     const users = await db.user.findMany({
-      where: { id: { in: userIds }, appearOnLeaderboard: true },
+      where: { appearOnLeaderboard: true },
+      orderBy: [
+        { rating: "desc" },
+        { createdAt: "asc" },
+      ],
       select: {
         id: true,
         username: true,
@@ -113,66 +85,62 @@ export const getGlobalLeaderboard = async (currentUserId?: string, page: number 
         problemsSolved: true,
         appearOnLeaderboard: true,
       },
+      skip,
+      take: limit,
     });
 
-    const userMap = new Map(
-      await Promise.all(
-        users.map(async (u) => {
-          const actualSolved = await calculateUserProblemsSolved(u.id);
-          if (u.problemsSolved !== actualSolved) {
-            await db.user.update({ where: { id: u.id }, data: { problemsSolved: actualSolved } });
-            u.problemsSolved = actualSolved;
-          }
-          return [u.id, u] as const;
-        })
-      )
-    );
-
-    const leaderboard = userIds
-      .map((id, index) => {
-        const u = userMap.get(id);
-        if (!u) return null;
+    const leaderboard = await Promise.all(
+      users.map(async (u, index) => {
+        const actualSolved = await calculateUserProblemsSolved(u.id);
+        if (u.problemsSolved !== actualSolved) {
+          await db.user.update({ where: { id: u.id }, data: { problemsSolved: actualSolved } });
+          u.problemsSolved = actualSolved;
+        }
         return {
-          rank: start + index + 1,
+          rank: skip + index + 1,
           ...u,
-          rating: ratingMap.get(id) ?? u.rating,
-          isOnline: isUserConnected(id),
+          isOnline: isUserConnected(u.id),
         };
       })
-      .filter(Boolean);
+    );
 
-    // Compute current user's global rank & rating (only if user opted into global leaderboard)
+    // 3. Compute current user's exact global rank
     let currentUserRankInfo = null;
     if (currentUserId) {
       const currentUser = await db.user.findUnique({
         where: { id: currentUserId },
-        select: { appearOnLeaderboard: true, rating: true },
+        select: { appearOnLeaderboard: true, rating: true, createdAt: true },
       });
 
       if (currentUser?.appearOnLeaderboard) {
-        let revRank = await redis.zrevrank(GLOBAL_LEADERBOARD_KEY, currentUserId);
-        let score = await redis.zscore(GLOBAL_LEADERBOARD_KEY, currentUserId);
+        const higherCount = await db.user.count({
+          where: {
+            appearOnLeaderboard: true,
+            OR: [
+              { rating: { gt: currentUser.rating } },
+              {
+                rating: currentUser.rating,
+                createdAt: { lt: currentUser.createdAt },
+              },
+            ],
+          },
+        });
 
-        if (revRank === null || score === null) {
-          await redis.zadd(GLOBAL_LEADERBOARD_KEY, currentUser.rating, currentUserId);
-          revRank = await redis.zrevrank(GLOBAL_LEADERBOARD_KEY, currentUserId);
-          score = await redis.zscore(GLOBAL_LEADERBOARD_KEY, currentUserId);
-        }
-
-        if (revRank !== null && score !== null) {
-          currentUserRankInfo = {
-            rank: revRank + 1,
-            rating: parseInt(score, 10),
-          };
-        }
+        currentUserRankInfo = {
+          rank: higherCount + 1,
+          rating: currentUser.rating,
+        };
       }
     }
+
+    // Background sync to ensure Redis ZSET is updated cleanly
+    syncGlobalLeaderboard().catch((e) => console.error("Background sync error:", e));
 
     return {
       leaderboard,
       currentUserRank: currentUserRankInfo,
       totalPlayers: totalPlayersCount,
-      hasMore: start + userIds.length < totalPlayersCount,
+      hasMore: skip + users.length < totalPlayersCount,
       page,
       limit,
     };

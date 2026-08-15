@@ -13,6 +13,29 @@ import {
 import { QueuePlayer } from "../matchmaking/matchmaking.types";
 import { updateUserRatingInLeaderboard } from "../leaderboard/leaderboard.service";
 import { handleTournamentMatchFinished } from "../tournament/tournament.service";
+import { createNotification } from "../notification/notification.service";
+
+const checkAndNotifyTierUpgrade = async (userId: string, oldRating: number, newRating: number) => {
+  const TIER_THRESHOLDS = [
+    { min: 2200, name: "Grandmaster" },
+    { min: 1900, name: "Master" },
+    { min: 1600, name: "Candidate Master" },
+    { min: 1400, name: "Specialist" },
+    { min: 1200, name: "Apprentice" },
+  ];
+
+  for (const tier of TIER_THRESHOLDS) {
+    if (oldRating < tier.min && newRating >= tier.min) {
+      await createNotification({
+        userId,
+        type: "RATING_TIER_UPGRADE",
+        title: "Rank Tier Upgrade!",
+        message: `🎉 Rank Up! You have reached ${tier.name} (${tier.min}+ ELO).`,
+      });
+      break;
+    }
+  }
+};
 
 const activeMatchTimers = new Map<string, NodeJS.Timeout>();
 const startingMatchUsers = new Set<string>();
@@ -332,6 +355,10 @@ export const endMatch = async (
   // Update Redis Leaderboards
   updateUserRatingInLeaderboard(p1.id, newR1);
   updateUserRatingInLeaderboard(p2.id, newR2);
+
+  // Check for ELO Tier Upgrades
+  checkAndNotifyTierUpgrade(p1.id, p1.rating, newR1).catch((e) => console.error("Tier notification error p1:", e));
+  checkAndNotifyTierUpgrade(p2.id, p2.rating, newR2).catch((e) => console.error("Tier notification error p2:", e));
 
   clearUserActiveMatch(p1.id);
   clearUserActiveMatch(p2.id);

@@ -2,8 +2,54 @@ import { Request, Response, NextFunction } from "express";
 import { getMatch } from "./match.service";
 import { db } from "../../config/db";
 import { NotFoundError } from "../../utils/errors";
+import { getWaitingPlayers } from "../matchmaking/matchmaking.queue";
 
 export class MatchController {
+  static async getMatchmakingQueue(req: Request, res: Response, next: NextFunction) {
+    try {
+      const rawPlayers = await getWaitingPlayers();
+      const userIds = rawPlayers.map((p) => p.userId);
+
+      let userMap = new Map<string, any>();
+      if (userIds.length > 0) {
+        const users = await db.user.findMany({
+          where: { id: { in: userIds } },
+          select: {
+            id: true,
+            username: true,
+            name: true,
+            rating: true,
+            avatar_url: true,
+            avatar_id: true,
+          },
+        });
+        users.forEach((u) => userMap.set(u.id, u));
+      }
+
+      const players = rawPlayers.map((p) => {
+        const u = userMap.get(p.userId);
+        return {
+          userId: p.userId,
+          username: p.username || u?.username || `coder_${p.userId.slice(-4)}`,
+          name: p.name || u?.name || u?.username || "Coder",
+          rating: p.rating || u?.rating || 1200,
+          avatar_url: p.avatar_url || u?.avatar_url || null,
+          avatar_id: p.avatar_id || u?.avatar_id || null,
+          joinedAt: p.joinedAt,
+          queueTimeSeconds: Math.max(0, Math.floor((Date.now() - p.joinedAt) / 1000)),
+        };
+      });
+
+      res.status(200).json({
+        success: true,
+        count: players.length,
+        players,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   static async getMatchById(req: Request, res: Response, next: NextFunction) {
     try {
       const matchId = req.params.id as string;

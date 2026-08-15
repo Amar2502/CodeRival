@@ -55,8 +55,8 @@ export function RightSidebar() {
   const [hoveredPtIndex, setHoveredPtIndex] = useState<number | null>(null)
 
   useEffect(() => {
-    // Initial fetch uses cached store if already initialized
-    fetchSidebarData(false)
+    // Always fetch fresh sidebar data on mount so ratings, rating chart, and stats stay updated
+    fetchSidebarData(true)
 
     // Force refresh store on real-time socket updates
     const handleUpdate = () => {

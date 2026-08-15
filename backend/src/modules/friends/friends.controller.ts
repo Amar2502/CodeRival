@@ -10,6 +10,7 @@ import {
 } from "./friends.service";
 import { getIO } from "../../socket";
 import { db } from "../../config/db";
+import { createNotification } from "../notification/notification.service";
 
 export const searchUsersController = async (req: Request, res: Response) => {
   try {
@@ -23,7 +24,7 @@ export const searchUsersController = async (req: Request, res: Response) => {
     return res.status(200).json({ results });
   } catch (error: any) {
     console.error("searchUsersController error:", error);
-    return res.status(500).json({ message: error.message || "Internal server error" });
+    return res.status(400).json({ message: error.message || "Failed to search users" });
   }
 };
 
@@ -34,14 +35,13 @@ export const getStatusController = async (req: Request, res: Response) => {
       return res.status(401).json({ message: "Unauthorized" });
     }
 
-    const targetUserId = Array.isArray(req.params.targetUserId)
-      ? req.params.targetUserId[0]
-      : String(req.params.targetUserId);
+    const rawParam = req.params.targetUserId;
+    const targetUserId = Array.isArray(rawParam) ? rawParam[0] : String(rawParam);
     const status = await getFriendshipStatus(userId, targetUserId);
     return res.status(200).json({ status });
   } catch (error: any) {
     console.error("getStatusController error:", error);
-    return res.status(500).json({ message: error.message || "Internal server error" });
+    return res.status(400).json({ message: error.message || "Failed to get friendship status" });
   }
 };
 
@@ -84,6 +84,26 @@ export const sendRequestController = async (req: Request, res: Response) => {
       }
     }
 
+    // Persist Notification in DB
+    if (autoAccepted) {
+      await createNotification({
+        userId: targetUser.id,
+        type: "FRIEND_REQUEST_ACCEPTED",
+        title: "Friend Request Accepted",
+        message: `@${currentUser?.username || "A user"} accepted your friend request!`,
+        senderId: userId,
+      });
+    } else {
+      await createNotification({
+        userId: targetUser.id,
+        type: "FRIEND_REQUEST_RECEIVED",
+        title: "Friend Request Received",
+        message: `@${currentUser?.username || "A user"} sent you a friend request.`,
+        senderId: userId,
+        friendshipId: friendship.id,
+      });
+    }
+
     return res.status(200).json({
       message: autoAccepted ? "Friend request accepted!" : "Friend request sent successfully",
       friendship,
@@ -122,6 +142,28 @@ export const acceptRequestController = async (req: Request, res: Response) => {
       });
     }
 
+    // Persist FRIEND_REQUEST_ACCEPTED notification for original sender
+    await createNotification({
+      userId: friendship.senderId,
+      type: "FRIEND_REQUEST_ACCEPTED",
+      title: "Friend Request Accepted",
+      message: `@${friendship.receiver?.username || "A user"} accepted your friend request!`,
+      senderId: userId,
+    });
+
+    // Update recipient's pending FRIEND_REQUEST_RECEIVED notification
+    await db.notification.updateMany({
+      where: {
+        userId: userId,
+        type: "FRIEND_REQUEST_RECEIVED",
+        senderId: friendship.senderId,
+      },
+      data: {
+        isRead: true,
+        message: `You accepted @${friendship.sender?.username || "user"}'s friend request.`,
+      },
+    });
+
     return res.status(200).json({ message: "Friend request accepted", friendship });
   } catch (error: any) {
     console.error("acceptRequestController error:", error);
@@ -149,6 +191,24 @@ export const declineRequestController = async (req: Request, res: Response) => {
     if (io && friendship) {
       io.to(`user:${friendship.senderId}`).emit("friend:request_declined", { requestId: friendship.id });
       io.to(`user:${friendship.receiverId}`).emit("friend:request_declined", { requestId: friendship.id });
+    }
+
+    if (friendship) {
+      const sender = await db.user.findUnique({
+        where: { id: friendship.senderId },
+        select: { username: true },
+      });
+      await db.notification.updateMany({
+        where: {
+          userId: userId,
+          type: "FRIEND_REQUEST_RECEIVED",
+          senderId: friendship.senderId,
+        },
+        data: {
+          isRead: true,
+          message: `You declined @${sender?.username || "user"}'s friend request.`,
+        },
+      });
     }
 
     return res.status(200).json({ message: "Friend request declined" });

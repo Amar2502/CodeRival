@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { socket } from "@/lib/socket";
 import { useAuthStore } from "@/lib/authStore";
 import { FriendChallengeModal } from "@/components/friends/FriendChallengeModal";
+import { TournamentInviteModal } from "@/components/tournaments/TournamentInviteModal";
 
 export default function SocketProvider({
   children,
@@ -45,7 +46,12 @@ export default function SocketProvider({
   return (
     <>
       {children}
-      {user && <FriendChallengeModal />}
+      {user && (
+        <>
+          <FriendChallengeModal />
+          <TournamentInviteModal />
+        </>
+      )}
     </>
   );
 }

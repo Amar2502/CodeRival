@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -137,11 +138,16 @@ export default function ForgotPasswordPage() {
       {/* Header */}
       <header className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur-md">
         <nav className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2 font-bold text-xl text-foreground hover:opacity-80 transition-opacity">
-            <div className="p-2 rounded-lg bg-linear-to-br from-primary to-accent">
-              <Zap className="w-5 h-5 text-primary-foreground" />
-            </div>
-            <span className="bg-linear-to-r from-primary via-primary to-accent bg-clip-text text-transparent">
+          <Link href="/" className="flex items-center gap-2.5 font-bold text-xl text-foreground hover:opacity-80 transition-opacity">
+            <Image
+              src="/logo.png"
+              alt="CodeRival Logo"
+              width={32}
+              height={32}
+              className="w-8 h-8 object-contain"
+              priority
+            />
+            <span className="bg-gradient-to-r from-primary via-rose-400 to-accent bg-clip-text text-transparent tracking-tight font-black text-xl">
               CodeRival
             </span>
           </Link>

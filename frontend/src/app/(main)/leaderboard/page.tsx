@@ -221,14 +221,14 @@ export default function LeaderboardPage() {
         </div>
       ) : (
         <>
-          {/* TOP 3 PODIUM CARDS */}
-          {top3.length > 0 && (
+          {/* TOP 3 PODIUM CARDS (Only on Page 1) */}
+          {page === 1 && top3.length > 0 && (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
               {/* RANK 2 - SILVER (Placed on Left) */}
               {top3[1] && (
                 <div className="p-6 rounded-2xl bg-card border border-border shadow-lg flex flex-col items-center text-center relative overflow-hidden order-2 md:order-1 mt-0 md:mt-4">
                   <div className="absolute top-3 right-3 px-2 py-0.5 rounded-full text-[10px] font-black bg-gray-400/20 text-gray-300 border border-gray-400/30 flex items-center gap-1">
-                    <Medal className="w-3 h-3 text-gray-300" /> #2 RANK
+                    <Medal className="w-3 h-3 text-gray-300" /> #{top3[1].rank} RANK
                   </div>
 
                   <UserAvatar
@@ -265,7 +265,7 @@ export default function LeaderboardPage() {
                   <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-2xl pointer-events-none" />
 
                   <div className="absolute top-3 right-3 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-amber-500/20 text-amber-400 border border-amber-500/40 flex items-center gap-1 animate-pulse">
-                    <Crown className="w-3 h-3 text-amber-400" /> #1 CHAMPION
+                    <Crown className="w-3 h-3 text-amber-400" /> #{top3[0].rank === 1 ? '1 CHAMPION' : `${top3[0].rank} RANK`}
                   </div>
 
                   <UserAvatar
@@ -301,7 +301,7 @@ export default function LeaderboardPage() {
               {top3[2] && (
                 <div className="p-6 rounded-2xl bg-card border border-border shadow-lg flex flex-col items-center text-center relative overflow-hidden order-3 mt-0 md:mt-6">
                   <div className="absolute top-3 right-3 px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-700/20 text-amber-600 border border-amber-700/30 flex items-center gap-1">
-                    <Award className="w-3 h-3 text-amber-600" /> #3 RANK
+                    <Award className="w-3 h-3 text-amber-600" /> #{top3[2].rank} RANK
                   </div>
 
                   <UserAvatar

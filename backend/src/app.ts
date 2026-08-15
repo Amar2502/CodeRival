@@ -9,6 +9,7 @@ import { matchRoutes } from "./modules/match";
 import friendsRoutes from "./modules/friends/friends.routes";
 import leaderboardRoutes from "./modules/leaderboard/leaderboard.routes";
 import tournamentRoutes from "./modules/tournament/tournament.routes";
+import notificationRoutes from "./modules/notification/notification.routes";
 import { config } from "./config/config";
 import { errorHandler } from "./middleware/error.middleware";
 
@@ -30,6 +31,7 @@ app.use("/api/match", matchRoutes);
 app.use("/api/friends", friendsRoutes);
 app.use("/api/leaderboard", leaderboardRoutes);
 app.use("/api/tournament", tournamentRoutes);
+app.use("/api/notification", notificationRoutes);
 
 app.use(errorHandler);
 

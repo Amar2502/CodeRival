@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Zap, Code2, Swords, LayoutDashboard, User, LogOut, Trophy, Users, Menu, X, Bell, Settings } from 'lucide-react'
@@ -16,6 +17,7 @@ import {
 import { useAuthStore } from '@/lib/authStore'
 import { getRatingInfo } from '@/lib/rating'
 import { UserAvatar } from '@/components/UserAvatar'
+import { NotificationPopover } from '@/components/NotificationPopover'
 import { isDevelopment } from '@/lib/config'
 import { api } from '@/lib/axios'
 import { socket } from '@/lib/socket'
@@ -96,8 +98,15 @@ export function Header() {
       <nav className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
         {/* Logo */}
         <Link href={user ? "/dashboard" : "/"} className="flex items-center gap-2.5 font-black text-xl text-foreground hover:opacity-95 transition-opacity group">
-          <div className="p-1.5 rounded-xl bg-gradient-to-br from-primary via-primary to-accent shadow-md shadow-primary/25 group-hover:scale-105 transition-transform">
-            <Zap className="w-5 h-5 text-white" />
+          <div className="relative group-hover:scale-105 transition-transform flex items-center justify-center">
+            <Image
+              src="/logo.png"
+              alt="CodeRival Logo"
+              width={42}
+              height={42}
+              // className="w-8 h-8 object-contain"
+              priority
+            />
           </div>
           <span className="bg-gradient-to-r from-primary via-rose-400 to-accent bg-clip-text text-transparent tracking-tight font-black">
             CodeRival
@@ -182,18 +191,7 @@ export function Header() {
           {user ? (
             <div className="flex items-center gap-2 sm:gap-3">
               {/* Notification Bell Button */}
-              <Link href="/friends" title="Notifications">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="relative text-muted-foreground hover:text-foreground hover:bg-surface border border-border/60 rounded-xl h-9 w-9"
-                >
-                  <Bell className="w-4 h-4 text-foreground" />
-                  {pendingFriendsCount > 0 && (
-                    <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-rose-500 animate-pulse ring-2 ring-background" />
-                  )}
-                </Button>
-              </Link>
+              <NotificationPopover />
 
               {/* Avatar Circle Dropdown using shadcn Select */}
               <Select onValueChange={handleUserMenuAction}>

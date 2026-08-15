@@ -6,6 +6,7 @@ import {
   getTournamentDetails,
   inviteFriendsToTournament,
   acceptTournamentInvite,
+  declineTournamentInvite,
   getUserTournaments,
   getUserTournamentInvites,
   cancelTournamentService,
@@ -66,6 +67,22 @@ export const acceptInviteController = asyncHandler(
 
     const tournament = await acceptTournamentInvite(io, id, userId);
     res.status(200).json({ success: true, tournament });
+  }
+);
+
+export const declineInviteController = asyncHandler(
+  async (req: Request, res: Response) => {
+    const userId = (req as any).user!.id;
+    const id = req.params.id as string;
+
+    const io = getIO();
+    if (!io) {
+      res.status(500).json({ success: false, message: "Socket server unavailable" });
+      return;
+    }
+
+    await declineTournamentInvite(io, id, userId);
+    res.status(200).json({ success: true });
   }
 );
 

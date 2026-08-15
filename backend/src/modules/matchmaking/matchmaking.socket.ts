@@ -1,6 +1,6 @@
 import { Server, Socket } from "socket.io";
 import { db } from "../../config/db";
-import { joinQueue, leaveQueue } from "./matchmaking.service";
+import { joinQueue, leaveQueue, notifyQueueUpdate } from "./matchmaking.service";
 import { QueuePlayer } from "./matchmaking.types";
 import { startMatch } from "../match/match.service";
 
@@ -17,6 +17,8 @@ export const initializeMatchmakingSocket = (
         where: { id: userId },
         select: {
           id: true,
+          username: true,
+          name: true,
           rating: true,
           avatar_url: true,
           avatar_id: true,
@@ -32,6 +34,8 @@ export const initializeMatchmakingSocket = (
 
       const player: QueuePlayer = {
         userId: user.id,
+        username: user.username,
+        name: user.name,
         socketId: socket.id,
         rating: user.rating,
         avatar_url: user.avatar_url,
@@ -49,6 +53,8 @@ export const initializeMatchmakingSocket = (
         return;
       }
 
+      await notifyQueueUpdate(io);
+
       if (!result.matched || !result.opponent) {
         socket.emit("matchmaking:searching", {
           joinedAt: player.joinedAt,
@@ -59,6 +65,7 @@ export const initializeMatchmakingSocket = (
 
       // Both players ready - start match directly
       await startMatch(io, player, result.opponent);
+      await notifyQueueUpdate(io);
 
     } catch (error) {
       console.error("Matchmaking join error:", error);
@@ -74,6 +81,7 @@ export const initializeMatchmakingSocket = (
       const userId = socket.data.user.id;
       await leaveQueue(userId);
       socket.emit("matchmaking:left");
+      await notifyQueueUpdate(io);
     } catch (error) {
       console.error("Matchmaking leave error:", error);
     }

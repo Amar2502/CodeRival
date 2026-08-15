@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Header } from '@/components/header'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -11,14 +10,11 @@ import {
   Trophy,
   Users,
   Plus,
-  Zap,
   CheckCircle2,
   Swords,
   Loader2,
-  Clock,
   Sparkles,
   ArrowRight,
-  ShieldAlert,
   UserPlus,
   AlertTriangle,
 } from 'lucide-react'
@@ -68,6 +64,7 @@ export default function TournamentsLobbyPage() {
   const [isCreating, setIsCreating] = useState(false)
   const [createError, setCreateError] = useState('')
   const [acceptingId, setAcceptingId] = useState<string | null>(null)
+  const [decliningId, setDecliningId] = useState<string | null>(null)
 
   useEffect(() => {
     fetchTournamentsData()
@@ -76,13 +73,22 @@ export default function TournamentsLobbyPage() {
       socket.connect()
     }
 
-    const onInvited = () => {
+    const onRefresh = () => {
       fetchTournamentsData()
     }
 
-    socket.on('tournament:invited', onInvited)
+    socket.on('tournament:invited', onRefresh)
+    socket.on('tournament:cancelled', onRefresh)
+    socket.on('tournament:started', onRefresh)
+    socket.on('tournament:updated', onRefresh)
+    socket.on('tournament:invite_declined', onRefresh)
+
     return () => {
-      socket.off('tournament:invited', onInvited)
+      socket.off('tournament:invited', onRefresh)
+      socket.off('tournament:cancelled', onRefresh)
+      socket.off('tournament:started', onRefresh)
+      socket.off('tournament:updated', onRefresh)
+      socket.off('tournament:invite_declined', onRefresh)
     }
   }, [])
 
@@ -135,6 +141,7 @@ export default function TournamentsLobbyPage() {
 
   const handleAcceptInvite = async (tournamentId: string) => {
     setAcceptingId(tournamentId)
+    setInvites((prev) => prev.filter((inv) => inv.tournamentId !== tournamentId))
     try {
       const res = await api.post(`/tournament/${tournamentId}/accept`)
       if (res.data?.tournament?.id) {
@@ -142,69 +149,77 @@ export default function TournamentsLobbyPage() {
       }
     } catch (err) {
       console.error('Failed to accept invite:', err)
+      fetchTournamentsData()
     } finally {
       setAcceptingId(null)
     }
   }
 
+  const handleDeclineInvite = async (tournamentId: string) => {
+    setDecliningId(tournamentId)
+    setInvites((prev) => prev.filter((inv) => inv.tournamentId !== tournamentId))
+    try {
+      await api.post(`/tournament/${tournamentId}/decline`)
+    } catch (err) {
+      console.error('Failed to decline invite:', err)
+      fetchTournamentsData()
+    } finally {
+      setDecliningId(null)
+    }
+  }
+
   if (!isDevelopment) {
     return (
-      <div className="min-h-screen bg-background text-foreground flex flex-col">
-        <Header />
-
-        <main className="flex-1 max-w-3xl mx-auto px-4 py-24 w-full flex flex-col items-center justify-center text-center space-y-6">
-          <div className="relative">
-            <div className="absolute inset-0 bg-primary/20 rounded-full blur-2xl animate-pulse" />
-            <div className="relative w-20 h-20 rounded-2xl bg-linear-to-br from-primary/20 via-surface to-accent/20 border border-primary/30 flex items-center justify-center shadow-2xl">
-              <Trophy className="w-10 h-10 text-amber-400" />
-            </div>
+      <div className="flex flex-col items-center justify-center text-center space-y-6 py-12">
+        <div className="relative">
+          <div className="absolute inset-0 bg-primary/20 rounded-full blur-2xl animate-pulse" />
+          <div className="relative w-20 h-20 rounded-2xl bg-linear-to-br from-primary/20 via-surface to-accent/20 border border-primary/30 flex items-center justify-center shadow-2xl">
+            <Trophy className="w-10 h-10 text-amber-400" />
           </div>
+        </div>
 
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-400 text-xs font-bold uppercase tracking-wider">
-            <Sparkles className="w-3.5 h-3.5 animate-pulse" />
-            Upcoming Feature
-          </div>
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-400 text-xs font-bold uppercase tracking-wider">
+          <Sparkles className="w-3.5 h-3.5 animate-pulse" />
+          Upcoming Feature
+        </div>
 
-          <div className="space-y-2">
-            <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-foreground">
-              Tournament Arena
-            </h1>
-            <p className="text-xs sm:text-sm text-muted-foreground max-w-md mx-auto leading-relaxed">
-              Bracket-style single-elimination championships and tournament coding duels are coming soon.
-            </p>
-          </div>
+        <div className="space-y-2">
+          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-foreground">
+            Tournament Arena
+          </h1>
+          <p className="text-xs sm:text-sm text-muted-foreground max-w-md mx-auto leading-relaxed">
+            Bracket-style single-elimination championships and tournament coding duels are coming soon.
+          </p>
+        </div>
 
-          <div className="pt-2">
-            <Link href="/battles">
-              <Button size="lg" className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold shadow-md rounded-xl gap-2 px-6 h-11 text-xs cursor-pointer">
-                <Swords className="w-4 h-4" />
-                <span>Go to 1v1 Battles</span>
-              </Button>
-            </Link>
-          </div>
-        </main>
+        <div className="pt-2">
+          <Link href="/battles">
+            <Button size="lg" className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold shadow-md rounded-xl gap-2 px-6 h-11 text-xs cursor-pointer">
+              <Swords className="w-4 h-4" />
+              <span>Go to 1v1 Battles</span>
+            </Button>
+          </Link>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col">
-      <Header />
-
-      <main className="flex-1 max-w-6xl mx-auto px-4 py-8 w-full space-y-8">
+    <>
+      <div className="space-y-8">
         {/* Banner Section */}
-        <div className="relative rounded-2xl border border-primary/30 bg-linear-to-r from-card via-surface to-card p-8 overflow-hidden shadow-xl shadow-primary/5">
+        <div className="relative rounded-2xl border border-primary/30 bg-linear-to-r from-card via-surface to-card p-6 sm:p-8 overflow-hidden shadow-xl shadow-primary/5">
           <div className="absolute top-0 right-0 w-80 h-80 bg-primary/10 rounded-full blur-3xl pointer-events-none" />
-          <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+          <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
             <div className="space-y-2 max-w-2xl">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-primary/20 bg-primary/10 text-primary text-xs font-semibold uppercase tracking-wider">
                 <Trophy className="w-3.5 h-3.5 text-amber-400" />
                 4 or 8-Player Single Elimination
               </div>
-              <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-foreground">
+              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
                 Friend Championship Arena
               </h1>
-              <p className="text-sm md:text-base text-muted-foreground leading-relaxed">
+              <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
                 Create a 4-player or 8-player bracket tournament, invite your friends, and battle head-to-head.
                 Every match counts toward your competitive ELO rating!
               </p>
@@ -216,7 +231,7 @@ export default function TournamentsLobbyPage() {
                 setCreateError('')
                 setIsCreateOpen(true)
               }}
-              className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold shadow-lg shadow-primary/25 rounded-xl gap-2 px-6 h-12 shrink-0 cursor-pointer"
+              className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold shadow-lg shadow-primary/25 rounded-xl gap-2 px-6 h-11 shrink-0 cursor-pointer"
             >
               <Plus className="w-5 h-5" />
               Create Tournament
@@ -231,37 +246,53 @@ export default function TournamentsLobbyPage() {
               <Sparkles className="w-5 h-5 text-amber-400 animate-pulse" />
               Pending Tournament Invites ({invites.length})
             </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {invites.map((inv) => (
                 <Card key={inv.id} className="border-amber-500/30 bg-amber-500/5 hover:border-amber-500/50 transition-colors">
                   <CardContent className="p-4 flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
                       <UserAvatar
                         src={inv.tournament.creator.avatar_url}
                         username={inv.tournament.creator.username}
                         size="md"
                       />
-                      <div>
-                        <h3 className="text-sm font-bold text-foreground">{inv.tournament.title}</h3>
-                        <p className="text-xs text-muted-foreground">
+                      <div className="min-w-0">
+                        <h3 className="text-sm font-bold text-foreground truncate">{inv.tournament.title}</h3>
+                        <p className="text-xs text-muted-foreground truncate">
                           Invited by <span className="text-primary font-semibold">@{inv.tournament.creator.username}</span>
                         </p>
                       </div>
                     </div>
 
-                    <Button
-                      size="sm"
-                      onClick={() => handleAcceptInvite(inv.tournamentId)}
-                      disabled={acceptingId === inv.tournamentId}
-                      className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold gap-1 px-4 shrink-0"
-                    >
-                      {acceptingId === inv.tournamentId ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                      )}
-                      <span>Accept & Join Bracket</span>
-                    </Button>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleDeclineInvite(inv.tournamentId)}
+                        disabled={decliningId === inv.tournamentId || acceptingId === inv.tournamentId}
+                        className="border-border text-muted-foreground hover:text-rose-400 hover:border-rose-500/40 text-xs font-semibold px-3 h-8 cursor-pointer"
+                      >
+                        {decliningId === inv.tournamentId ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          'Decline'
+                        )}
+                      </Button>
+
+                      <Button
+                        size="sm"
+                        onClick={() => handleAcceptInvite(inv.tournamentId)}
+                        disabled={acceptingId === inv.tournamentId || decliningId === inv.tournamentId}
+                        className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold gap-1 px-3 h-8 cursor-pointer"
+                      >
+                        {acceptingId === inv.tournamentId ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                        )}
+                        <span>Accept</span>
+                      </Button>
+                    </div>
                   </CardContent>
                 </Card>
               ))}
@@ -281,8 +312,8 @@ export default function TournamentsLobbyPage() {
           </div>
 
           {isLoading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 py-8">
-              {[...Array(3)].map((_, i) => (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-8">
+              {[...Array(4)].map((_, i) => (
                 <Card key={i} className="border-border bg-card">
                   <CardContent className="p-5 space-y-3">
                     <div className="skeleton h-5 w-3/4" />
@@ -308,7 +339,7 @@ export default function TournamentsLobbyPage() {
               </CardContent>
             </Card>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {tournaments.map((t) => (
                 <Card key={t.id} className="border-border bg-card/70 backdrop-blur-xs hover:border-primary/50 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-primary/5 flex flex-col justify-between">
                   <CardHeader className="pb-3">
@@ -318,7 +349,7 @@ export default function TournamentsLobbyPage() {
                         t.status === 'IN_PROGRESS' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 animate-pulse' :
                         'bg-purple-500/10 text-purple-400 border-purple-500/20'
                       }`}>
-                        {t.status === 'WAITING_FOR_PLAYERS' ? `Waiting (${t.participants.length}/8)` :
+                        {t.status === 'WAITING_FOR_PLAYERS' ? `Waiting (${t.participants.length}/${t.maxPlayers || 8})` :
                          t.status === 'IN_PROGRESS' ? 'In Progress' : 'Completed'}
                       </span>
                       <span className="text-[11px] text-muted-foreground font-mono">
@@ -350,12 +381,12 @@ export default function TournamentsLobbyPage() {
                     <div className="space-y-1.5">
                       <div className="flex justify-between text-xs font-medium">
                         <span className="text-muted-foreground">Roster Slots:</span>
-                        <span className="text-foreground font-mono">{t.participants.length} / 8</span>
+                        <span className="text-foreground font-mono">{t.participants.length} / {t.maxPlayers || 8}</span>
                       </div>
                       <div className="h-1.5 w-full bg-surface rounded-full overflow-hidden">
                         <div
                           className="h-full bg-primary transition-all duration-500"
-                          style={{ width: `${(t.participants.length / 8) * 100}%` }}
+                          style={{ width: `${(t.participants.length / (t.maxPlayers || 8)) * 100}%` }}
                         />
                       </div>
                     </div>
@@ -372,7 +403,7 @@ export default function TournamentsLobbyPage() {
             </div>
           )}
         </div>
-      </main>
+      </div>
 
       {/* Create Tournament Modal */}
       {isCreateOpen && (
@@ -517,6 +548,6 @@ export default function TournamentsLobbyPage() {
           </Card>
         </div>
       )}
-    </div>
+    </>
   )
 }

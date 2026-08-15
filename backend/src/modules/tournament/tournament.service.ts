@@ -351,6 +351,16 @@ export const acceptTournamentInvite = async (
     data: { status: "ACCEPTED" },
   });
 
+  const acceptingUser = await db.user.findUnique({
+    where: { id: userId },
+    select: { id: true, username: true, name: true, avatar_url: true },
+  });
+
+  io.to(`tournament:${tournamentId}`).emit("tournament:invite_accepted", {
+    tournamentId,
+    user: acceptingUser || { id: userId, username: "Player" },
+  });
+
   // Check if tournament is now full
   const updatedParticipantsCount = currentCount + 1;
   if (updatedParticipantsCount === maxPlayers) {
@@ -531,7 +541,18 @@ export const cancelTournamentService = async (
     data: { status: TournamentStatus.CANCELLED },
   });
 
-  // 2. Mark any active 1v1 matches CANCELLED
+  // 2. Mark any pending invites CANCELLED
+  const pendingInvites = await db.tournamentInvite.findMany({
+    where: { tournamentId, status: "PENDING" },
+    select: { receiverId: true },
+  });
+
+  await db.tournamentInvite.updateMany({
+    where: { tournamentId, status: "PENDING" },
+    data: { status: "CANCELLED" },
+  });
+
+  // 3. Mark any active 1v1 matches CANCELLED
   for (const tm of tournament.matches) {
     if (tm.matchId) {
       await db.match.updateMany({
@@ -543,15 +564,59 @@ export const cancelTournamentService = async (
 
   const updatedDetails = await getTournamentDetails(tournamentId);
 
-  // 3. Broadcast Socket event to all room participants
+  // 4. Broadcast Socket event to all room participants and invited users
   io.to(`tournament:${tournamentId}`).emit("tournament:cancelled", updatedDetails);
+  for (const inv of pendingInvites) {
+    io.to(`user:${inv.receiverId}`).emit("tournament:cancelled", updatedDetails);
+  }
 
   return updatedDetails;
 };
 
+export const declineTournamentInvite = async (
+  io: Server,
+  tournamentId: string,
+  userId: string
+) => {
+  await db.tournamentInvite.updateMany({
+    where: { tournamentId, receiverId: userId },
+    data: { status: "DECLINED" },
+  });
+
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    select: { id: true, username: true, name: true, avatar_url: true },
+  });
+
+  const tournament = await db.tournament.findUnique({
+    where: { id: tournamentId },
+    select: { creatorId: true },
+  });
+
+  const payload = {
+    tournamentId,
+    receiverId: userId,
+    user: user || { id: userId, username: "Player" },
+  };
+
+  if (tournament) {
+    io.to(`user:${tournament.creatorId}`).emit("tournament:invite_declined", payload);
+  }
+
+  io.to(`tournament:${tournamentId}`).emit("tournament:invite_declined", payload);
+
+  return { success: true };
+};
+
 export const getUserTournamentInvites = async (userId: string) => {
   return await db.tournamentInvite.findMany({
-    where: { receiverId: userId, status: "PENDING" },
+    where: {
+      receiverId: userId,
+      status: "PENDING",
+      tournament: {
+        status: TournamentStatus.WAITING_FOR_PLAYERS,
+      },
+    },
     include: {
       tournament: {
         include: {

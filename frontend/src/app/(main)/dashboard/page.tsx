@@ -86,7 +86,7 @@ export default function DashboardPage() {
   const [selectedTopic, setSelectedTopic] = useState<string | null>(null)
   const [sortOrder, setSortOrder] = useState<'number' | 'difficulty' | 'title'>('number')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
-  const [activeMatchmakers, setActiveMatchmakers] = useState<number>(32)
+  const [activeMatchmakers, setActiveMatchmakers] = useState<number>(0)
   const [hoveredPtIndex, setHoveredPtIndex] = useState<number | null>(null)
 
   // Infinite Scroll Pagination State
@@ -97,12 +97,27 @@ export default function DashboardPage() {
   useEffect(() => {
     fetchDashboardData()
 
-    // Randomize matchmaking counter slightly to keep it feeling live & dynamic
-    const timer = setInterval(() => {
-      setActiveMatchmakers(prev => Math.max(18, prev + Math.floor(Math.random() * 5) - 2))
-    }, 5000)
+    // Fetch initial actual matchmakers queue count
+    api.get('/match/queue')
+      .then(res => {
+        if (res.data?.success && typeof res.data.count === 'number') {
+          setActiveMatchmakers(res.data.count)
+        }
+      })
+      .catch(() => {})
 
-    return () => clearInterval(timer)
+    // Listen for real-time queue count updates via Socket.IO
+    const handleQueueUpdate = (data: { count?: number }) => {
+      if (typeof data?.count === 'number') {
+        setActiveMatchmakers(data.count)
+      }
+    }
+
+    socket.on('matchmaking:queue_update', handleQueueUpdate)
+
+    return () => {
+      socket.off('matchmaking:queue_update', handleQueueUpdate)
+    }
   }, [])
 
   const observerTargetRef = useRef<HTMLDivElement>(null)

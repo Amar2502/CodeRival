@@ -195,17 +195,33 @@ export default function BattlesPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedResultFilter, setSelectedResultFilter] = useState<'ALL' | 'VICTORY' | 'DEFEAT' | 'DRAW'>('ALL')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
-  const [activeMatchmakers, setActiveMatchmakers] = useState<number>(32)
+  const [activeMatchmakers, setActiveMatchmakers] = useState<number>(0)
   const [hoveredPtIndex, setHoveredPtIndex] = useState<number | null>(null)
 
   useEffect(() => {
     fetchBattlePageData()
 
-    const timer = setInterval(() => {
-      setActiveMatchmakers(prev => Math.max(18, prev + Math.floor(Math.random() * 5) - 2))
-    }, 5000)
+    // Fetch initial actual matchmakers queue count
+    api.get('/match/queue')
+      .then(res => {
+        if (res.data?.success && typeof res.data.count === 'number') {
+          setActiveMatchmakers(res.data.count)
+        }
+      })
+      .catch(() => {})
 
-    return () => clearInterval(timer)
+    // Listen for real-time queue count updates via Socket.IO
+    const handleQueueUpdate = (data: { count?: number }) => {
+      if (typeof data?.count === 'number') {
+        setActiveMatchmakers(data.count)
+      }
+    }
+
+    socket.on('matchmaking:queue_update', handleQueueUpdate)
+
+    return () => {
+      socket.off('matchmaking:queue_update', handleQueueUpdate)
+    }
   }, [])
 
   // Timer effect for queue duration

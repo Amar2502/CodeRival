@@ -10,6 +10,26 @@ import {
 import { getUserActiveMatch } from "../../socket/socketManager";
 import { startMatch } from "../match/match.service";
 
+export const notifyQueueUpdate = async (io: Server): Promise<void> => {
+  try {
+    const rawPlayers = await getWaitingPlayers();
+    io.emit("matchmaking:queue_update", {
+      count: rawPlayers.length,
+      players: rawPlayers.map((p) => ({
+        userId: p.userId,
+        username: p.username || `coder_${p.userId.slice(-4)}`,
+        name: p.name || p.username || "Coder",
+        rating: p.rating,
+        avatar_url: p.avatar_url || null,
+        avatar_id: p.avatar_id || null,
+        joinedAt: p.joinedAt,
+      })),
+    });
+  } catch (err) {
+    console.error("Queue notification error:", err);
+  }
+};
+
 export const joinQueue = async (player: QueuePlayer): Promise<MatchmakingResult> => {
   // 1. Prevent duplicate queue entries
   const alreadyInQueue = await isPlayerInQueue(player.userId);
