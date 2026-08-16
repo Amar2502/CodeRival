@@ -8,6 +8,7 @@ import { Footer } from '@/components/footer'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
 import {
   User,
   CheckCircle2,
@@ -415,42 +416,57 @@ function ProfileContent() {
             
             {/* Avatar & Basic Identity Side-by-Side */}
             <div className="flex flex-row items-center gap-4 sm:gap-5 w-full">
-              <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full border-2 border-border bg-surface flex items-center justify-center text-foreground font-extrabold text-3xl sm:text-4xl overflow-hidden shadow-xl shrink-0">
-                {displayUser?.avatar_url || displayUser?.avatar ? (
-                  <img
-                    src={displayUser.avatar_url || displayUser.avatar}
-                    alt={displayUser.username}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <span>{displayUser?.name?.charAt(0) || displayUser?.username?.charAt(0) || 'U'}</span>
-                )}
-              </div>
+              {isLoadingProfile ? (
+                <>
+                  <Skeleton className="w-24 h-24 sm:w-28 sm:h-28 rounded-full shrink-0" />
+                  <div className="space-y-2 flex-1">
+                    <Skeleton className="h-7 w-40 rounded-lg" />
+                    <Skeleton className="h-4 w-28 rounded-md" />
+                    <Skeleton className="h-4 w-20 rounded-md" />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full border-2 border-border bg-surface flex items-center justify-center text-foreground font-extrabold text-3xl sm:text-4xl overflow-hidden shadow-xl shrink-0">
+                    {displayUser?.avatar_url || displayUser?.avatar ? (
+                      <img
+                        src={displayUser.avatar_url || displayUser.avatar}
+                        alt={displayUser.username}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <span>{displayUser?.name?.charAt(0) || displayUser?.username?.charAt(0) || 'U'}</span>
+                    )}
+                  </div>
 
-              {/* Display Name, Handle, Rank beside photo */}
-              <div className="space-y-1 text-left min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground truncate">
-                    {displayUser?.name || displayUser?.username || 'User'}
-                  </h1>
-                  {displayUser?.emailVerified && (
-                    <span title="Verified Coder">
-                      <BadgeCheck className="w-5 h-5 fill-blue-500 text-background shrink-0" />
-                    </span>
-                  )}
-                </div>
+                  {/* Display Name, Handle, Rank beside photo */}
+                  <div className="space-y-1 text-left min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground truncate">
+                        {displayUser?.name || displayUser?.username || 'User'}
+                      </h1>
+                      {displayUser?.emailVerified && (
+                        <span title="Verified Coder">
+                          <BadgeCheck className="w-5 h-5 fill-blue-500 text-background shrink-0" />
+                        </span>
+                      )}
+                    </div>
 
-                <p className="text-sm font-mono text-muted-foreground truncate">
-                  @{displayUser?.username || 'username'}
-                </p>
-                <p className="text-sm font-semibold text-foreground/90 pt-0.5">
-                  Rank {formatOrdinalRank(userRank || displayUser?.rank)}
-                </p>
-              </div>
+                    <p className="text-sm font-mono text-muted-foreground truncate">
+                      @{displayUser?.username || 'username'}
+                    </p>
+                    <p className="text-sm font-semibold text-foreground/90 pt-0.5">
+                      Rank {formatOrdinalRank(userRank || displayUser?.rank)}
+                    </p>
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Action Buttons: Edit Profile for self, Friend/Challenge for others */}
-            {isSelfProfile ? (
+            {isLoadingProfile ? (
+              <Skeleton className="w-full h-10 rounded-xl" />
+            ) : isSelfProfile ? (
               <Link
                 href="/settings/profile"
                 className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 px-6 rounded-xl shadow-md transition-all cursor-pointer text-sm font-sans tracking-wide text-center block"
@@ -476,81 +492,91 @@ function ProfileContent() {
 
             {/* Profile Info Details List */}
             <div className="w-full space-y-3 text-sm font-sans text-foreground/90 pt-1 text-left">
-              {/* 1. Location Pin: Country */}
-              <div className="flex items-center gap-2.5">
-                <MapPin className="w-4 h-4 text-muted-foreground shrink-0" />
-                <span className={displayUser?.country ? 'text-foreground' : 'text-muted-foreground italic text-xs'}>
-                  {displayUser?.country || 'No location set'}
-                </span>
-              </div>
+              {isLoadingProfile ? (
+                <>
+                  <Skeleton className="h-5 w-3/4 rounded-md" />
+                  <Skeleton className="h-5 w-1/2 rounded-md" />
+                  <Skeleton className="h-5 w-2/3 rounded-md" />
+                </>
+              ) : (
+                <>
+                  {/* 1. Location Pin: Country */}
+                  <div className="flex items-center gap-2.5">
+                    <MapPin className="w-4 h-4 text-muted-foreground shrink-0" />
+                    <span className={displayUser?.country ? 'text-foreground' : 'text-muted-foreground italic text-xs'}>
+                      {displayUser?.country || 'No location set'}
+                    </span>
+                  </div>
 
-              {/* 2. Website Globe: Website */}
-              <div className="flex items-center gap-2.5 font-mono text-accent">
-                <Globe className="w-4 h-4 text-muted-foreground shrink-0" />
-                {displayUser?.website ? (
-                  <a
-                    href={displayUser.website.startsWith('http') ? displayUser.website : `https://${displayUser.website}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="hover:underline hover:text-accent/90 truncate"
-                  >
-                    {displayUser.website.replace(/^https?:\/\//, '')}
-                  </a>
-                ) : (
-                  <span className="text-muted-foreground italic text-xs font-sans">No website set</span>
-                )}
-              </div>
+                  {/* 2. Website Globe: Website */}
+                  <div className="flex items-center gap-2.5 font-mono text-accent">
+                    <Globe className="w-4 h-4 text-muted-foreground shrink-0" />
+                    {displayUser?.website ? (
+                      <a
+                        href={displayUser.website.startsWith('http') ? displayUser.website : `https://${displayUser.website}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="hover:underline hover:text-accent/90 truncate"
+                      >
+                        {displayUser.website.replace(/^https?:\/\//, '')}
+                      </a>
+                    ) : (
+                      <span className="text-muted-foreground italic text-xs font-sans">No website set</span>
+                    )}
+                  </div>
 
-              {/* 3. GitHub */}
-              <div className="flex items-center gap-2.5 font-mono text-foreground/90">
-                <FaGithub className="w-4 h-4 text-muted-foreground shrink-0" />
-                {displayUser?.githubHandle ? (
-                  <a
-                    href={`https://github.com/${displayUser.githubHandle}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="hover:underline hover:text-accent truncate"
-                  >
-                    {displayUser.githubHandle}
-                  </a>
-                ) : (
-                  <span className="text-muted-foreground italic text-xs font-sans">No GitHub handle</span>
-                )}
-              </div>
+                  {/* 3. GitHub */}
+                  <div className="flex items-center gap-2.5 font-mono text-foreground/90">
+                    <FaGithub className="w-4 h-4 text-muted-foreground shrink-0" />
+                    {displayUser?.githubHandle ? (
+                      <a
+                        href={`https://github.com/${displayUser.githubHandle}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="hover:underline hover:text-accent truncate"
+                      >
+                        {displayUser.githubHandle}
+                      </a>
+                    ) : (
+                      <span className="text-muted-foreground italic text-xs font-sans">No GitHub handle</span>
+                    )}
+                  </div>
 
-              {/* 4. Twitter / X */}
-              <div className="flex items-center gap-2.5 font-mono text-foreground/90">
-                <FaXTwitter className="w-4 h-4 text-muted-foreground shrink-0" />
-                {displayUser?.twitterHandle ? (
-                  <a
-                    href={`https://x.com/${displayUser.twitterHandle}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="hover:underline hover:text-accent truncate"
-                  >
-                    {displayUser.twitterHandle}
-                  </a>
-                ) : (
-                  <span className="text-muted-foreground italic text-xs font-sans">No Twitter handle</span>
-                )}
-              </div>
+                  {/* 4. Twitter / X */}
+                  <div className="flex items-center gap-2.5 font-mono text-foreground/90">
+                    <FaXTwitter className="w-4 h-4 text-muted-foreground shrink-0" />
+                    {displayUser?.twitterHandle ? (
+                      <a
+                        href={`https://x.com/${displayUser.twitterHandle}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="hover:underline hover:text-accent truncate"
+                      >
+                        {displayUser.twitterHandle}
+                      </a>
+                    ) : (
+                      <span className="text-muted-foreground italic text-xs font-sans">No Twitter handle</span>
+                    )}
+                  </div>
 
-              {/* 5. LinkedIn */}
-              <div className="flex items-center gap-2.5 font-mono text-foreground/90">
-                <FaLinkedin className="w-4 h-4 text-muted-foreground shrink-0" />
-                {displayUser?.linkedinHandle ? (
-                  <a
-                    href={`https://linkedin.com/in/${displayUser.linkedinHandle}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="hover:underline hover:text-accent truncate"
-                  >
-                    {displayUser.linkedinHandle}
-                  </a>
-                ) : (
-                  <span className="text-muted-foreground italic text-xs font-sans">No LinkedIn handle</span>
-                )}
-              </div>
+                  {/* 5. LinkedIn */}
+                  <div className="flex items-center gap-2.5 font-mono text-foreground/90">
+                    <FaLinkedin className="w-4 h-4 text-muted-foreground shrink-0" />
+                    {displayUser?.linkedinHandle ? (
+                      <a
+                        href={`https://linkedin.com/in/${displayUser.linkedinHandle}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="hover:underline hover:text-accent truncate"
+                      >
+                        {displayUser.linkedinHandle}
+                      </a>
+                    ) : (
+                      <span className="text-muted-foreground italic text-xs font-sans">No LinkedIn handle</span>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
@@ -572,51 +598,60 @@ function ProfileContent() {
 
             {/* 4 Stat Cards Row */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              
-              {/* Card 1: Rating */}
-              <div className="p-4 sm:p-5 rounded-2xl bg-card border border-border shadow-xs flex flex-col justify-between">
-                <span className="text-sm font-sans text-muted-foreground font-medium">Rating</span>
-                <span className="text-2xl sm:text-3xl font-black text-foreground mt-3 tracking-tight font-sans">
-                  {userRating}
-                </span>
-              </div>
+              {isLoadingProfile ? (
+                <>
+                  <Skeleton className="h-24 rounded-2xl" />
+                  <Skeleton className="h-24 rounded-2xl" />
+                  <Skeleton className="h-24 rounded-2xl" />
+                  <Skeleton className="h-24 rounded-2xl" />
+                </>
+              ) : (
+                <>
+                  {/* Card 1: Rating */}
+                  <div className="p-4 sm:p-5 rounded-2xl bg-card border border-border shadow-xs flex flex-col justify-between">
+                    <span className="text-sm font-sans text-muted-foreground font-medium">Rating</span>
+                    <span className="text-2xl sm:text-3xl font-black text-foreground mt-3 tracking-tight font-sans">
+                      {userRating}
+                    </span>
+                  </div>
 
-              {/* Card 2: Problems */}
-              <div className="p-4 sm:p-5 rounded-2xl bg-card border border-border shadow-xs flex flex-col justify-between">
-                <span className="text-sm font-sans text-muted-foreground font-medium">problems</span>
-                <span className="text-2xl sm:text-3xl font-black text-foreground mt-3 tracking-tight font-sans">
-                  {problemsSolved}
-                </span>
-              </div>
+                  {/* Card 2: Problems */}
+                  <div className="p-4 sm:p-5 rounded-2xl bg-card border border-border shadow-xs flex flex-col justify-between">
+                    <span className="text-sm font-sans text-muted-foreground font-medium">problems</span>
+                    <span className="text-2xl sm:text-3xl font-black text-foreground mt-3 tracking-tight font-sans">
+                      {problemsSolved}
+                    </span>
+                  </div>
 
-              {/* Card 3: Matches Played */}
-              <div className="p-4 sm:p-5 rounded-2xl bg-card border border-border shadow-xs flex flex-col justify-between">
-                <span className="text-sm font-sans text-muted-foreground font-medium">Matches Played</span>
-                <div className="mt-3">
-                  <span className="text-2xl sm:text-3xl font-black text-foreground tracking-tight block font-sans">
-                    {matchesPlayed}
-                  </span>
-                  <span className="text-xs text-muted-foreground font-mono block mt-1">
-                    {wins} W / {losses} L / {draws} D
-                  </span>
-                </div>
-              </div>
+                  {/* Card 3: Matches Played */}
+                  <div className="p-4 sm:p-5 rounded-2xl bg-card border border-border shadow-xs flex flex-col justify-between">
+                    <span className="text-sm font-sans text-muted-foreground font-medium">Matches Played</span>
+                    <div className="mt-3">
+                      <span className="text-2xl sm:text-3xl font-black text-foreground tracking-tight block font-sans">
+                        {matchesPlayed}
+                      </span>
+                      <span className="text-xs text-muted-foreground font-mono block mt-1">
+                        {wins} W / {losses} L / {draws} D
+                      </span>
+                    </div>
+                  </div>
 
-              {/* Card 4: Win Ratio */}
-              <div className="p-4 sm:p-5 rounded-2xl bg-card border border-border shadow-xs flex flex-col justify-between">
-                <span className="text-sm font-sans text-muted-foreground font-medium">Win Ratio</span>
-                <span className="text-2xl sm:text-3xl font-black text-foreground mt-3 tracking-tight font-sans">
-                  {winRate} %
-                </span>
-              </div>
-
+                  {/* Card 4: Win Ratio */}
+                  <div className="p-4 sm:p-5 rounded-2xl bg-card border border-border shadow-xs flex flex-col justify-between">
+                    <span className="text-sm font-sans text-muted-foreground font-medium">Win Ratio</span>
+                    <span className="text-2xl sm:text-3xl font-black text-foreground mt-3 tracking-tight font-sans">
+                      {winRate} %
+                    </span>
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Rating Chart Box */}
             <div className="rounded-2xl bg-card border border-border p-5 sm:p-6 shadow-xs space-y-4">
               <h2 className="text-lg font-bold text-foreground font-sans tracking-wide">Rating Chart</h2>
               <div className="pt-2">
-                <RatingChart history={ratingHistory} currentRating={userRating} />
+                <RatingChart history={ratingHistory} currentRating={userRating} isLoading={isLoadingProfile} />
               </div>
             </div>
 
@@ -650,7 +685,11 @@ function ProfileContent() {
               {/* Tab 1 Content: Recent Matches List */}
               {activeTab === 'matches' && (
                 <div className="space-y-3 pt-1">
-                  {recentMatches.length === 0 ? (
+                  {isLoadingProfile ? (
+                    Array.from({ length: 4 }).map((_, i) => (
+                      <Skeleton key={i} className="h-16 w-full rounded-xl" />
+                    ))
+                  ) : recentMatches.length === 0 ? (
                     <div className="p-8 text-center rounded-xl bg-card border border-border text-muted-foreground text-sm font-mono">
                       No recent matches played yet.
                     </div>
@@ -696,7 +735,11 @@ function ProfileContent() {
               {/* Tab 2 Content: Submissions List */}
               {activeTab === 'submissions' && (
                 <div className="space-y-3 pt-1">
-                  {recentSubmissions.length === 0 ? (
+                  {isLoadingProfile ? (
+                    Array.from({ length: 4 }).map((_, i) => (
+                      <Skeleton key={i} className="h-16 w-full rounded-xl" />
+                    ))
+                  ) : recentSubmissions.length === 0 ? (
                     <div className="p-8 text-center rounded-xl bg-card border border-border text-muted-foreground text-sm font-mono">
                       No recent submissions recorded yet.
                     </div>

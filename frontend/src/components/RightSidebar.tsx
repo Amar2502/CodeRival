@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo, useCallback } from 'react'
 import Link from 'next/link'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Users, UserPlus, TrendingUp } from 'lucide-react'
 import { useAuthStore } from '@/lib/authStore'
 import { api } from '@/lib/axios'
@@ -47,32 +48,29 @@ interface RatingPoint {
   delta?: number
 }
 
-import { useSidebarStore } from '@/lib/sidebarStore'
+import { useUserProfile, useFriends, useGlobalLeaderboard } from '@/hooks/queries'
 
 export function RightSidebar() {
   const { user: authUser } = useAuthStore()
-  const { profile, friends, ratingHistory, userRank, fetchSidebarData } = useSidebarStore()
+  const { data: profileData } = useUserProfile('me')
+  const { data: friendsData } = useFriends()
+  const { data: leaderboardData } = useGlobalLeaderboard(1, 50)
   const [hoveredPtIndex, setHoveredPtIndex] = useState<number | null>(null)
 
-  useEffect(() => {
-    // Always fetch fresh sidebar data on mount so ratings, rating chart, and stats stay updated
-    fetchSidebarData(true)
+  const profile = profileData?.user as UserProfileData | undefined
+  const ratingHistory = (profileData?.ratingHistory || []) as RatingPoint[]
+  const friends = (friendsData?.friends || []) as FriendItem[]
 
-    // Force refresh store on real-time socket updates
-    const handleUpdate = () => {
-      fetchSidebarData(true)
+  const userRank = useMemo(() => {
+    if (leaderboardData?.currentUserRank?.rank) {
+      const r = leaderboardData.currentUserRank.rank
+      const s = ['th', 'st', 'nd', 'rd']
+      const v = r % 100
+      const ordinalSuffix = s[(v - 20) % 10] || s[v] || s[0]
+      return `${r}${ordinalSuffix}`
     }
-
-    socket.on('friend:request_accepted', handleUpdate)
-    socket.on('friend:removed', handleUpdate)
-    socket.on('match:ended', handleUpdate)
-
-    return () => {
-      socket.off('friend:request_accepted', handleUpdate)
-      socket.off('friend:removed', handleUpdate)
-      socket.off('match:ended', handleUpdate)
-    }
-  }, [fetchSidebarData])
+    return '-'
+  }, [leaderboardData])
 
   const handleChallenge = (targetUserId: string) => {
     socket.emit('friend:challenge_send', { targetUserId })
@@ -152,25 +150,36 @@ export function RightSidebar() {
 
       {/* 1. STATS GRID (2x2) */}
       <div className="grid grid-cols-2 gap-px bg-border rounded-2xl overflow-hidden border border-border shadow-md">
-        <div className="bg-card p-5 text-center flex flex-col items-center justify-center">
-          <div className="text-3xl font-black text-foreground tracking-tight">{userRating}</div>
-          <div className="text-xs text-muted-foreground font-medium mt-1">Rating</div>
-        </div>
+        {!profileData ? (
+          <>
+            <div className="bg-card p-5 flex flex-col items-center justify-center space-y-2"><Skeleton className="h-8 w-16 rounded-md" /><Skeleton className="h-3 w-12 rounded-sm" /></div>
+            <div className="bg-card p-5 flex flex-col items-center justify-center space-y-2"><Skeleton className="h-8 w-16 rounded-md" /><Skeleton className="h-3 w-12 rounded-sm" /></div>
+            <div className="bg-card p-5 flex flex-col items-center justify-center space-y-2"><Skeleton className="h-8 w-16 rounded-md" /><Skeleton className="h-3 w-12 rounded-sm" /></div>
+            <div className="bg-card p-5 flex flex-col items-center justify-center space-y-2"><Skeleton className="h-8 w-16 rounded-md" /><Skeleton className="h-3 w-12 rounded-sm" /></div>
+          </>
+        ) : (
+          <>
+            <div className="bg-card p-5 text-center flex flex-col items-center justify-center">
+              <div className="text-3xl font-black text-foreground tracking-tight">{userRating}</div>
+              <div className="text-xs text-muted-foreground font-medium mt-1">Rating</div>
+            </div>
 
-        <div className="bg-card p-5 text-center flex flex-col items-center justify-center">
-          <div className="text-3xl font-black text-foreground tracking-tight">{totalMatches}</div>
-          <div className="text-xs text-muted-foreground font-medium mt-1">Matches</div>
-        </div>
+            <div className="bg-card p-5 text-center flex flex-col items-center justify-center">
+              <div className="text-3xl font-black text-foreground tracking-tight">{totalMatches}</div>
+              <div className="text-xs text-muted-foreground font-medium mt-1">Matches</div>
+            </div>
 
-        <div className="bg-card p-5 text-center flex flex-col items-center justify-center">
-          <div className="text-3xl font-black text-foreground tracking-tight">{winRate}%</div>
-          <div className="text-xs text-muted-foreground font-medium mt-1">Win Rate</div>
-        </div>
+            <div className="bg-card p-5 text-center flex flex-col items-center justify-center">
+              <div className="text-3xl font-black text-foreground tracking-tight">{winRate}%</div>
+              <div className="text-xs text-muted-foreground font-medium mt-1">Win Rate</div>
+            </div>
 
-        <div className="bg-card p-5 text-center flex flex-col items-center justify-center">
-          <div className="text-3xl font-black text-foreground tracking-tight">{userRank}</div>
-          <div className="text-xs text-muted-foreground font-medium mt-1">Rank</div>
-        </div>
+            <div className="bg-card p-5 text-center flex flex-col items-center justify-center">
+              <div className="text-3xl font-black text-foreground tracking-tight">{userRank}</div>
+              <div className="text-xs text-muted-foreground font-medium mt-1">Rank</div>
+            </div>
+          </>
+        )}
       </div>
 
       {/* 2. FRIENDS WIDGET */}
@@ -179,11 +188,17 @@ export function RightSidebar() {
           <div className="flex items-center justify-between border-b border-border pb-3">
             <h3 className="font-extrabold text-base text-foreground flex items-center gap-2">
               <Users className="w-4 h-4 text-accent" />
-              <span>Friends ({friends.length})</span>
+              <span>Friends {!friendsData ? '' : `(${friends.length})`}</span>
             </h3>
           </div>
 
-          {displayFriends.length === 0 ? (
+          {!friendsData ? (
+            <div className="space-y-3">
+              <Skeleton className="h-10 w-full rounded-xl" />
+              <Skeleton className="h-10 w-full rounded-xl" />
+              <Skeleton className="h-10 w-full rounded-xl" />
+            </div>
+          ) : displayFriends.length === 0 ? (
             <div className="py-4 px-2 text-center space-y-3">
               <div className="w-10 h-10 rounded-full bg-accent/10 border border-accent/20 flex items-center justify-center mx-auto text-accent">
                 <UserPlus className="w-5 h-5" />

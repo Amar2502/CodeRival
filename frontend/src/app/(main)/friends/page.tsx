@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Users,
   UserPlus,
@@ -68,16 +69,42 @@ interface RatingPoint {
   matchId?: string | null;
 }
 
+import { useQueryClient } from "@tanstack/react-query";
+import { useFriends, useUserProfile, useGlobalLeaderboard } from "@/hooks/queries";
+
 export default function FriendsPage() {
   const { user: currentUser, setUser } = useAuthStore();
+  const queryClient = useQueryClient();
 
-  // Data states
-  const [friends, setFriends] = useState<FriendItem[]>([]);
-  const [incoming, setIncoming] = useState<IncomingRequest[]>([]);
-  const [outgoing, setOutgoing] = useState<OutgoingRequest[]>([]);
-  const [ratingHistory, setRatingHistory] = useState<RatingPoint[]>([]);
-  const [userRank, setUserRank] = useState<string>("2nd");
-  const [loading, setLoading] = useState<boolean>(true);
+  // TanStack Query Hooks
+  const { data: friendsData, isLoading: isFriendsLoading } = useFriends();
+  const { data: profileData } = useUserProfile("me");
+  const { data: leaderboardData } = useGlobalLeaderboard(1, 50);
+
+  const friends = (friendsData?.friends || []) as FriendItem[];
+  const incoming = (friendsData?.incomingRequests || []) as IncomingRequest[];
+  const outgoing = (friendsData?.outgoingRequests || []) as OutgoingRequest[];
+  const ratingHistory = (profileData?.ratingHistory || []) as RatingPoint[];
+
+  const userRank = useMemo(() => {
+    if (leaderboardData?.currentUserRank?.rank) {
+      const r = leaderboardData.currentUserRank.rank;
+      if (r === 1) return "1st";
+      if (r === 2) return "2nd";
+      if (r === 3) return "3rd";
+      return `${r}th`;
+    }
+    return "-";
+  }, [leaderboardData]);
+
+  const loading = isFriendsLoading && !friendsData;
+
+  // Sync authStore user profile
+  useEffect(() => {
+    if (profileData?.user) {
+      setUser(profileData.user);
+    }
+  }, [profileData, setUser]);
 
   // Search & Filter states
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -87,56 +114,9 @@ export default function FriendsPage() {
   const [showOutgoing, setShowOutgoing] = useState<boolean>(false);
   const [hoveredPtIndex, setHoveredPtIndex] = useState<number | null>(null);
 
-  // Fetch friends, requests, profile & rating history
-  const fetchData = useCallback(async () => {
-    try {
-      setLoading(true);
-
-      // 1. Fetch friends & requests
-      const res = await api.get("/friends");
-      setFriends(res.data.friends || []);
-      setIncoming(res.data.incomingRequests || []);
-      setOutgoing(res.data.outgoingRequests || []);
-
-      // 2. Fetch rating history & user profile
-      try {
-        const profileRes = await api.get("/user/profile/me");
-        if (profileRes.data?.user) {
-          setUser(profileRes.data.user);
-        }
-        if (profileRes.data?.ratingHistory) {
-          setRatingHistory(profileRes.data.ratingHistory);
-        }
-      } catch (e) {
-        console.error("Failed to fetch profile history:", e);
-      }
-
-      // 3. Fetch global rank
-      try {
-        const rankRes = await api.get("/leaderboard/global?limit=50");
-        if (rankRes.data?.currentUserRank) {
-          const r = rankRes.data.currentUserRank;
-          if (r === 1) setUserRank("1st");
-          else if (r === 2) setUserRank("2nd");
-          else if (r === 3) setUserRank("3rd");
-          else setUserRank(`${r}th`);
-        }
-      } catch (e) {
-        console.error("Failed to fetch rank:", e);
-      }
-
-    } catch (err) {
-      console.error("Failed to fetch friends:", err);
-    } finally {
-      setLoading(false);
-    }
-  }, [setUser]);
-
   useEffect(() => {
-    fetchData();
-
     const handleUpdate = () => {
-      fetchData();
+      queryClient.invalidateQueries({ queryKey: ["friends"] });
     };
 
     socket.on("friend:request_received", handleUpdate);
@@ -152,7 +132,7 @@ export default function FriendsPage() {
       socket.off("friend:request_declined", handleUpdate);
       socket.off("friend:removed", handleUpdate);
     };
-  }, [fetchData]);
+  }, [queryClient]);
 
   // Handle user directory search
   const handleSearch = async (e?: React.FormEvent) => {
@@ -188,7 +168,7 @@ export default function FriendsPage() {
   const handleAccept = async (requestId: string) => {
     try {
       await api.post("/friends/accept", { requestId });
-      fetchData();
+      queryClient.invalidateQueries({ queryKey: ["friends"] });
       if (typeof window !== "undefined") {
         window.dispatchEvent(new CustomEvent("friend_request_updated"));
       }
@@ -200,7 +180,7 @@ export default function FriendsPage() {
   const handleDecline = async (requestId: string) => {
     try {
       await api.post("/friends/decline", { requestId });
-      fetchData();
+      queryClient.invalidateQueries({ queryKey: ["friends"] });
       if (typeof window !== "undefined") {
         window.dispatchEvent(new CustomEvent("friend_request_updated"));
       }
@@ -213,7 +193,7 @@ export default function FriendsPage() {
     if (!confirm("Are you sure you want to remove this friend?")) return;
     try {
       await api.post("/friends/remove", { friendId });
-      fetchData();
+      queryClient.invalidateQueries({ queryKey: ["friends"] });
     } catch (err) {
       console.error("Failed to remove friend:", err);
     }
@@ -588,9 +568,10 @@ export default function FriendsPage() {
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center py-16 gap-2 text-muted-foreground font-mono text-xs">
-            <Loader2 className="w-5 h-5 animate-spin text-primary" />
-            <span>Loading friends directory...</span>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-32 rounded-2xl" />
+            ))}
           </div>
         ) : filteredFriends.length === 0 ? (
           <div className="text-center py-14 p-6 rounded-2xl bg-card border border-border space-y-3">

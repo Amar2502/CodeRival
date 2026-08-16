@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 
+import QueryProvider from "@/providers/QueryProvider";
 import AuthProvider from "@/providers/authProvider";
 import SocketProvider from "../providers/SocketProvider";
 
@@ -52,12 +53,14 @@ export default function RootLayout({
       className="h-full antialiased"
     >
       <body className="min-h-full flex flex-col font-sans">
-        <AuthProvider>
-          <SocketProvider>
-            {children}
-            <Toaster position="bottom-right" richColors />
-          </SocketProvider>
-        </AuthProvider>
+        <QueryProvider>
+          <AuthProvider>
+            <SocketProvider>
+              {children}
+              <Toaster position="bottom-right" richColors />
+            </SocketProvider>
+          </AuthProvider>
+        </QueryProvider>
       </body>
     </html>
   );

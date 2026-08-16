@@ -2,6 +2,7 @@ import { redis } from "../../config/redis";
 import { db } from "../../config/db";
 import { isUserConnected } from "../../socket/socketManager";
 import { calculateUserProblemsSolved } from "../user/user.controller";
+import { getCached } from "../../utils/cache";
 
 const GLOBAL_LEADERBOARD_KEY = "leaderboard:global";
 
@@ -57,54 +58,65 @@ export const syncGlobalLeaderboard = async () => {
  */
 export const getGlobalLeaderboard = async (currentUserId?: string, page: number = 1, limit: number = 20) => {
   try {
-    // 1. Fetch total count of active leaderboard participants
-    const totalPlayersCount = await db.user.count({
-      where: { appearOnLeaderboard: true },
-    });
-
     const skip = (page - 1) * limit;
 
-    // 2. Fetch users ordered by rating desc, then createdAt asc
-    const users = await db.user.findMany({
-      where: { appearOnLeaderboard: true },
-      orderBy: [
-        { rating: "desc" },
-        { createdAt: "asc" },
-      ],
-      select: {
-        id: true,
-        username: true,
-        name: true,
-        avatar_url: true,
-        avatar_id: true,
-        country: true,
-        rating: true,
-        wins: true,
-        losses: true,
-        draws: true,
-        problemsSolved: true,
-        appearOnLeaderboard: true,
-      },
-      skip,
-      take: limit,
-    });
+    // Cache the expensive leaderboard entries (N+1 queries) — 5 min TTL
+    const cachedData = await getCached(
+      `cache:leaderboard:global:${page}:${limit}`,
+      300,
+      async () => {
+        // 1. Fetch total count of active leaderboard participants
+        const totalPlayersCount = await db.user.count({
+          where: { appearOnLeaderboard: true },
+        });
 
-    const leaderboard = await Promise.all(
-      users.map(async (u, index) => {
-        const actualSolved = await calculateUserProblemsSolved(u.id);
-        if (u.problemsSolved !== actualSolved) {
-          await db.user.update({ where: { id: u.id }, data: { problemsSolved: actualSolved } });
-          u.problemsSolved = actualSolved;
-        }
-        return {
-          rank: skip + index + 1,
-          ...u,
-          isOnline: isUserConnected(u.id),
-        };
-      })
+        // 2. Fetch users ordered by rating desc, then createdAt asc
+        const users = await db.user.findMany({
+          where: { appearOnLeaderboard: true },
+          orderBy: [
+            { rating: "desc" },
+            { createdAt: "asc" },
+          ],
+          select: {
+            id: true,
+            username: true,
+            name: true,
+            avatar_url: true,
+            avatar_id: true,
+            country: true,
+            rating: true,
+            wins: true,
+            losses: true,
+            draws: true,
+            problemsSolved: true,
+            appearOnLeaderboard: true,
+          },
+          skip,
+          take: limit,
+        });
+
+        const leaderboard = await Promise.all(
+          users.map(async (u, index) => {
+            const actualSolved = await calculateUserProblemsSolved(u.id);
+            if (u.problemsSolved !== actualSolved) {
+              await db.user.update({ where: { id: u.id }, data: { problemsSolved: actualSolved } });
+              u.problemsSolved = actualSolved;
+            }
+            return {
+              rank: skip + index + 1,
+              ...u,
+              isOnline: isUserConnected(u.id),
+            };
+          })
+        );
+
+        return { leaderboard, totalPlayersCount };
+      }
     );
 
-    // 3. Compute current user's exact global rank
+    const { leaderboard, totalPlayersCount } = cachedData;
+
+    // 3. Compute current user's exact global rank (per-user, not cached)
     let currentUserRankInfo = null;
     if (currentUserId) {
       const currentUser = await db.user.findUnique({
@@ -140,7 +152,7 @@ export const getGlobalLeaderboard = async (currentUserId?: string, page: number 
       leaderboard,
       currentUserRank: currentUserRankInfo,
       totalPlayers: totalPlayersCount,
-      hasMore: skip + users.length < totalPlayersCount,
+      hasMore: skip + leaderboard.length < totalPlayersCount,
       page,
       limit,
     };
@@ -155,91 +167,100 @@ export const getGlobalLeaderboard = async (currentUserId?: string, page: number 
  */
 export const getFriendsLeaderboard = async (currentUserId: string, page: number = 1, limit: number = 20) => {
   try {
-    // 1. Fetch user's accepted friendships
-    const friendships = await db.friendship.findMany({
-      where: {
-        status: "ACCEPTED",
-        OR: [{ senderId: currentUserId }, { receiverId: currentUserId }],
-      },
-      select: { senderId: true, receiverId: true },
-    });
+    // Cache per-user friends leaderboard — 3 min TTL
+    const cachedResult = await getCached(
+      `cache:leaderboard:friends:${currentUserId}:${page}:${limit}`,
+      180,
+      async () => {
+        // 1. Fetch user's accepted friendships
+        const friendships = await db.friendship.findMany({
+          where: {
+            status: "ACCEPTED",
+            OR: [{ senderId: currentUserId }, { receiverId: currentUserId }],
+          },
+          select: { senderId: true, receiverId: true },
+        });
 
-    // 2. Collect unique friend IDs + current user ID
-    const friendIdSet = new Set<string>([currentUserId]);
-    friendships.forEach((f) => {
-      friendIdSet.add(f.senderId === currentUserId ? f.receiverId : f.senderId);
-    });
+        // 2. Collect unique friend IDs + current user ID
+        const friendIdSet = new Set<string>([currentUserId]);
+        friendships.forEach((f) => {
+          friendIdSet.add(f.senderId === currentUserId ? f.receiverId : f.senderId);
+        });
 
-    const targetUserIds = Array.from(friendIdSet);
+        const targetUserIds = Array.from(friendIdSet);
 
-    // 3. Fetch ratings from Redis using pipeline
-    const pipeline = redis.pipeline();
-    targetUserIds.forEach((id) => pipeline.zscore(GLOBAL_LEADERBOARD_KEY, id));
-    const scores = await pipeline.exec();
+        // 3. Fetch ratings from Redis using pipeline
+        const pipeline = redis.pipeline();
+        targetUserIds.forEach((id) => pipeline.zscore(GLOBAL_LEADERBOARD_KEY, id));
+        const scores = await pipeline.exec();
 
-    const redisRatingMap = new Map<string, number>();
-    scores?.forEach(([err, res], idx) => {
-      if (!err && res !== null) {
-        redisRatingMap.set(targetUserIds[idx], parseInt(res as string, 10));
+        const redisRatingMap = new Map<string, number>();
+        scores?.forEach(([err, res], idx) => {
+          if (!err && res !== null) {
+            redisRatingMap.set(targetUserIds[idx], parseInt(res as string, 10));
+          }
+        });
+
+        // 4. Fetch rich profiles from DB
+        const rawUsers = await db.user.findMany({
+          where: { id: { in: targetUserIds } },
+          select: {
+            id: true,
+            username: true,
+            name: true,
+            avatar_url: true,
+            avatar_id: true,
+            country: true,
+            rating: true,
+            wins: true,
+            losses: true,
+            draws: true,
+            problemsSolved: true,
+          },
+        });
+
+        const users = await Promise.all(
+          rawUsers.map(async (u) => {
+            const actualSolved = await calculateUserProblemsSolved(u.id);
+            if (u.problemsSolved !== actualSolved) {
+              await db.user.update({ where: { id: u.id }, data: { problemsSolved: actualSolved } });
+              u.problemsSolved = actualSolved;
+            }
+            return u;
+          })
+        );
+
+        // 5. Merge Redis rating and sort descending
+        const fullLeaderboard = users
+          .map((u) => ({
+            ...u,
+            rating: redisRatingMap.get(u.id) ?? u.rating,
+            isOnline: isUserConnected(u.id),
+            isCurrentUser: u.id === currentUserId,
+          }))
+          .sort((a, b) => b.rating - a.rating)
+          .map((user, index) => ({
+            rank: index + 1,
+            ...user,
+          }));
+
+        const currentUserRankItem = fullLeaderboard.find((u) => u.isCurrentUser);
+
+        const start = (page - 1) * limit;
+        const pagedLeaderboard = fullLeaderboard.slice(start, start + limit);
+
+        return {
+          leaderboard: pagedLeaderboard,
+          currentUserRank: currentUserRankItem ? currentUserRankItem.rank : null,
+          totalFriends: fullLeaderboard.length - 1,
+          hasMore: start + pagedLeaderboard.length < fullLeaderboard.length,
+          page,
+          limit,
+        };
       }
-    });
-
-    // 4. Fetch rich profiles from DB
-    const rawUsers = await db.user.findMany({
-      where: { id: { in: targetUserIds } },
-      select: {
-        id: true,
-        username: true,
-        name: true,
-        avatar_url: true,
-        avatar_id: true,
-        country: true,
-        rating: true,
-        wins: true,
-        losses: true,
-        draws: true,
-        problemsSolved: true,
-      },
-    });
-
-    const users = await Promise.all(
-      rawUsers.map(async (u) => {
-        const actualSolved = await calculateUserProblemsSolved(u.id);
-        if (u.problemsSolved !== actualSolved) {
-          await db.user.update({ where: { id: u.id }, data: { problemsSolved: actualSolved } });
-          u.problemsSolved = actualSolved;
-        }
-        return u;
-      })
     );
 
-    // 5. Merge Redis rating and sort descending
-    const fullLeaderboard = users
-      .map((u) => ({
-        ...u,
-        rating: redisRatingMap.get(u.id) ?? u.rating,
-        isOnline: isUserConnected(u.id),
-        isCurrentUser: u.id === currentUserId,
-      }))
-      .sort((a, b) => b.rating - a.rating)
-      .map((user, index) => ({
-        rank: index + 1,
-        ...user,
-      }));
-
-    const currentUserRankItem = fullLeaderboard.find((u) => u.isCurrentUser);
-
-    const start = (page - 1) * limit;
-    const pagedLeaderboard = fullLeaderboard.slice(start, start + limit);
-
-    return {
-      leaderboard: pagedLeaderboard,
-      currentUserRank: currentUserRankItem ? currentUserRankItem.rank : null,
-      totalFriends: fullLeaderboard.length - 1,
-      hasMore: start + pagedLeaderboard.length < fullLeaderboard.length,
-      page,
-      limit,
-    };
+    return cachedResult;
   } catch (error) {
     console.error("Error getting friends leaderboard:", error);
     throw error;

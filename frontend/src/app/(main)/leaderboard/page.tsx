@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Trophy,
   Globe,
@@ -78,15 +79,20 @@ interface UserProfileData {
   problemsSolved: number;
 }
 
+import { useGlobalLeaderboard, useFriendsLeaderboard } from "@/hooks/queries";
+
 export default function LeaderboardPage() {
   const { user: currentUser } = useAuthStore();
   const [activeTab, setActiveTab] = useState<"global" | "friends">("global");
+
+  // TanStack Query Hooks for Page 1
+  const { data: initialGlobalData, isLoading: isGlobalLoading } = useGlobalLeaderboard(1, 20);
+  const { data: initialFriendsData, isLoading: isFriendsLoading } = useFriendsLeaderboard(1, 20);
 
   const [globalLeaderboard, setGlobalLeaderboard] = useState<LeaderboardUser[]>([]);
   const [friendsLeaderboard, setFriendsLeaderboard] = useState<LeaderboardUser[]>([]);
   const [userRank, setUserRank] = useState<string>("2nd");
   const [totalPlayers, setTotalPlayers] = useState<number>(0);
-  const [loading, setLoading] = useState<boolean>(true);
 
   // Pagination & Infinite Scroll state
   const [page, setPage] = useState<number>(1);
@@ -94,52 +100,65 @@ export default function LeaderboardPage() {
   const [loadingMore, setLoadingMore] = useState<boolean>(false);
   const observerTarget = useRef<HTMLDivElement>(null);
 
+  const loading = activeTab === "global" ? (isGlobalLoading && globalLeaderboard.length === 0) : (isFriendsLoading && friendsLeaderboard.length === 0);
+
+  // Sync initial global data
+  useEffect(() => {
+    if (initialGlobalData?.leaderboard) {
+      setGlobalLeaderboard(initialGlobalData.leaderboard);
+      if (initialGlobalData.currentUserRank) {
+        const r = typeof initialGlobalData.currentUserRank === "object" ? initialGlobalData.currentUserRank.rank : initialGlobalData.currentUserRank;
+        const s = ["th", "st", "nd", "rd"];
+        const v = r % 100;
+        setUserRank(`${r}${s[(v - 20) % 10] || s[v] || s[0]}`);
+      }
+      setTotalPlayers(initialGlobalData.totalPlayers || 0);
+      setHasMore(Boolean(initialGlobalData.hasMore));
+      setPage(1);
+    }
+  }, [initialGlobalData]);
+
+  // Sync initial friends data
+  useEffect(() => {
+    if (initialFriendsData?.leaderboard) {
+      setFriendsLeaderboard(initialFriendsData.leaderboard);
+      if (activeTab === "friends") {
+        setHasMore(Boolean(initialFriendsData.hasMore));
+        setPage(1);
+      }
+    }
+  }, [initialFriendsData, activeTab]);
+
   useEffect(() => {
     setPage(1);
-    setHasMore(true);
-    fetchLeaderboard(1, true);
-  }, [activeTab]);
+    setHasMore(activeTab === "global" ? Boolean(initialGlobalData?.hasMore) : Boolean(initialFriendsData?.hasMore));
+  }, [activeTab, initialGlobalData, initialFriendsData]);
 
-  const fetchLeaderboard = async (targetPage: number = 1, isReset: boolean = false) => {
-    if (isReset) {
-      setLoading(true);
-    } else {
-      setLoadingMore(true);
-    }
+  const loadMoreLeaderboard = useCallback(async () => {
+    if (loading || loadingMore || !hasMore) return;
+    const nextPage = page + 1;
+    setLoadingMore(true);
     try {
-      const endpoint = activeTab === "global" 
-        ? `/leaderboard/global?page=${targetPage}&limit=20` 
-        : `/leaderboard/friends?page=${targetPage}&limit=20`;
+      const endpoint = activeTab === "global"
+        ? `/leaderboard/global?page=${nextPage}&limit=20`
+        : `/leaderboard/friends?page=${nextPage}&limit=20`;
       const res = await api.get(endpoint);
       const newItems: LeaderboardUser[] = res.data.leaderboard || [];
 
       if (activeTab === "global") {
-        setGlobalLeaderboard((prev) => (isReset ? newItems : [...prev, ...newItems]));
-        if (res.data.currentUserRank) {
-          const r = typeof res.data.currentUserRank === "object" ? res.data.currentUserRank.rank : res.data.currentUserRank;
-          const s = ["th", "st", "nd", "rd"];
-          const v = r % 100;
-          setUserRank(`${r}${s[(v - 20) % 10] || s[v] || s[0]}`);
-        }
-        setTotalPlayers(res.data.totalPlayers || 0);
+        setGlobalLeaderboard((prev) => [...prev, ...newItems]);
         setHasMore(Boolean(res.data.hasMore));
       } else {
-        setFriendsLeaderboard((prev) => (isReset ? newItems : [...prev, ...newItems]));
+        setFriendsLeaderboard((prev) => [...prev, ...newItems]);
         setHasMore(Boolean(res.data.hasMore));
       }
-      setPage(targetPage);
+      setPage(nextPage);
     } catch (err) {
-      console.error("Failed to load leaderboard:", err);
+      console.error("Failed to load more leaderboard:", err);
     } finally {
-      setLoading(false);
       setLoadingMore(false);
     }
-  };
-
-  const loadMoreLeaderboard = useCallback(() => {
-    if (loading || loadingMore || !hasMore) return;
-    fetchLeaderboard(page + 1, false);
-  }, [loading, loadingMore, hasMore, page, activeTab]);
+  }, [activeTab, page, loading, loadingMore, hasMore]);
 
   useEffect(() => {
     const target = observerTarget.current;
@@ -205,9 +224,17 @@ export default function LeaderboardPage() {
       </div>
 
       {loading ? (
-        <div className="flex flex-col items-center justify-center py-20 gap-3 text-muted-foreground bg-card border border-border rounded-2xl">
-          <Loader2 className="w-7 h-7 animate-spin text-primary" />
-          <span className="text-xs font-mono">Fetching Redis Leaderboard...</span>
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+            <Skeleton className="h-48 rounded-2xl" />
+            <Skeleton className="h-56 rounded-2xl" />
+            <Skeleton className="h-48 rounded-2xl" />
+          </div>
+          <div className="space-y-2">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Skeleton key={i} className="h-16 w-full rounded-2xl" />
+            ))}
+          </div>
         </div>
       ) : currentList.length === 0 ? (
         <div className="text-center py-16 p-8 rounded-2xl bg-card border border-border space-y-3">

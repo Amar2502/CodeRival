@@ -3,6 +3,7 @@ import { getMatch } from "./match.service";
 import { db } from "../../config/db";
 import { NotFoundError } from "../../utils/errors";
 import { getWaitingPlayers } from "../matchmaking/matchmaking.queue";
+import { getCached } from "../../utils/cache";
 
 export class MatchController {
   static async getMatchmakingQueue(req: Request, res: Response, next: NextFunction) {
@@ -93,26 +94,37 @@ export class MatchController {
       const limit = req.query.limit ? Math.max(1, parseInt(String(req.query.limit), 10)) : 20;
       const skip = (page - 1) * limit;
 
-      const totalMatches = await db.match.count({
-        where: {
-          OR: [{ player1Id: userId }, { player2Id: userId }],
-        },
-      });
+      // Cache per-user match history — 2 min TTL
+      const cachedData = await getCached(
+        `cache:matches:${userId}:${page}:${limit}`,
+        120,
+        async () => {
+          const totalMatches = await db.match.count({
+            where: {
+              OR: [{ player1Id: userId }, { player2Id: userId }],
+            },
+          });
 
-      const matches = await db.match.findMany({
-        where: {
-          OR: [{ player1Id: userId }, { player2Id: userId }],
-        },
-        orderBy: { createdAt: "desc" },
-        include: {
-          player1: { select: { id: true, username: true, avatar_url: true, avatar_id: true, rating: true } },
-          player2: { select: { id: true, username: true, avatar_url: true, avatar_id: true, rating: true } },
-          problem: { select: { id: true, title: true, slug: true, difficulty: true } },
-          winner: { select: { id: true, username: true } },
-        },
-        skip,
-        take: limit,
-      });
+          const matches = await db.match.findMany({
+            where: {
+              OR: [{ player1Id: userId }, { player2Id: userId }],
+            },
+            orderBy: { createdAt: "desc" },
+            include: {
+              player1: { select: { id: true, username: true, avatar_url: true, avatar_id: true, rating: true } },
+              player2: { select: { id: true, username: true, avatar_url: true, avatar_id: true, rating: true } },
+              problem: { select: { id: true, title: true, slug: true, difficulty: true } },
+              winner: { select: { id: true, username: true } },
+            },
+            skip,
+            take: limit,
+          });
+
+          return { totalMatches, matches };
+        }
+      );
+
+      const { totalMatches, matches } = cachedData;
 
       res.status(200).json({
         success: true,

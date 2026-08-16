@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
 import {
   Swords,
   Search,
@@ -163,15 +164,50 @@ const getMatchReasonInfo = (match: MatchHistoryRecord, currentUserId?: string) =
   }
 }
 
+import { useQueryClient } from '@tanstack/react-query'
+import { useUserProfile, useFriends, useMatchHistory, useGlobalLeaderboard, useActiveMatch, useMatchQueue } from '@/hooks/queries'
+
 export default function BattlesPage() {
   const router = useRouter()
+  const queryClient = useQueryClient()
   const { user: authUser, setUser } = useAuthStore()
 
-  // Profile, Friends & Rating State
-  const [profile, setProfile] = useState<UserProfileData | null>(null)
-  const [friends, setFriends] = useState<FriendItem[]>([])
-  const [ratingHistory, setRatingHistory] = useState<RatingPoint[]>([])
-  const [userRank, setUserRank] = useState<string>('2nd')
+  // TanStack Query Hooks
+  const { data: profileData } = useUserProfile('me')
+  const { data: friendsData } = useFriends()
+  const { data: initialHistoryData, isLoading: isQueryLoadingHistory } = useMatchHistory(1, 20)
+  const { data: leaderboardData } = useGlobalLeaderboard(1, 50)
+  const { data: activeMatchData } = useActiveMatch()
+  const { data: queueData } = useMatchQueue()
+
+  const profile = profileData?.user as UserProfileData | undefined
+  const ratingHistory = (profileData?.ratingHistory || []) as RatingPoint[]
+  const friends = (friendsData?.friends || []) as FriendItem[]
+
+  const userRank = useMemo(() => {
+    if (leaderboardData?.currentUserRank?.rank) {
+      const r = leaderboardData.currentUserRank.rank
+      if (r === 1) return '1st'
+      if (r === 2) return '2nd'
+      if (r === 3) return '3rd'
+      return `${r}th`
+    }
+    return '-'
+  }, [leaderboardData])
+
+  // Active match check redirect
+  useEffect(() => {
+    if (activeMatchData?.data?.id) {
+      router.push(`/battles/${activeMatchData.data.id}`)
+    }
+  }, [activeMatchData, router])
+
+  // Sync authStore user
+  useEffect(() => {
+    if (profileData?.user) {
+      setUser(profileData.user)
+    }
+  }, [profileData, setUser])
 
   // Matchmaking Queue State
   const [isSearching, setIsSearching] = useState(false)
@@ -184,12 +220,21 @@ export default function BattlesPage() {
 
   // Matches List State & Infinite Scroll Pagination
   const [matchHistory, setMatchHistory] = useState<MatchHistoryRecord[]>([])
-  const [isLoadingHistory, setIsLoadingHistory] = useState(true)
   const [historyPage, setHistoryPage] = useState<number>(1)
   const [hasMoreHistory, setHasMoreHistory] = useState<boolean>(true)
   const [isLoadingMoreHistory, setIsLoadingMoreHistory] = useState<boolean>(false)
   const observerTarget = useRef<HTMLDivElement>(null)
   const [selectedHistoryMatch, setSelectedHistoryMatch] = useState<MatchHistoryRecord | null>(null)
+
+  const isLoadingHistory = isQueryLoadingHistory && matchHistory.length === 0
+
+  // Sync initial match history
+  useEffect(() => {
+    if (initialHistoryData?.data) {
+      setMatchHistory(initialHistoryData.data)
+      setHasMoreHistory(Boolean(initialHistoryData.hasMore))
+    }
+  }, [initialHistoryData])
 
   // Filter & Search State
   const [searchQuery, setSearchQuery] = useState('')
@@ -198,18 +243,14 @@ export default function BattlesPage() {
   const [activeMatchmakers, setActiveMatchmakers] = useState<number>(0)
   const [hoveredPtIndex, setHoveredPtIndex] = useState<number | null>(null)
 
+  // Sync queue count
   useEffect(() => {
-    fetchBattlePageData()
+    if (typeof queueData?.count === 'number') {
+      setActiveMatchmakers(queueData.count)
+    }
+  }, [queueData])
 
-    // Fetch initial actual matchmakers queue count
-    api.get('/match/queue')
-      .then(res => {
-        if (res.data?.success && typeof res.data.count === 'number') {
-          setActiveMatchmakers(res.data.count)
-        }
-      })
-      .catch(() => {})
-
+  useEffect(() => {
     // Listen for real-time queue count updates via Socket.IO
     const handleQueueUpdate = (data: { count?: number }) => {
       if (typeof data?.count === 'number') {
@@ -223,129 +264,6 @@ export default function BattlesPage() {
       socket.off('matchmaking:queue_update', handleQueueUpdate)
     }
   }, [])
-
-  // Timer effect for queue duration
-  useEffect(() => {
-    let timer: NodeJS.Timeout
-    if (isSearching) {
-      timer = setInterval(() => setQueueTime((prev) => prev + 1), 1000)
-    } else {
-      setQueueTime(0)
-    }
-    return () => clearInterval(timer)
-  }, [isSearching])
-
-  // Countdown timer for Match Found transition
-  useEffect(() => {
-    let interval: NodeJS.Timeout
-    if (matchFoundData && matchCountdown > 0) {
-      interval = setInterval(() => {
-        setMatchCountdown((prev) => prev - 1)
-      }, 1000)
-    } else if (matchFoundData && matchCountdown === 0) {
-      router.push(`/battles/${matchFoundData.matchId}`)
-    }
-    return () => clearInterval(interval)
-  }, [matchFoundData, matchCountdown, router])
-
-  // Socket event listeners for Matchmaking
-  useEffect(() => {
-    const onSearching = () => {
-      setIsSearching(true)
-      setQueueError(null)
-    }
-
-    const onLeft = () => {
-      setIsSearching(false)
-    }
-
-    const onError = (data: { message: string }) => {
-      setIsSearching(false)
-      setQueueError(data.message || 'Matchmaking error occurred.')
-    }
-
-    const onMatchStart = (data: MatchFoundPayload) => {
-      setIsSearching(false)
-      setMatchFoundData(data)
-      setMatchCountdown(3)
-    }
-
-    socket.on('matchmaking:searching', onSearching)
-    socket.on('matchmaking:left', onLeft)
-    socket.on('matchmaking:error', onError)
-    socket.on('match:start', onMatchStart)
-    socket.on('match:found', onMatchStart)
-
-    return () => {
-      socket.off('matchmaking:searching', onSearching)
-      socket.off('matchmaking:left', onLeft)
-      socket.off('matchmaking:error', onError)
-      socket.off('match:start', onMatchStart)
-      socket.off('match:found', onMatchStart)
-    }
-  }, [])
-
-  const fetchBattlePageData = async () => {
-    setIsLoadingHistory(true)
-    try {
-      // 1. User profile & rating history
-      const profileRes = await api.get('/user/profile/me')
-      if (profileRes.data?.user) {
-        setProfile(profileRes.data.user)
-        setUser(profileRes.data.user)
-      }
-      if (profileRes.data?.ratingHistory) {
-        setRatingHistory(profileRes.data.ratingHistory)
-      }
-
-      // 2. Friends list
-      try {
-        const friendsRes = await api.get('/friends')
-        setFriends(friendsRes.data?.friends || [])
-      } catch (e) {
-        console.error('Failed to fetch friends:', e)
-      }
-
-      // 3. Match History (Page 1, 20 per page)
-      try {
-        const historyRes = await api.get('/match/history/me?page=1&limit=20')
-        setMatchHistory(historyRes.data?.data || [])
-        setHistoryPage(1)
-        setHasMoreHistory(Boolean(historyRes.data?.hasMore))
-      } catch (e) {
-        console.error('Failed to fetch match history:', e)
-      }
-
-      // 4. Leaderboard rank
-      try {
-        const rankRes = await api.get('/leaderboard/global?limit=50')
-        if (rankRes.data?.currentUserRank) {
-          const r = rankRes.data.currentUserRank
-          if (r === 1) setUserRank('1st')
-          else if (r === 2) setUserRank('2nd')
-          else if (r === 3) setUserRank('3rd')
-          else setUserRank(`${r}th`)
-        }
-      } catch (e) {
-        console.error('Failed to fetch rank:', e)
-      }
-
-      // 5. Active match check
-      try {
-        const activeRes = await api.get('/match/active')
-        if (activeRes.data?.data) {
-          router.push(`/battles/${activeRes.data.data.id}`)
-        }
-      } catch (e) {
-        // ignore
-      }
-
-    } catch (err) {
-      console.error('Failed to load battle page:', err)
-    } finally {
-      setIsLoadingHistory(false)
-    }
-  }
 
   const loadMoreMatches = useCallback(async () => {
     if (isLoadingMoreHistory || !hasMoreHistory || isLoadingHistory) return
@@ -631,7 +549,7 @@ export default function BattlesPage() {
         <Button
           size="sm"
           variant="outline"
-          onClick={fetchBattlePageData}
+          onClick={() => queryClient.invalidateQueries({ queryKey: ['matches'] })}
           disabled={isLoadingHistory}
           className="gap-1.5 text-xs font-semibold border-border bg-surface hover:bg-surface-2"
         >
@@ -644,10 +562,9 @@ export default function BattlesPage() {
       <div className="border-t border-border pt-4">
         <div className="space-y-2">
           {isLoadingHistory ? (
-            <div className="py-12 text-center text-xs text-muted-foreground font-mono bg-card rounded-2xl border border-border p-6 flex flex-col items-center gap-2">
-              <Loader2 className="w-6 h-6 animate-spin text-primary" />
-              <span>Loading match history...</span>
-            </div>
+            Array.from({ length: 5 }).map((_, i) => (
+              <Skeleton key={i} className="h-16 w-full rounded-xl" />
+            ))
           ) : filteredMatches.length === 0 ? (
             <div className="py-12 text-center text-xs text-muted-foreground font-mono bg-card rounded-2xl border border-border p-6">
               <Swords className="w-8 h-8 mx-auto mb-2 opacity-40" />

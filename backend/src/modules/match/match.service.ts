@@ -14,6 +14,7 @@ import { QueuePlayer } from "../matchmaking/matchmaking.types";
 import { updateUserRatingInLeaderboard } from "../leaderboard/leaderboard.service";
 import { handleTournamentMatchFinished } from "../tournament/tournament.service";
 import { createNotification } from "../notification/notification.service";
+import { invalidateCache } from "../../utils/cache";
 
 const checkAndNotifyTierUpgrade = async (userId: string, oldRating: number, newRating: number) => {
   const TIER_THRESHOLDS = [
@@ -403,6 +404,15 @@ export const endMatch = async (
   }
 
     const updatedMatch = await db.match.findUnique({ where: { id: matchId } });
+
+    // Invalidate cached leaderboards and match history for both players
+    invalidateCache(
+      "cache:leaderboard:*",
+      `cache:matches:${p1.id}:*`,
+      `cache:matches:${p2.id}:*`,
+      `cache:profile:${p1.id}:*`,
+      `cache:profile:${p2.id}:*`
+    ).catch((err) => console.error("Match end cache invalidation error:", err));
 
     return updatedMatch;
   } finally {

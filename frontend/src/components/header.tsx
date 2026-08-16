@@ -22,12 +22,17 @@ import { isDevelopment } from '@/lib/config'
 import { api } from '@/lib/axios'
 import { socket } from '@/lib/socket'
 
+import { useFriends } from '@/hooks/queries'
+
 export function Header() {
   const pathname = usePathname()
   const router = useRouter()
   const { user, logout } = useAuthStore()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const [pendingFriendsCount, setPendingFriendsCount] = useState<number>(0)
+
+  // TanStack Query hook (uses cached friends data)
+  const { data: friendsData } = useFriends()
+  const pendingFriendsCount = user ? (friendsData?.incomingRequests?.length || 0) : 0
 
   const handleLogout = async () => {
     try {
@@ -52,47 +57,6 @@ export function Header() {
 
   const ratingInfo = getRatingInfo(user?.rating || 1200)
 
-  const fetchPendingCount = useCallback(async () => {
-    if (!user) {
-      setPendingFriendsCount(0)
-      return
-    }
-    try {
-      const res = await api.get('/friends')
-      const incoming = res.data?.incomingRequests || []
-      setPendingFriendsCount(incoming.length)
-    } catch (err) {
-      // Ignore fetch error silently
-    }
-  }, [user])
-
-  useEffect(() => {
-    if (!user) return
-
-    fetchPendingCount()
-
-    const handleUpdate = () => {
-      fetchPendingCount()
-    }
-
-    socket.on('friend:request_received', handleUpdate)
-    socket.on('friend:request_accepted', handleUpdate)
-    socket.on('friend:removed', handleUpdate)
-
-    if (typeof window !== 'undefined') {
-      window.addEventListener('friend_request_updated', handleUpdate)
-    }
-
-    return () => {
-      socket.off('friend:request_received', handleUpdate)
-      socket.off('friend:request_accepted', handleUpdate)
-      socket.off('friend:removed', handleUpdate)
-      if (typeof window !== 'undefined') {
-        window.removeEventListener('friend_request_updated', handleUpdate)
-      }
-    }
-  }, [user, fetchPendingCount, pathname])
-
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur-md transition-all">
       <nav className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
@@ -104,13 +68,17 @@ export function Header() {
               alt="CodeRival Logo"
               width={42}
               height={42}
-              // className="w-8 h-8 object-contain"
+              className="w-8 h-8 object-contain"
               priority
             />
           </div>
-          <span className="bg-gradient-to-r from-primary via-rose-400 to-accent bg-clip-text text-transparent tracking-tight font-black">
-            CodeRival
+          <div className="hidden sm:flex items-center gap-0">
+            <span className="bg-rose-400 bg-clip-text text-transparent tracking-tight font-black">
+            Code
+          </span><span className="bg-accent bg-clip-text text-transparent tracking-tight font-black">
+            Rival
           </span>
+          </div>
         </Link>
 
         {/* Desktop Nav Links */}

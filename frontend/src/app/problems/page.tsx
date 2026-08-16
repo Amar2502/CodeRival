@@ -6,6 +6,7 @@ import { Header } from '@/components/header'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Search, CheckCircle2, Code2, Sparkles, Filter, ArrowRight, Flame } from 'lucide-react'
 import { api } from '@/lib/axios'
 
@@ -29,49 +30,34 @@ interface ProblemItem {
   status?: 'SOLVED' | 'ATTEMPTED' | 'UNSOLVED'
 }
 
+import { useProblems, useProblemsByDifficulty } from '@/hooks/queries'
+
 export default function ProblemsPage() {
-  const [problems, setProblems] = useState<ProblemItem[]>([])
-  const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedDifficulty, setSelectedDifficulty] = useState<'ALL' | 'EASY' | 'MEDIUM' | 'HARD'>('ALL')
   const [selectedTopic, setSelectedTopic] = useState<string>('ALL')
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1)
-  const [itemsPerPage, setItemsPerPage] = useState(50)
-  const [totalProblems, setTotalProblems] = useState(200)
+  const [itemsPerPage] = useState(50)
+
+  // TanStack Query Hooks
+  const { data: allProblemsData, isLoading: isLoadingAll } = useProblems(currentPage, itemsPerPage)
+  const { data: diffProblemsData, isLoading: isLoadingDiff } = useProblemsByDifficulty(
+    selectedDifficulty !== 'ALL' ? selectedDifficulty.toLowerCase() : ''
+  )
+
+  const isLoading = selectedDifficulty === 'ALL' ? isLoadingAll : isLoadingDiff
+  const problems: ProblemItem[] = selectedDifficulty === 'ALL'
+    ? (allProblemsData?.problems || [])
+    : (diffProblemsData?.problems || [])
+  const totalProblems = selectedDifficulty === 'ALL'
+    ? (allProblemsData?.totalCount || problems.length)
+    : problems.length
 
   useEffect(() => {
     setCurrentPage(1)
   }, [searchQuery, selectedDifficulty, selectedTopic])
-
-  useEffect(() => {
-    fetchProblems()
-  }, [currentPage, itemsPerPage, selectedDifficulty])
-
-  const fetchProblems = async () => {
-    setIsLoading(true)
-    try {
-      if (selectedDifficulty === 'ALL') {
-        const res = await api.get(`/problem/get/get-all/${currentPage}/${itemsPerPage}`)
-        const fetched = res.data.problems || []
-        setProblems(fetched)
-        if (res.data.totalCount) {
-          setTotalProblems(res.data.totalCount)
-        }
-      } else {
-        const res = await api.get(`/problem/get/by-difficulty/${selectedDifficulty.toLowerCase()}`)
-        const fetched = res.data.problems || []
-        setProblems(fetched)
-        setTotalProblems(fetched.length)
-      }
-    } catch (err) {
-      console.error('Failed to fetch problems:', err)
-      setProblems([])
-    } finally {
-      setIsLoading(false)
-    }
-  }
 
   // Filter problems locally by search query and topic
   const filteredProblems = problems.filter((p) => {
@@ -228,23 +214,23 @@ export default function ProblemsPage() {
                 </thead>
                 <tbody className="divide-y divide-border text-sm">
                   {isLoading ? (
-                    Array.from({ length: 5 }).map((_, idx) => (
-                      <tr key={idx} className="animate-pulse">
+                    Array.from({ length: 6 }).map((_, idx) => (
+                      <tr key={idx}>
                         <td className="py-4 px-4 text-center">
-                          <div className="w-5 h-5 mx-auto bg-surface-2 rounded-full" />
+                          <Skeleton className="w-5 h-5 mx-auto rounded-full" />
                         </td>
                         <td className="py-4 px-4">
-                          <div className="h-4 bg-surface-2 rounded-xs w-48 mb-1" />
-                          <div className="h-3 bg-surface-2 rounded-xs w-24" />
+                          <Skeleton className="h-4 w-48 rounded-md mb-1" />
+                          <Skeleton className="h-3 w-24 rounded-sm" />
                         </td>
                         <td className="py-4 px-4">
-                          <div className="h-4 bg-surface-2 rounded-xs w-32" />
+                          <Skeleton className="h-4 w-32 rounded-md" />
                         </td>
                         <td className="py-4 px-4">
-                          <div className="h-5 bg-surface-2 rounded-full w-16" />
+                          <Skeleton className="h-5 w-16 rounded-full" />
                         </td>
                         <td className="py-4 px-4 text-right">
-                          <div className="h-8 bg-surface-2 rounded-lg w-16 ml-auto" />
+                          <Skeleton className="h-8 w-16 rounded-lg ml-auto" />
                         </td>
                       </tr>
                     ))

@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { api } from "./axios";
+import { getQueryClient } from "@/providers/QueryProvider";
 
 export type User = {
   id: string;
@@ -58,6 +59,9 @@ export const refreshCurrentUser = async () => {
     const res = await api.get("/user/me");
     if (res.data?.user) {
       useAuthStore.getState().setUser(res.data.user);
+      try {
+        getQueryClient().invalidateQueries({ queryKey: ["user"] });
+      } catch {}
     }
   } catch (err) {
     console.error("Failed to refresh current user:", err);

@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
 import {
   Swords,
   Search,
@@ -73,15 +74,34 @@ interface RatingPoint {
   matchId?: string | null
 }
 
+import { useUserProfile, useFriends, useProblems, useGlobalLeaderboard, useMatchQueue } from '@/hooks/queries'
+
 export default function DashboardPage() {
   const { user: authUser, setUser } = useAuthStore()
-  const [profile, setProfile] = useState<UserProfileData | null>(null)
-  const [friends, setFriends] = useState<FriendItem[]>([])
-  const [ratingHistory, setRatingHistory] = useState<RatingPoint[]>([])
-  const [problems, setProblems] = useState<ProblemItem[]>([])
-  const [userRank, setUserRank] = useState<string>('-')
   
-  const [isLoading, setIsLoading] = useState(true)
+  // TanStack Query Hooks (shares cache with RightSidebar & Header)
+  const { data: profileData } = useUserProfile('me')
+  const { data: friendsData } = useFriends()
+  const { data: initialProblemsData, isLoading: isProblemsLoading } = useProblems(1, 50)
+  const { data: leaderboardData } = useGlobalLeaderboard(1, 50)
+  const { data: queueData } = useMatchQueue()
+
+  const profile = profileData?.user as UserProfileData | undefined
+  const ratingHistory = (profileData?.ratingHistory || []) as RatingPoint[]
+  const friends = (friendsData?.friends || []) as FriendItem[]
+  
+  const userRank = useMemo(() => {
+    if (leaderboardData?.currentUserRank?.rank) {
+      const r = leaderboardData.currentUserRank.rank
+      if (r === 1) return '1st'
+      if (r === 2) return '2nd'
+      if (r === 3) return '3rd'
+      return `${r}th`
+    }
+    return '-'
+  }, [leaderboardData])
+
+  const [problems, setProblems] = useState<ProblemItem[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedTopic, setSelectedTopic] = useState<string | null>(null)
   const [sortOrder, setSortOrder] = useState<'number' | 'difficulty' | 'title'>('number')
@@ -89,37 +109,35 @@ export default function DashboardPage() {
   const [activeMatchmakers, setActiveMatchmakers] = useState<number>(0)
   const [hoveredPtIndex, setHoveredPtIndex] = useState<number | null>(null)
 
+  // Sync authStore user profile
+  useEffect(() => {
+    if (profileData?.user) {
+      setUser(profileData.user)
+    }
+  }, [profileData, setUser])
+
+  // Sync initial problems
+  useEffect(() => {
+    if (initialProblemsData?.problems) {
+      setProblems(initialProblemsData.problems)
+      if (initialProblemsData.totalCount && initialProblemsData.problems.length >= initialProblemsData.totalCount) {
+        setHasMore(false)
+      }
+    }
+  }, [initialProblemsData])
+
+  // Sync queue count
+  useEffect(() => {
+    if (typeof queueData?.count === 'number') {
+      setActiveMatchmakers(queueData.count)
+    }
+  }, [queueData])
+
   // Infinite Scroll Pagination State
   const [page, setPage] = useState(1)
   const [hasMore, setHasMore] = useState(true)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
-
-  useEffect(() => {
-    fetchDashboardData()
-
-    // Fetch initial actual matchmakers queue count
-    api.get('/match/queue')
-      .then(res => {
-        if (res.data?.success && typeof res.data.count === 'number') {
-          setActiveMatchmakers(res.data.count)
-        }
-      })
-      .catch(() => {})
-
-    // Listen for real-time queue count updates via Socket.IO
-    const handleQueueUpdate = (data: { count?: number }) => {
-      if (typeof data?.count === 'number') {
-        setActiveMatchmakers(data.count)
-      }
-    }
-
-    socket.on('matchmaking:queue_update', handleQueueUpdate)
-
-    return () => {
-      socket.off('matchmaking:queue_update', handleQueueUpdate)
-    }
-  }, [])
-
+  const isLoading = isProblemsLoading && problems.length === 0
   const observerTargetRef = useRef<HTMLDivElement>(null)
 
   // IntersectionObserver for automatic infinite loading when user scrolls to bottom
@@ -143,64 +161,20 @@ export default function DashboardPage() {
     }
   }, [page, hasMore, isLoadingMore, isLoading, searchQuery, selectedTopic])
 
-  const fetchDashboardData = async () => {
-    setIsLoading(true)
-    try {
-      // 1. Fetch user profile & recent matches & rating history
-      const profileRes = await api.get('/user/profile/me')
-      if (profileRes.data?.user) {
-        setProfile(profileRes.data.user)
-        setUser(profileRes.data.user)
+  useEffect(() => {
+    // Listen for real-time queue count updates via Socket.IO
+    const handleQueueUpdate = (data: { count?: number }) => {
+      if (typeof data?.count === 'number') {
+        setActiveMatchmakers(data.count)
       }
-      if (profileRes.data?.ratingHistory) {
-        setRatingHistory(profileRes.data.ratingHistory)
-      }
-
-      // 2. Fetch friends list
-      try {
-        const friendsRes = await api.get('/friends')
-        setFriends(friendsRes.data?.friends || [])
-      } catch (e) {
-        console.error('Failed to fetch friends:', e)
-      }
-
-      // 3. Fetch initial problems set (Page 1)
-      try {
-        const problemsRes = await api.get('/problem/get/get-all/1/50')
-        const fetched = problemsRes.data?.problems || []
-        setProblems(fetched)
-        setPage(1)
-        if (problemsRes.data?.totalCount && fetched.length >= problemsRes.data.totalCount) {
-          setHasMore(false)
-        } else if (fetched.length < 50) {
-          setHasMore(false)
-        }
-      } catch (e) {
-        console.error('Failed to fetch problems:', e)
-      }
-
-      // 4. Fetch leaderboard rank
-      try {
-        const rankRes = await api.get('/leaderboard/global?limit=50')
-        if (rankRes.data?.currentUserRank?.rank) {
-          const r = rankRes.data.currentUserRank.rank
-          if (r === 1) setUserRank('1st')
-          else if (r === 2) setUserRank('2nd')
-          else if (r === 3) setUserRank('3rd')
-          else setUserRank(`${r}th`)
-        } else {
-          setUserRank('-')
-        }
-      } catch (e) {
-        setUserRank('-')
-      }
-
-    } catch (err) {
-      console.error('Failed to load dashboard:', err)
-    } finally {
-      setIsLoading(false)
     }
-  }
+
+    socket.on('matchmaking:queue_update', handleQueueUpdate)
+
+    return () => {
+      socket.off('matchmaking:queue_update', handleQueueUpdate)
+    }
+  }, [])
 
   const fetchMoreProblems = async () => {
     if (isLoadingMore || !hasMore) return
@@ -456,7 +430,17 @@ export default function DashboardPage() {
       {/* 4. PROBLEM LIST TABLE */}
       <div className="border-t border-border pt-4">
         <div className="space-y-1">
-          {displayedProblems.length === 0 ? (
+          {isLoading ? (
+            Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="flex items-center justify-between p-3.5 rounded-xl border border-transparent">
+                <div className="flex items-center gap-3.5 flex-1">
+                  <Skeleton className="w-5 h-5 rounded-full shrink-0" />
+                  <Skeleton className="h-5 w-64 rounded-md" />
+                </div>
+                <Skeleton className="h-5 w-16 rounded-md shrink-0" />
+              </div>
+            ))
+          ) : displayedProblems.length === 0 ? (
             <div className="py-12 text-center text-xs text-muted-foreground font-mono bg-card rounded-2xl border border-border p-6">
               <Code2 className="w-8 h-8 mx-auto mb-2 opacity-40" />
               No problems found matching your criteria.

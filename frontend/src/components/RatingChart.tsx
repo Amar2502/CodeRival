@@ -10,6 +10,7 @@ import {
   CartesianGrid,
   Tooltip,
 } from "recharts";
+import { Skeleton } from "@/components/ui/skeleton";
 import { TrendingUp, TrendingDown, Minus, Award } from "lucide-react";
 
 export interface RatingHistoryItem {
@@ -23,6 +24,7 @@ export interface RatingHistoryItem {
 interface RatingChartProps {
   history: RatingHistoryItem[];
   currentRating?: number;
+  isLoading?: boolean;
 }
 
 // Custom Tooltip component matching dark mode aesthetic
@@ -57,7 +59,19 @@ function CustomTooltip({ active, payload }: any) {
   return null;
 }
 
-export function RatingChart({ history, currentRating }: RatingChartProps) {
+export function RatingChart({ history, currentRating, isLoading }: RatingChartProps) {
+  if (isLoading) {
+    return (
+      <div className="w-full space-y-4">
+        <Skeleton className="h-64 w-full rounded-2xl" />
+        <div className="flex justify-center items-center gap-3 pt-2">
+          <Skeleton className="h-4 w-48 rounded-md" />
+          <Skeleton className="h-4 w-24 rounded-md" />
+        </div>
+      </div>
+    );
+  }
+
   const { chartData, initialRating, hasMatches } = useMemo(() => {
     const items = history || [];
     // Filter out synthetic fallback items where delta is 0 and id is initial
