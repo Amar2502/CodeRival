@@ -1,7 +1,9 @@
 import { Server } from "socket.io";
 import { db } from "../../config/db";
 import { TournamentStatus, TournamentMatchRound, MatchStatus } from "../../generated/prisma/client";
-import { createMatch } from "../match/match.service";
+import { startMatch } from "../match/match.service";
+import { QueuePlayer } from "../matchmaking/matchmaking.types";
+import { getSocket } from "../../socket/socketManager";
 
 export const createTournamentService = async (
   creatorId: string,
@@ -393,18 +395,46 @@ export const startTournamentEngine = async (io: Server, tournamentId: string) =>
     include: { player1: true, player2: true },
   });
 
-  // Create 1v1 Match records for all starting matches
+  // Create and initialize 1v1 Match records for all starting matches
   for (const matchNode of startingMatches) {
     if (matchNode.player1Id && matchNode.player2Id) {
-      const match = await createMatch(
-        { userId: matchNode.player1Id, socketId: "", joinedAt: Date.now(), rating: matchNode.player1?.rating || 1200 },
-        { userId: matchNode.player2Id, socketId: "", joinedAt: Date.now(), rating: matchNode.player2?.rating || 1200 }
-      );
+      try {
+        const p1Socket = getSocket(matchNode.player1Id);
+        const p2Socket = getSocket(matchNode.player2Id);
 
-      await db.tournamentMatch.update({
-        where: { id: matchNode.id },
-        data: { matchId: match.id },
-      });
+        const p1: QueuePlayer = {
+          userId: matchNode.player1Id,
+          socketId: p1Socket?.id || "",
+          username: matchNode.player1?.username,
+          name: matchNode.player1?.name,
+          avatar_url: matchNode.player1?.avatar_url,
+          avatar_id: matchNode.player1?.avatar_id,
+          rating: matchNode.player1?.rating || 1200,
+          joinedAt: Date.now(),
+        };
+
+        const p2: QueuePlayer = {
+          userId: matchNode.player2Id,
+          socketId: p2Socket?.id || "",
+          username: matchNode.player2?.username,
+          name: matchNode.player2?.name,
+          avatar_url: matchNode.player2?.avatar_url,
+          avatar_id: matchNode.player2?.avatar_id,
+          rating: matchNode.player2?.rating || 1200,
+          joinedAt: Date.now(),
+        };
+
+        const match = await startMatch(io, p1, p2);
+
+        if (match) {
+          await db.tournamentMatch.update({
+            where: { id: matchNode.id },
+            data: { matchId: match.id },
+          });
+        }
+      } catch (err) {
+        console.error(`Failed to start tournament match ${matchNode.id}:`, err);
+      }
     }
   }
 
@@ -417,8 +447,15 @@ export const startTournamentEngine = async (io: Server, tournamentId: string) =>
 
   // Notify each player in starting matches that their match is ready
   for (const p of updatedTournament?.participants || []) {
+    const playerMatch = updatedTournament?.matches?.find(
+      (m) =>
+        m.round === startingRound &&
+        (m.player1Id === p.userId || m.player2Id === p.userId)
+    );
+
     io.to(`user:${p.userId}`).emit("tournament:match_ready", {
       tournamentId,
+      matchId: playerMatch?.matchId || undefined,
       message: `${roundLabel} Match is Live! Enter Arena!`,
     });
   }
@@ -454,27 +491,55 @@ export const handleTournamentMatchFinished = async (
 
     // Check if next match now has BOTH players
     if (nextMatch.player1Id && nextMatch.player2Id && !nextMatch.matchId) {
-      const new1v1Match = await createMatch(
-        { userId: nextMatch.player1Id, socketId: "", joinedAt: Date.now(), rating: nextMatch.player1?.rating || 1200 },
-        { userId: nextMatch.player2Id, socketId: "", joinedAt: Date.now(), rating: nextMatch.player2?.rating || 1200 }
-      );
+      try {
+        const p1Socket = getSocket(nextMatch.player1Id);
+        const p2Socket = getSocket(nextMatch.player2Id);
 
-      await db.tournamentMatch.update({
-        where: { id: nextMatch.id },
-        data: { matchId: new1v1Match.id },
-      });
+        const p1: QueuePlayer = {
+          userId: nextMatch.player1Id,
+          socketId: p1Socket?.id || "",
+          username: nextMatch.player1?.username,
+          name: nextMatch.player1?.name,
+          avatar_url: nextMatch.player1?.avatar_url,
+          avatar_id: nextMatch.player1?.avatar_id,
+          rating: nextMatch.player1?.rating || 1200,
+          joinedAt: Date.now(),
+        };
 
-      // Notify both players that their next round match is ready
-      io.to(`user:${nextMatch.player1Id}`).emit("tournament:match_ready", {
-        tournamentId: tournamentMatch.tournamentId,
-        matchId: new1v1Match.id,
-        message: `Your ${nextMatch.round} match is live!`,
-      });
-      io.to(`user:${nextMatch.player2Id}`).emit("tournament:match_ready", {
-        tournamentId: tournamentMatch.tournamentId,
-        matchId: new1v1Match.id,
-        message: `Your ${nextMatch.round} match is live!`,
-      });
+        const p2: QueuePlayer = {
+          userId: nextMatch.player2Id,
+          socketId: p2Socket?.id || "",
+          username: nextMatch.player2?.username,
+          name: nextMatch.player2?.name,
+          avatar_url: nextMatch.player2?.avatar_url,
+          avatar_id: nextMatch.player2?.avatar_id,
+          rating: nextMatch.player2?.rating || 1200,
+          joinedAt: Date.now(),
+        };
+
+        const new1v1Match = await startMatch(io, p1, p2);
+
+        if (new1v1Match) {
+          await db.tournamentMatch.update({
+            where: { id: nextMatch.id },
+            data: { matchId: new1v1Match.id },
+          });
+
+          // Notify both players that their next round match is ready
+          io.to(`user:${nextMatch.player1Id}`).emit("tournament:match_ready", {
+            tournamentId: tournamentMatch.tournamentId,
+            matchId: new1v1Match.id,
+            message: `Your ${nextMatch.round} match is live!`,
+          });
+          io.to(`user:${nextMatch.player2Id}`).emit("tournament:match_ready", {
+            tournamentId: tournamentMatch.tournamentId,
+            matchId: new1v1Match.id,
+            message: `Your ${nextMatch.round} match is live!`,
+          });
+        }
+      } catch (err) {
+        console.error(`Failed to start tournament progression match ${nextMatch.id}:`, err);
+      }
     }
   }
 
