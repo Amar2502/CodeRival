@@ -1,5 +1,5 @@
 import { Worker, Job } from "bullmq";
-import { redis } from "../../config/redis";
+import { createBullRedisConnection } from "../../config/redis";
 import { db } from "../../config/db";
 import { SubmissionStatus, SubmissionType, Verdict } from "../../generated/prisma/client";
 import { ExecutionService } from "./execution.service";
@@ -147,7 +147,7 @@ export const startSubmissionWorker = (concurrency: number = Number(process.env.S
     SUBMISSION_QUEUE_NAME,
     processSubmissionJob,
     {
-      connection: redis,
+      connection: createBullRedisConnection(),
       concurrency,
     }
   );

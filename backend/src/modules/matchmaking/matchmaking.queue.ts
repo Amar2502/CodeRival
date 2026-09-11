@@ -27,7 +27,9 @@ export const getAllowedDifference = (waitingTimeMs: number): number => {
 export const addPlayerToQueue = async (
   player: QueuePlayer
 ): Promise<void> => {
-  await redis.hset(PLAYER_KEY(player.userId), {
+  const pipeline = redis.pipeline();
+
+  pipeline.hset(PLAYER_KEY(player.userId), {
     userId: player.userId,
     username: player.username || "",
     name: player.name || "",
@@ -39,18 +41,22 @@ export const addPlayerToQueue = async (
     joinedAt: player.joinedAt.toString(),
   });
 
-  await redis.zadd(
+  pipeline.zadd(
     WAITING_QUEUE,
     player.joinedAt,
     player.userId
   );
+
+  await pipeline.exec();
 };
 
 export const removePlayerFromQueue = async (
   userId: string
 ): Promise<void> => {
-  await redis.del(PLAYER_KEY(userId));
-  await redis.zrem(WAITING_QUEUE, userId);
+  const pipeline = redis.pipeline();
+  pipeline.del(PLAYER_KEY(userId));
+  pipeline.zrem(WAITING_QUEUE, userId);
+  await pipeline.exec();
 };
 
 export const isPlayerInQueue = async (
@@ -123,10 +129,15 @@ export const getWaitingPlayers = async (): Promise<QueuePlayer[]> => {
   return players;
 };
 
+export const getWaitingQueueCount = async (): Promise<number> => {
+  return await redis.zcard(WAITING_QUEUE);
+};
+
 export const getOpponentFromQueue = async (
-  player: QueuePlayer
+  player: QueuePlayer,
+  waitingPlayersInput?: QueuePlayer[]
 ): Promise<QueuePlayer | null> => {
-  const waitingPlayers = await getWaitingPlayers();
+  const waitingPlayers = waitingPlayersInput || (await getWaitingPlayers());
   const now = Date.now();
 
   for (const opponent of waitingPlayers) {

@@ -30,12 +30,31 @@ export async function getCached<T>(
 }
 
 /**
+ * Directly delete specific cache keys in a single atomic Redis DEL command.
+ */
+export async function delCacheKeys(...keys: string[]): Promise<void> {
+  const validKeys = keys.filter(Boolean);
+  if (validKeys.length === 0) return;
+  try {
+    await redis.del(...validKeys);
+  } catch (err) {
+    console.error("Cache key deletion error:", err);
+  }
+}
+
+/**
  * Invalidate cache keys matching given glob patterns.
- * Uses SCAN (cursor-based) instead of KEYS for production safety.
+ * Uses direct DEL for exact keys, and cursor-based SCAN for wildcard patterns.
  */
 export async function invalidateCache(...patterns: string[]): Promise<void> {
   for (const pattern of patterns) {
     try {
+      // If the pattern has no wildcards, delete directly without SCAN
+      if (!pattern.includes("*") && !pattern.includes("?") && !pattern.includes("[")) {
+        await redis.del(pattern);
+        continue;
+      }
+
       let cursor = "0";
       do {
         const [nextCursor, keys] = await redis.scan(
@@ -43,7 +62,7 @@ export async function invalidateCache(...patterns: string[]): Promise<void> {
           "MATCH",
           pattern,
           "COUNT",
-          100
+          250
         );
         cursor = nextCursor;
         if (keys.length > 0) {

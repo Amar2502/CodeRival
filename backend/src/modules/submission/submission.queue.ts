@@ -1,11 +1,11 @@
 import { Queue, QueueEvents } from "bullmq";
-import { redis } from "../../config/redis";
+import { createBullRedisConnection } from "../../config/redis";
 import { SubmissionJobData } from "./submission.types";
 
 export const SUBMISSION_QUEUE_NAME = "submission";
 
 export const submissionQueue = new Queue<SubmissionJobData>(SUBMISSION_QUEUE_NAME, {
-  connection: redis,
+  connection: createBullRedisConnection(),
   defaultJobOptions: {
     attempts: 3,
     backoff: {
@@ -13,18 +13,18 @@ export const submissionQueue = new Queue<SubmissionJobData>(SUBMISSION_QUEUE_NAM
       delay: 1000,
     },
     removeOnComplete: {
-      age: 3600 * 24, // Keep completed jobs for 24 hours
-      count: 1000,    // Keep last 1000 completed jobs
+      age: 3600 * 2, // Keep completed jobs for 2 hours (reduced from 24h)
+      count: 200,    // Keep last 200 completed jobs (reduced from 1000)
     },
     removeOnFail: {
-      age: 3600 * 24 * 7, // Keep failed jobs for 7 days
-      count: 5000,
+      age: 3600 * 24, // Keep failed jobs for 24 hours (reduced from 7 days)
+      count: 500,     // Keep last 500 failed jobs (reduced from 5000)
     },
   },
 });
 
 export const submissionQueueEvents = new QueueEvents(SUBMISSION_QUEUE_NAME, {
-  connection: redis,
+  connection: createBullRedisConnection(),
 });
 
 /**

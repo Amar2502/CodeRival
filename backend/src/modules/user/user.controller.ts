@@ -255,12 +255,7 @@ export const getUserProfile = async (req: Request, res: Response) => {
       if (user.appearOnLeaderboard) {
         let revRank = await redis.zrevrank("leaderboard:global", targetUserId);
         if (revRank === null) {
-          const card = await redis.zcard("leaderboard:global");
-          if (card === 0) {
-            await syncGlobalLeaderboard();
-          } else {
-            await updateUserRatingInLeaderboard(targetUserId, user.rating);
-          }
+          await updateUserRatingInLeaderboard(targetUserId, user.rating);
           revRank = await redis.zrevrank("leaderboard:global", targetUserId);
         }
         if (revRank !== null) {

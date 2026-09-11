@@ -7,5 +7,14 @@ export const redisOptions: RedisOptions = {
   enableReadyCheck: false,
 };
 
+// Main application client (caching, rate limiting, matchmaking, leaderboards, OTP)
 export const redis = new Redis(redisUrl, redisOptions);
+
+// Dedicated connection factory for BullMQ Queues and Workers
+export const createBullRedisConnection = (): Redis => {
+  return new Redis(redisUrl, {
+    ...redisOptions,
+    maxRetriesPerRequest: null,
+  });
+};
 

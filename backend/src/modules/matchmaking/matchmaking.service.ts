@@ -6,6 +6,7 @@ import {
   isPlayerInQueue,
   removePlayerFromQueue,
   getWaitingPlayers,
+  getWaitingQueueCount,
 } from "./matchmaking.queue";
 import { getUserActiveMatch } from "../../socket/socketManager";
 import { startMatch } from "../match/match.service";
@@ -50,7 +51,8 @@ export const joinQueue = async (player: QueuePlayer): Promise<MatchmakingResult>
   }
 
   // 3. Try to find an opponent immediately
-  const opponent = await getOpponentFromQueue(player);
+  const waitingPlayers = await getWaitingPlayers();
+  const opponent = await getOpponentFromQueue(player, waitingPlayers);
 
   if (!opponent) {
     await addPlayerToQueue(player);
@@ -78,6 +80,10 @@ let tickerInterval: NodeJS.Timeout | null = null;
 
 export const processQueueMatches = async (io: Server): Promise<void> => {
   try {
+    // Quick O(1) check: if fewer than 2 players in queue, do not fetch hashes
+    const queueCount = await getWaitingQueueCount();
+    if (queueCount < 2) return;
+
     const waitingPlayers = await getWaitingPlayers();
     if (waitingPlayers.length < 2) return;
 
@@ -92,7 +98,8 @@ export const processQueueMatches = async (io: Server): Promise<void> => {
         continue;
       }
 
-      const opponent = await getOpponentFromQueue(player1);
+      // Use the in-memory array — NO extra Redis queries in this loop!
+      const opponent = await getOpponentFromQueue(player1, waitingPlayers);
       if (opponent && !matchedUserIds.has(opponent.userId)) {
         if (getUserActiveMatch(opponent.userId)) {
           await removePlayerFromQueue(opponent.userId);

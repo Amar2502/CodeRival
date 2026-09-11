@@ -145,9 +145,6 @@ export const getGlobalLeaderboard = async (currentUserId?: string, page: number 
       }
     }
 
-    // Background sync to ensure Redis ZSET is updated cleanly
-    syncGlobalLeaderboard().catch((e) => console.error("Background sync error:", e));
-
     return {
       leaderboard,
       currentUserRank: currentUserRankInfo,
@@ -189,19 +186,7 @@ export const getFriendsLeaderboard = async (currentUserId: string, page: number 
 
         const targetUserIds = Array.from(friendIdSet);
 
-        // 3. Fetch ratings from Redis using pipeline
-        const pipeline = redis.pipeline();
-        targetUserIds.forEach((id) => pipeline.zscore(GLOBAL_LEADERBOARD_KEY, id));
-        const scores = await pipeline.exec();
-
-        const redisRatingMap = new Map<string, number>();
-        scores?.forEach(([err, res], idx) => {
-          if (!err && res !== null) {
-            redisRatingMap.set(targetUserIds[idx], parseInt(res as string, 10));
-          }
-        });
-
-        // 4. Fetch rich profiles from DB
+        // 3. Fetch rich profiles from DB (ratings are already up-to-date in Postgres)
         const rawUsers = await db.user.findMany({
           where: { id: { in: targetUserIds } },
           select: {
@@ -230,11 +215,11 @@ export const getFriendsLeaderboard = async (currentUserId: string, page: number 
           })
         );
 
-        // 5. Merge Redis rating and sort descending
+        // 4. Sort descending by rating
         const fullLeaderboard = users
           .map((u) => ({
             ...u,
-            rating: redisRatingMap.get(u.id) ?? u.rating,
+            rating: u.rating,
             isOnline: isUserConnected(u.id),
             isCurrentUser: u.id === currentUserId,
           }))

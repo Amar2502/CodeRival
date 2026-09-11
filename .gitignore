@@ -9,15 +9,5 @@ backend/src/generated/
 
 backend/scripts
 
-BULLMQ.md
-DEPLOYMENT.md
-DRIVER.md
-FEATURES.md
-FUTURE.md
-MATCHMAKING.md
-POSTMAN.md
-PROJECT.md
 REPORT.md
-SOCKET.md
-SUBMISSION.md
-TOURNAMENT.md
+REDIS.md
