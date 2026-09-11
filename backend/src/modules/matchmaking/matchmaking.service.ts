@@ -11,6 +11,23 @@ import {
 import { getUserActiveMatch } from "../../socket/socketManager";
 import { startMatch } from "../match/match.service";
 
+let tickerInterval: NodeJS.Timeout | null = null;
+let tickerIo: Server | null = null;
+
+const startTicker = (): void => {
+  if (tickerInterval || !tickerIo) return;
+  tickerInterval = setInterval(() => {
+    processQueueMatches(tickerIo!);
+  }, 2000);
+};
+
+const stopTicker = (): void => {
+  if (tickerInterval) {
+    clearInterval(tickerInterval);
+    tickerInterval = null;
+  }
+};
+
 export const notifyQueueUpdate = async (io: Server): Promise<void> => {
   try {
     const rawPlayers = await getWaitingPlayers();
@@ -56,6 +73,7 @@ export const joinQueue = async (player: QueuePlayer): Promise<MatchmakingResult>
 
   if (!opponent) {
     await addPlayerToQueue(player);
+    startTicker();
     return {
       success: true,
       matched: false,
@@ -74,15 +92,18 @@ export const joinQueue = async (player: QueuePlayer): Promise<MatchmakingResult>
 
 export const leaveQueue = async (userId: string): Promise<void> => {
   await removePlayerFromQueue(userId);
+  const count = await getWaitingQueueCount();
+  if (count === 0) stopTicker();
 };
-
-let tickerInterval: NodeJS.Timeout | null = null;
 
 export const processQueueMatches = async (io: Server): Promise<void> => {
   try {
     // Quick O(1) check: if fewer than 2 players in queue, do not fetch hashes
     const queueCount = await getWaitingQueueCount();
-    if (queueCount < 2) return;
+    if (queueCount < 2) {
+      if (queueCount === 0) stopTicker();
+      return;
+    }
 
     const waitingPlayers = await getWaitingPlayers();
     if (waitingPlayers.length < 2) return;
@@ -124,10 +145,9 @@ export const processQueueMatches = async (io: Server): Promise<void> => {
   }
 };
 
-export const initMatchmakingTicker = (io: Server): void => {
-  if (tickerInterval) return;
-
-  tickerInterval = setInterval(() => {
-    processQueueMatches(io);
-  }, 2000);
+export const initMatchmakingTicker = async (io: Server): Promise<void> => {
+  tickerIo = io;
+  // Only start if there are already players waiting (e.g. server restart)
+  const count = await getWaitingQueueCount();
+  if (count > 0) startTicker();
 };

@@ -12,6 +12,7 @@ import tournamentRoutes from "./modules/tournament/tournament.routes";
 import notificationRoutes from "./modules/notification/notification.routes";
 import { config } from "./config/config";
 import { errorHandler } from "./middleware/error.middleware";
+import healthRoutes from "./modules/health/health.routes";
 
 const app = express();
 
@@ -24,6 +25,7 @@ app.use(
 );
 app.use(cookieParser());
 app.use(passport.initialize());
+app.use("/api", healthRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/problem", problemRoutes);

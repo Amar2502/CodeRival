@@ -14,7 +14,7 @@ import { QueuePlayer } from "../matchmaking/matchmaking.types";
 import { updateUserRatingInLeaderboard } from "../leaderboard/leaderboard.service";
 import { handleTournamentMatchFinished } from "../tournament/tournament.service";
 import { createNotification } from "../notification/notification.service";
-import { invalidateCache, delCacheKeys } from "../../utils/cache";
+import { delCacheKeys } from "../../utils/cache";
 
 const checkAndNotifyTierUpgrade = async (userId: string, oldRating: number, newRating: number) => {
   const TIER_THRESHOLDS = [
@@ -405,20 +405,21 @@ export const endMatch = async (
 
     const updatedMatch = await db.match.findUnique({ where: { id: matchId } });
 
-    // Invalidate primary page 1 caches directly without full keyspace SCAN
+    // Deterministic cache invalidation — no wildcard SCAN needed.
+    // Match history pages beyond page 1 have a 2-min TTL and expire naturally.
     delCacheKeys(
+      // Leaderboard page 1 (most commonly viewed)
       "cache:leaderboard:global:1:20",
       "cache:leaderboard:global:1:10",
+      // Match history page 1 for both players
       `cache:matches:${p1.id}:1:20`,
       `cache:matches:${p2.id}:1:20`,
+      // Player profiles
       `cache:profile:${p1.id}`,
-      `cache:profile:${p2.id}`
-    ).catch((err) => console.error("Match end direct cache invalidation error:", err));
-
-    // Targeted invalidation for remaining match history pages
-    invalidateCache(
-      `cache:matches:${p1.id}:*`,
-      `cache:matches:${p2.id}:*`
+      `cache:profile:${p2.id}`,
+      // Friends leaderboard for both players (invalidate their view)
+      `cache:leaderboard:friends:${p1.id}:1:20`,
+      `cache:leaderboard:friends:${p2.id}:1:20`
     ).catch((err) => console.error("Match end cache invalidation error:", err));
 
     return updatedMatch;

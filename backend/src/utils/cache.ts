@@ -41,36 +41,3 @@ export async function delCacheKeys(...keys: string[]): Promise<void> {
     console.error("Cache key deletion error:", err);
   }
 }
-
-/**
- * Invalidate cache keys matching given glob patterns.
- * Uses direct DEL for exact keys, and cursor-based SCAN for wildcard patterns.
- */
-export async function invalidateCache(...patterns: string[]): Promise<void> {
-  for (const pattern of patterns) {
-    try {
-      // If the pattern has no wildcards, delete directly without SCAN
-      if (!pattern.includes("*") && !pattern.includes("?") && !pattern.includes("[")) {
-        await redis.del(pattern);
-        continue;
-      }
-
-      let cursor = "0";
-      do {
-        const [nextCursor, keys] = await redis.scan(
-          cursor,
-          "MATCH",
-          pattern,
-          "COUNT",
-          250
-        );
-        cursor = nextCursor;
-        if (keys.length > 0) {
-          await redis.del(...keys);
-        }
-      } while (cursor !== "0");
-    } catch (err) {
-      console.error(`Cache invalidation error for pattern "${pattern}":`, err);
-    }
-  }
-}
