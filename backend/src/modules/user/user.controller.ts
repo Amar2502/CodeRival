@@ -696,6 +696,9 @@ export const uploadAvatarController = async (req: Request, res: Response) => {
     if (req.file) {
       fileBuffer = req.file.buffer;
     } else if (req.body.avatar_data) {
+      if (typeof req.body.avatar_data === "string" && Buffer.byteLength(req.body.avatar_data) > 5 * 1024 * 1024 * 1.37) {
+        return res.status(400).json({ message: "Avatar data exceeds 5MB limit" });
+      }
       fileBuffer = req.body.avatar_data;
     }
 
@@ -834,8 +837,9 @@ export const deleteAccountController = async (req: Request, res: Response) => {
 
     res.clearCookie("token", {
       httpOnly: true,
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
       secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
+      path: "/",
     });
 
     return res.status(200).json({ message: "Account deleted successfully." });

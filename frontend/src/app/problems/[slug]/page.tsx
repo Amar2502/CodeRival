@@ -181,7 +181,6 @@ export default function ProblemWorkspacePage({ params }: { params: Promise<{ slu
   const [isLeftCollapsed, setIsLeftCollapsed] = useState(false)
   const [isBottomCollapsed, setIsBottomCollapsed] = useState(false)
   const [activeLeftTab, setActiveLeftTab] = useState<'description' | 'submissions'>('description')
-  const [activeBottomTab, setActiveBottomTab] = useState<'testcase' | 'result'>('testcase')
   const [selectedTestCaseIndex, setSelectedTestCaseIndex] = useState(0)
 
   const isDraggingLeftRef = useRef(false)
@@ -600,8 +599,7 @@ export default function ProblemWorkspacePage({ params }: { params: Promise<{ slu
     setIsLeftCollapsed(true)
   }
 
-  const expandBottomPanel = (tab?: 'testcase' | 'result') => {
-    if (tab) setActiveBottomTab(tab)
+  const expandBottomPanel = () => {
     setIsBottomCollapsed(false)
   }
 
@@ -680,7 +678,7 @@ export default function ProblemWorkspacePage({ params }: { params: Promise<{ slu
   const handleRunCode = async () => {
     if (!problem || isRunning || isSubmitting) return
     setIsRunning(true)
-    expandBottomPanel('result')
+    expandBottomPanel()
     setExecutionResult(null)
 
     try {
@@ -1608,21 +1606,9 @@ export default function ProblemWorkspacePage({ params }: { params: Promise<{ slu
             <div className="h-9 border-b border-border bg-surface/80 px-3 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-1">
                 <button
-                  onClick={() => expandBottomPanel('testcase')}
+                  onClick={() => expandBottomPanel()}
                   className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
-                    activeBottomTab === 'testcase' && !isBottomCollapsed
-                      ? 'bg-[#2a2a2e] text-foreground border border-border/40'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <SquareCheck className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                  <span>Testcase</span>
-                </button>
-                <span className="text-slate-600 font-light mx-0.5 select-none">|</span>
-                <button
-                  onClick={() => expandBottomPanel('result')}
-                  className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
-                    activeBottomTab === 'result' && !isBottomCollapsed
+                    !isBottomCollapsed
                       ? 'bg-[#2a2a2e] text-foreground border border-border/40'
                       : 'text-slate-400 hover:text-slate-200'
                   }`}
@@ -1649,48 +1635,7 @@ export default function ProblemWorkspacePage({ params }: { params: Promise<{ slu
             {/* Content Body (Visible when expanded) */}
             {!isBottomCollapsed && (
               <div className="flex-1 p-5 overflow-y-auto font-mono text-xs space-y-6 bg-card text-foreground">
-                {activeBottomTab === 'testcase' ? (
-                  /* Sample Test Cases View */
-                  <div className="space-y-4">
-                    {/* Case Pills */}
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {problem.testCases?.map((tc, idx) => (
-                        <button
-                          key={tc.id || idx}
-                          onClick={() => setSelectedTestCaseIndex(idx)}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
-                            selectedTestCaseIndex === idx
-                              ? 'bg-[#333338] text-white border border-slate-600/50 shadow-xs'
-                              : 'bg-transparent text-slate-400 hover:bg-[#28282c] hover:text-slate-200'
-                          }`}
-                        >
-                          <SquareCheck className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                          <span>Case {idx + 1}</span>
-                        </button>
-                      ))}
-                    </div>
-
-                    {/* Input Section */}
-                    {problem.testCases && problem.testCases[selectedTestCaseIndex] && (
-                      <div className="space-y-2">
-                        <div className="text-slate-400 text-xs font-semibold font-sans mb-2">Input</div>
-                        {renderInputParameters(
-                          problem.testCases[selectedTestCaseIndex].input,
-                          problem.signature?.params as any[]
-                        )}
-                      </div>
-                    )}
-
-                    {/* Contribute Testcase Footer */}
-                    <div className="pt-6 pb-2 text-center">
-                      <button className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 transition-colors font-medium cursor-pointer font-sans">
-                        <Heart className="w-3.5 h-3.5" />
-                        <span>Contribute a testcase</span>
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  /* Execution Results View */
+                {/* Execution Results View */}
                   <div>
                     {isRunning ? (
                       <div className="flex flex-col items-center justify-center py-10 gap-2 text-slate-400 font-sans">
@@ -1799,7 +1744,6 @@ export default function ProblemWorkspacePage({ params }: { params: Promise<{ slu
                       </div>
                     )}
                   </div>
-                )}
               </div>
             )}
           </div>

@@ -16,9 +16,23 @@ import {
 import { authenticate } from "../../middleware/auth.middleware";
 import { validate } from "../../middleware/validate.middleware";
 import { checkUsernameSchema, updateUserProfileSchema } from "./user.schema";
+import { BadRequestError } from "../../utils/errors";
 
 const router = Router();
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5 MB maximum limit
+    files: 1,
+  },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith("image/")) {
+      cb(null, true);
+    } else {
+      cb(new BadRequestError("Only image files are permitted (JPEG, PNG, WebP, etc.)"));
+    }
+  },
+});
 
 router.get("/check_username", validate(checkUsernameSchema), checkUsername);
 router.get("/me", authenticate, getMe);

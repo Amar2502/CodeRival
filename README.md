@@ -43,7 +43,7 @@ CodeRival is an open-source, production-grade competitive coding platform engine
 
 ### ⚔️ 1v1 Real-Time Ranked Battles
 - **Dynamic Elo Matchmaking**: Adaptive range expansion algorithm searches for evenly matched opponents (<5s: ±100, <10s: ±150, <20s: ±200, <30s: ±300, <45s: ±500, >45s: ∞).
-- **Live Match Arena**: Split-screen interface with problem statements, custom test runners, live activity telemetry, and opponent progression bars.
+- **Live Match Arena**: Split-screen interface with problem statements, test execution runner, live activity telemetry, and opponent progression bars.
 - **Disconnect Grace Period**: Automatic 30-second reconnection buffer preventing accidental loss on network blips.
 - **Surrender & Timeout Protocol**: Built-in forfeit mechanisms and an automated 15-minute duel timeout ticker.
 

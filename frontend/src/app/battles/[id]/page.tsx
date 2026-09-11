@@ -184,7 +184,6 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
 
   // UI Tabs & Panels State
   const [activeLeftTab, setActiveLeftTab] = useState<'problem' | 'feed' | 'submissions'>('problem')
-  const [activeBottomTab, setActiveBottomTab] = useState<'testcase' | 'result'>('testcase')
   const [isBottomOpen, setIsBottomOpen] = useState(true)
   const [selectedTestCaseIndex, setSelectedTestCaseIndex] = useState(0)
 
@@ -1316,19 +1315,9 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
                   <div className="h-9 border-b border-border bg-surface/50 px-3 flex items-center justify-between shrink-0">
                     <div className="flex items-center gap-1">
                       <button
-                        onClick={() => { setIsBottomOpen(true); setActiveBottomTab('testcase'); }}
+                        onClick={() => setIsBottomOpen(true)}
                         className={`flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-md transition-colors ${
-                          activeBottomTab === 'testcase' && isBottomOpen
-                            ? 'bg-surface text-accent'
-                            : 'text-muted-foreground hover:text-foreground'
-                        }`}
-                      >
-                        <Terminal className="w-3.5 h-3.5" /> Testcase
-                      </button>
-                      <button
-                        onClick={() => { setIsBottomOpen(true); setActiveBottomTab('result'); }}
-                        className={`flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-md transition-colors ${
-                          activeBottomTab === 'result' && isBottomOpen
+                          isBottomOpen
                             ? 'bg-surface text-accent'
                             : 'text-muted-foreground hover:text-foreground'
                         }`}
@@ -1352,90 +1341,8 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
 
                   {/* Bottom Content Body */}
                   <div className="flex-1 p-4 overflow-y-auto font-mono text-xs space-y-3">
-                    {activeBottomTab === 'testcase' ? (
-                      /* Sample Test Cases View */
-                      <div className="space-y-3">
-                        <div className="flex items-center gap-2">
-                          {((problem.testCases && problem.testCases.length > 0)
-                            ? problem.testCases
-                            : problem.examples?.map((ex, idx) => ({
-                                id: ex.id || String(idx),
-                                input: ex.input,
-                                expected: ex.output,
-                                order: idx,
-                                isSample: true,
-                              }))
-                          )?.map((tc: any, idx: number) => (
-                            <button
-                              key={tc.id || idx}
-                              onClick={() => setSelectedTestCaseIndex(idx)}
-                              className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors ${
-                                selectedTestCaseIndex === idx
-                                  ? 'bg-surface text-foreground border border-border'
-                                  : 'text-muted-foreground hover:text-foreground'
-                              }`}
-                            >
-                              Case {idx + 1}
-                            </button>
-                          ))}
-                        </div>
-
-                        {((problem.testCases && problem.testCases.length > 0)
-                          ? problem.testCases
-                          : problem.examples?.map((ex, idx) => ({
-                              id: ex.id || String(idx),
-                              input: ex.input,
-                              expected: ex.output,
-                              order: idx,
-                              isSample: true,
-                            }))
-                        )?.[selectedTestCaseIndex] && (
-                          <div className="space-y-3">
-                            <div>
-                              <div className="text-muted-foreground text-[11px] mb-1 font-semibold">Input:</div>
-                              <div className="p-3 rounded-lg bg-surface border border-border">
-                                {Array.isArray(
-                                  ((problem.testCases && problem.testCases.length > 0) ? problem.testCases : problem.examples)?.[selectedTestCaseIndex]?.input
-                                ) &&
-                                problem.signature?.params &&
-                                Array.isArray(problem.signature.params) ? (
-                                  <div className="space-y-1">
-                                    {(problem.signature.params as any[]).map((param: any, idx: number) => (
-                                      <div key={param.name || idx} className="flex items-center gap-2">
-                                        <span className="text-muted-foreground">{param.name} =</span>
-                                        <span className="text-foreground font-semibold">
-                                          {JSON.stringify(
-                                            ((problem.testCases && problem.testCases.length > 0) ? problem.testCases : problem.examples)?.[selectedTestCaseIndex]?.input[idx]
-                                          )}
-                                        </span>
-                                      </div>
-                                    ))}
-                                  </div>
-                                ) : (
-                                  <div className="text-foreground">
-                                    {typeof ((problem.testCases && problem.testCases.length > 0) ? problem.testCases : problem.examples)?.[selectedTestCaseIndex]?.input === 'string'
-                                      ? ((problem.testCases && problem.testCases.length > 0) ? problem.testCases : problem.examples)?.[selectedTestCaseIndex]?.input
-                                      : JSON.stringify(((problem.testCases && problem.testCases.length > 0) ? problem.testCases : problem.examples)?.[selectedTestCaseIndex]?.input)}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                            <div>
-                              <div className="text-muted-foreground text-[11px] mb-1 font-semibold">Expected Output:</div>
-                              <div className="p-3 rounded-lg bg-surface border border-border text-emerald-400 font-semibold">
-                                {typeof (((problem.testCases && problem.testCases.length > 0) ? problem.testCases : problem.examples)?.[selectedTestCaseIndex] as any)?.expected === 'string'
-                                  ? (((problem.testCases && problem.testCases.length > 0) ? problem.testCases : problem.examples)?.[selectedTestCaseIndex] as any)?.expected
-                                  : typeof (((problem.testCases && problem.testCases.length > 0) ? problem.testCases : problem.examples)?.[selectedTestCaseIndex] as any)?.output === 'string'
-                                  ? (((problem.testCases && problem.testCases.length > 0) ? problem.testCases : problem.examples)?.[selectedTestCaseIndex] as any)?.output
-                                  : JSON.stringify((((problem.testCases && problem.testCases.length > 0) ? problem.testCases : problem.examples)?.[selectedTestCaseIndex] as any)?.expected ?? (((problem.testCases && problem.testCases.length > 0) ? problem.testCases : problem.examples)?.[selectedTestCaseIndex] as any)?.output)}
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      /* Execution Results View */
-                      <div>
+                    {/* Execution Results View */}
+                    <div>
                         {isRunning || isSubmitting ? (
                           <div className="flex flex-col items-center justify-center py-8 gap-2 text-muted-foreground">
                             <Loader2 className="w-6 h-6 animate-spin text-primary" />
@@ -1575,7 +1482,6 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
                           </div>
                         )}
                       </div>
-                    )}
                   </div>
                 </ResizablePanel>
               </ResizablePanelGroup>

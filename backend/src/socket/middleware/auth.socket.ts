@@ -9,7 +9,10 @@ export const authSocket = (socket: Socket, next: (err?: Error) => void) => {
 
     const cookies = cookie.parseCookie(socket.handshake.headers.cookie || "");
 
-    const token = cookies.token;
+    const token =
+      cookies.token ||
+      (socket.handshake.auth?.token as string) ||
+      (socket.handshake.query?.token as string);
 
     if (!token) {
       return next(new Error("Authentication required"));

@@ -11,7 +11,6 @@ export const authenticate = (
   try {
     const token =
       req.cookies.token ||
-      (req.query.token as string) ||
       req.headers.authorization?.replace("Bearer ", "");
 
     if (!token) {
