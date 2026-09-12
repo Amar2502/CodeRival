@@ -91,7 +91,7 @@ export default function LeaderboardPage() {
 
   const [globalLeaderboard, setGlobalLeaderboard] = useState<LeaderboardUser[]>([]);
   const [friendsLeaderboard, setFriendsLeaderboard] = useState<LeaderboardUser[]>([]);
-  const [userRank, setUserRank] = useState<string>("2nd");
+  const [userRank, setUserRank] = useState<string>("-");
   const [totalPlayers, setTotalPlayers] = useState<number>(0);
 
   // Pagination & Infinite Scroll state

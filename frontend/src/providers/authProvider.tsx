@@ -15,6 +15,7 @@ const PROTECTED_ROUTES = [
   "/leaderboard",
   "/friends",
   "/tournaments",
+  "/settings",
 ];
 
 export default function AuthProvider({

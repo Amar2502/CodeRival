@@ -56,7 +56,7 @@ export default function ForgotPasswordPage() {
     try {
       const response = await api.post('/auth/request-password-reset', { email })
 
-      if (response.status !== 201) {
+      if (response.status !== 200 && response.status !== 201) {
         setOtpError('Failed to send OTP. Please try again later.')
         return
       }

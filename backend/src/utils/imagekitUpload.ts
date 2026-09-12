@@ -6,7 +6,7 @@ export interface ImageKitUploadResult {
 }
 
 /**
- * Uploads a file buffer or base64 string to ImageKit with fallback for invalid credentials or failures
+ * Uploads a file buffer or base64 string to ImageKit
  */
 export const uploadAvatarToImageKit = async (
   fileBuffer: Buffer | string,
@@ -36,20 +36,8 @@ export const uploadAvatarToImageKit = async (
       avatar_id: result.fileId,
     };
   } catch (error: any) {
-    console.warn("ImageKit API Upload Error (falling back to Data URI avatar):", error?.message || error);
-
-    // Fallback: convert fileBuffer to Data URI string if ImageKit fails
-    let dataUri = "";
-    if (typeof fileBuffer === "string") {
-      dataUri = fileBuffer;
-    } else {
-      dataUri = `data:image/png;base64,${fileBuffer.toString("base64")}`;
-    }
-
-    return {
-      avatar_url: dataUri,
-      avatar_id: `local_${Date.now()}`,
-    };
+    console.error("ImageKit avatar upload failed:", error?.message || error);
+    throw new Error("Failed to upload avatar to cloud storage. Please try again later.");
   }
 };
 

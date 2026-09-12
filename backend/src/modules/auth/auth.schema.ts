@@ -31,7 +31,7 @@ export const VerifyPasswordResetOTPSchema = z.object({
 export const ResetPasswordSchema = z.object({
   email: z.email().trim().toLowerCase(),
 
-  token: z.string().length(35),
+  token: z.string().min(32).max(128),
 
   newPassword: z.string().min(8).max(100),
 });

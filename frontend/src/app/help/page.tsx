@@ -26,7 +26,7 @@ const FAQS = [
     id: 'faq-2',
     question: 'What happens if my opponent surrenders or disconnects?',
     answer:
-      'If your opponent surrenders, you win immediately. If they disconnect, a 60-second timer allows them to rejoin. If they fail to return, you win by default.',
+      'If your opponent surrenders, you win immediately. If they disconnect, a 30-second timer allows them to rejoin. If they fail to return, you win by default.',
   },
   {
     id: 'faq-3',
@@ -38,7 +38,7 @@ const FAQS = [
     id: 'faq-4',
     question: 'Which programming languages are supported?',
     answer:
-      'CodeRival supports JavaScript, TypeScript, Python, C++, Java, and Go with instant execution and test case verification.',
+      'CodeRival supports C++, Java, and Python 3 with instant execution and test case verification.',
   },
   {
     id: 'faq-5',

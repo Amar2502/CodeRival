@@ -20,6 +20,6 @@ router.use(authenticate);
 router.get("/", getNotificationsController);
 router.patch("/read", markReadController);
 router.delete("/:id", deleteNotificationController);
-router.post("/announcement", sendAnnouncementController);
+// router.post("/announcement", sendAnnouncementController);
 
 export default router;

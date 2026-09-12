@@ -184,6 +184,7 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
 
   // UI Tabs & Panels State
   const [activeLeftTab, setActiveLeftTab] = useState<'problem' | 'feed' | 'submissions'>('problem')
+  const [activeBottomTab, setActiveBottomTab] = useState<'testcase' | 'result'>('result')
   const [isBottomOpen, setIsBottomOpen] = useState(true)
   const [selectedTestCaseIndex, setSelectedTestCaseIndex] = useState(0)
 

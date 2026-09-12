@@ -6,6 +6,7 @@ import { otpService } from "../../services/otp.service";
 import { emailService } from "../../services/emails/emails.service";
 import { verifyToken } from "../../services/passwordReset.service";
 import { config } from "../../config/config";
+import { redis } from "../../config/redis";
 
 
 // --------------------------- Register -------------------------------
@@ -93,9 +94,7 @@ export const signin = async (req: Request, res: Response) => {
       return;
     }
 
-    const passwordMatches = passwordHash.startsWith("$")
-      ? await bcrypt.compare(password, passwordHash)
-      : passwordHash === password;
+    const passwordMatches = await bcrypt.compare(password, passwordHash)
 
     if (!passwordMatches) {
       res.status(400).json({ message: "Invalid credentials" });
@@ -143,7 +142,7 @@ export const requestPasswordReset = async (req: Request, res: Response) => {
     })
 
     if (!user) {
-      res.status(400).json({ message: "User does not exist" });
+      res.status(200).json({ message: "If an account with that email exists, an OTP has been sent." });
       return;
     }
     
@@ -212,6 +211,8 @@ export const resetPassword = async (req: Request, res: Response) => {
       where: { email },
       data: { passwordHash },
     });
+
+    await redis.del(`forgot-password-token:${email}`);
 
     res.status(200).json({
       message: "Password reset successfully",

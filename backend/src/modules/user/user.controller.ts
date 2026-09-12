@@ -871,7 +871,7 @@ export const sendContactForm = async (req: Request, res: Response) => {
           <p style="white-space: pre-wrap; background: #f4f4f5; padding: 15px; rounded: 8px;">${message}</p>
         </div>
       `;
-      await emailService.sendEmail(adminSupportEmail, adminEmailHtml, `[CodeRival Support] ${subject}`);
+      await emailService.sendEmail(adminSupportEmail, `[CodeRival Support] ${subject}`, adminEmailHtml);
     } catch (e) {
       console.warn("Support notification email dispatch error:", e);
     }
@@ -887,7 +887,7 @@ export const sendContactForm = async (req: Request, res: Response) => {
           <p style="white-space: pre-wrap; background: #f4f4f5; padding: 15px; rounded: 8px;">${message}</p>
         </div>
       `;
-      await emailService.sendEmail(email, userConfirmationHtml, `CodeRival Support Request Received: ${subject}`);
+      await emailService.sendEmail(email, `CodeRival Support Request Received: ${subject}`, userConfirmationHtml);
     } catch (e) {
       console.warn("User confirmation email dispatch error:", e);
     }
