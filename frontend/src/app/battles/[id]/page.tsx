@@ -1820,11 +1820,11 @@ export default function BattleRoomPage({ params }: { params: Promise<{ id: strin
                     3. Internet Disconnection
                   </span>
                   <span className="text-xs font-mono font-bold text-sky-400 bg-sky-500/10 px-2.5 py-0.5 rounded border border-sky-500/20">
-                    30s Grace Period
+                    60s Grace Period
                   </span>
                 </div>
                 <p className="text-xs sm:text-sm text-slate-400 leading-relaxed pl-6">
-                  If your internet connection drops, you are granted a 30-second window to reconnect before the match is forfeited.
+                  If your internet connection drops, you are granted a 60-second window to reconnect before the match is forfeited.
                 </p>
               </div>
 

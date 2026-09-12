@@ -250,6 +250,41 @@ export default function BattlesPage() {
     }
   }, [queueData])
 
+  // Increment queue timer every second while searching
+  useEffect(() => {
+    let interval: NodeJS.Timeout | null = null
+    if (isSearching) {
+      setQueueTime(0)
+      interval = setInterval(() => {
+        setQueueTime((prev) => prev + 1)
+      }, 1000)
+    } else {
+      setQueueTime(0)
+    }
+    return () => {
+      if (interval) clearInterval(interval)
+    }
+  }, [isSearching])
+
+  // 3-second VS Countdown when match is found
+  useEffect(() => {
+    if (!matchFoundData) return
+
+    setMatchCountdown(3)
+    const interval = setInterval(() => {
+      setMatchCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval)
+          router.push(`/battles/${matchFoundData.matchId}`)
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+
+    return () => clearInterval(interval)
+  }, [matchFoundData, router])
+
   useEffect(() => {
     // Listen for real-time queue count updates via Socket.IO
     const handleQueueUpdate = (data: { count?: number }) => {
@@ -258,10 +293,43 @@ export default function BattlesPage() {
       }
     }
 
+    const handleMatchSearching = () => {
+      setIsSearching(true)
+      setQueueError(null)
+    }
+
+    const handleMatchFound = (payload: MatchFoundPayload) => {
+      setIsSearching(false)
+      setQueueTime(0)
+      setQueueError(null)
+      setMatchFoundData(payload)
+    }
+
+    const handleMatchmakingError = (data: { message?: string }) => {
+      setIsSearching(false)
+      setQueueTime(0)
+      setQueueError(data?.message || 'Matchmaking error occurred.')
+    }
+
+    const handleMatchmakingLeft = () => {
+      setIsSearching(false)
+      setQueueTime(0)
+    }
+
     socket.on('matchmaking:queue_update', handleQueueUpdate)
+    socket.on('matchmaking:searching', handleMatchSearching)
+    socket.on('match:found', handleMatchFound)
+    socket.on('match:start', handleMatchFound)
+    socket.on('matchmaking:error', handleMatchmakingError)
+    socket.on('matchmaking:left', handleMatchmakingLeft)
 
     return () => {
       socket.off('matchmaking:queue_update', handleQueueUpdate)
+      socket.off('matchmaking:searching', handleMatchSearching)
+      socket.off('match:found', handleMatchFound)
+      socket.off('match:start', handleMatchFound)
+      socket.off('matchmaking:error', handleMatchmakingError)
+      socket.off('matchmaking:left', handleMatchmakingLeft)
     }
   }, [])
 
