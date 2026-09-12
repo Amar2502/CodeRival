@@ -1,4 +1,5 @@
 import express from "express";
+import helmet from "helmet";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import passport from "./config/passport";
@@ -16,6 +17,7 @@ import healthRoutes from "./modules/health/health.routes";
 
 const app = express();
 
+app.use(helmet());
 app.use(express.json());
 app.use(
   cors({

@@ -11,6 +11,8 @@ export const errorHandler = (
 ) => {
   console.error(`[Error] ${req.method} ${req.url}:`, err);
 
+  const isProduction = process.env.NODE_ENV === "production";
+
   if (err instanceof multer.MulterError) {
     if (err.code === "LIMIT_FILE_SIZE") {
       return res.status(400).json({
@@ -25,15 +27,17 @@ export const errorHandler = (
   }
 
   if (err instanceof AppError) {
+    const isServerError = err.statusCode >= 500;
     return res.status(err.statusCode).json({
       success: false,
-      message: err.message,
-      ...(err.details ? { details: err.details } : {}),
+      message: isProduction && isServerError ? "Internal Server Error" : err.message,
+      ...(err.details && (!isProduction || !isServerError) ? { details: err.details } : {}),
     });
   }
 
   return res.status(500).json({
     success: false,
-    message: err.message || "Internal Server Error",
+    message: isProduction ? "Internal Server Error" : (err.message || "Internal Server Error"),
+    ...(!isProduction && err.stack ? { stack: err.stack } : {}),
   });
 };
