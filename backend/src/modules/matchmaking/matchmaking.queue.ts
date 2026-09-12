@@ -5,11 +5,9 @@ const WAITING_QUEUE = "matchmaking:waiting";
 const PLAYER_KEY = (userId: string) => `matchmaking:player:${userId}`;
 
 const MATCHMAKING_RANGES = [
-  { wait: 5, diff: 100 },
-  { wait: 10, diff: 150 },
-  { wait: 20, diff: 200 },
-  { wait: 30, diff: 300 },
-  { wait: 45, diff: 500 },
+  { wait: 2, diff: 100 }, // Iteration 1 (0-2s): 100 max rating difference
+  { wait: 4, diff: 200 }, // Iteration 2 (2-4s): 200 max rating difference (+100 expansion)
+  // Iteration 3 (>=4s): Infinity (matches any rating)
 ];
 
 export const getAllowedDifference = (waitingTimeMs: number): number => {

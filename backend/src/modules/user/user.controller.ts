@@ -128,7 +128,7 @@ export const getUserProfile = async (req: Request, res: Response) => {
   try {
     const requestedId = req.params.userId;
     const currentUserId = req.user?.userId;
-    const isMeQuery = !requestedId || requestedId === "me" || requestedId === currentUserId;
+    const isMeQuery = !requestedId || requestedId === "me" || requestedId === "profile" || requestedId === currentUserId;
 
     let targetUserId = currentUserId;
     if (!isMeQuery && typeof requestedId === "string") {

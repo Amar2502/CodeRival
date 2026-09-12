@@ -18,7 +18,7 @@ const startTicker = (): void => {
   if (tickerInterval || !tickerIo) return;
   tickerInterval = setInterval(() => {
     processQueueMatches(tickerIo!);
-  }, 2000);
+  }, 4000);
 };
 
 const stopTicker = (): void => {

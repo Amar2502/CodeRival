@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo, useRef, Suspense } from 'react'
 import Link from 'next/link'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import { Header } from '@/components/header'
 import { Footer } from '@/components/footer'
 import { Button } from '@/components/ui/button'
@@ -80,6 +80,7 @@ interface RecentMatchItem {
 }
 
 function ProfileContent() {
+  const router = useRouter()
   const { user, setUser } = useAuthStore()
   const params = useParams()
   const rawUsername = params?.username as string
@@ -138,7 +139,8 @@ function ProfileContent() {
     setIsLoadingProfile(true)
     try {
       const targetHandle = rawUsername || 'me'
-      const endpoint = targetHandle && targetHandle !== 'me' && targetHandle !== user?.username && targetHandle !== user?.id
+      const isSelf = !targetHandle || targetHandle === 'me' || targetHandle === 'profile' || targetHandle === user?.username || targetHandle === user?.id
+      const endpoint = !isSelf
         ? `/user/profile/${encodeURIComponent(targetHandle)}`
         : '/user/profile/me'
       
@@ -153,7 +155,7 @@ function ProfileContent() {
         const u = res.data?.user
         setProfileUser(u)
 
-        const selfCheck = !targetHandle || targetHandle === 'me' || targetHandle === user?.username || targetHandle === user?.id || u?.id === user?.id
+        const selfCheck = isSelf || u?.id === user?.id
         setIsSelfProfile(selfCheck)
 
         if (selfCheck) {
@@ -165,6 +167,10 @@ function ProfileContent() {
           setGithubHandle(u.githubHandle || '')
           setTwitterHandle(u.twitterHandle || '')
           setLinkedinHandle(u.linkedinHandle || '')
+
+          if ((rawUsername === 'profile' || rawUsername === 'me') && u?.username) {
+            router.replace(`/${u.username}`)
+          }
         }
 
         if (u?.rank || res.data?.rank) setUserRank(u?.rank || res.data?.rank)
@@ -173,7 +179,11 @@ function ProfileContent() {
         setRecentMatches(res.data?.formattedRecentMatches || [])
         setRecentSubmissions(res.data?.user?.submissions || [])
       }
-    } catch (err) {
+    } catch (err: any) {
+      if (err.response?.status === 401 && (!rawUsername || rawUsername === 'me' || rawUsername === 'profile')) {
+        router.push('/signin')
+        return
+      }
       console.error('Failed to load profile data:', err)
     } finally {
       setIsLoadingProfile(false)
